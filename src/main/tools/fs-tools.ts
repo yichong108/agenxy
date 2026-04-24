@@ -1,0 +1,150 @@
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import { resolveSafePath, ensureWorkspaceExists } from '../path-guard.js'
+
+const MAX_READ = 500_000
+
+const TEXT_EXT = new Set([
+  '.ts',
+  '.tsx',
+  '.js',
+  '.jsx',
+  '.mjs',
+  '.cjs',
+  '.json',
+  '.md',
+  '.yml',
+  '.yaml',
+  '.toml',
+  '.css',
+  '.html',
+  '.txt',
+  '.vue',
+  '.rs',
+  '.go',
+  '.py'
+])
+
+function looksTextual(file: string): boolean {
+  const ext = path.extname(file).toLowerCase()
+  if (!ext) return true
+  return TEXT_EXT.has(ext)
+}
+
+export async function readFileTool(workspace: string, relPath: string): Promise<string> {
+  const root = ensureWorkspaceExists(workspace)
+  const file = resolveSafePath(relPath, root)
+  const st = await fs.stat(file)
+  if (!st.isFile()) {
+    return `不是文件: ${relPath}`
+  }
+  if (st.size > MAX_READ) {
+    const fh = await fs.open(file, 'r')
+    try {
+      const buf = Buffer.alloc(MAX_READ)
+      const { bytesRead } = await fh.read(buf, 0, MAX_READ, 0)
+      return (
+        buf.subarray(0, bytesRead).toString('utf8') +
+        `\n\n[已截断：文件 ${st.size} 字节，仅读取前 ${MAX_READ} 字节]`
+      )
+    } finally {
+      await fh.close()
+    }
+  }
+  return await fs.readFile(file, 'utf8')
+}
+
+export async function writeFileTool(workspace: string, relPath: string, content: string): Promise<string> {
+  const root = ensureWorkspaceExists(workspace)
+  const file = resolveSafePath(relPath, root)
+  await fs.mkdir(path.dirname(file), { recursive: true })
+  await fs.writeFile(file, content, 'utf8')
+  return `已写入: ${path.relative(root, file)}`
+}
+
+export async function listDirTool(
+  workspace: string,
+  relPath: string,
+  options?: { depth?: number }
+): Promise<string> {
+  const root = ensureWorkspaceExists(workspace)
+  const dir = resolveSafePath(relPath || '.', root)
+  const st = await fs.stat(dir)
+  if (!st.isDirectory()) {
+    return `不是目录: ${relPath}`
+  }
+  const depth = Math.min(options?.depth ?? 2, 5)
+  const lines: string[] = []
+  const skipDir = new Set(['node_modules', '.git', 'dist', 'out', 'release', '.next'])
+
+  async function walk(d: string, dLevel: number, prefix: string) {
+    const entries = await fs.readdir(d, { withFileTypes: true })
+    for (const e of entries) {
+      const full = path.join(d, e.name)
+      if (e.isDirectory()) {
+        if (skipDir.has(e.name)) {
+          lines.push(`${prefix}${e.name}/ (已省略子项)`)
+          continue
+        }
+        lines.push(`${prefix}${e.name}/`)
+        if (dLevel < depth) {
+          await walk(full, dLevel + 1, prefix + '  ')
+        }
+      } else {
+        lines.push(`${prefix}${e.name}`)
+      }
+    }
+  }
+  await walk(dir, 0, '')
+  return lines.length ? lines.join('\n') : '(空目录)'
+}
+
+export async function searchWorkspace(
+  workspace: string,
+  query: string,
+  options?: { maxFiles?: number; glob?: string }
+): Promise<string> {
+  const root = ensureWorkspaceExists(workspace)
+  const maxFiles = options?.maxFiles ?? 64
+  const results: string[] = []
+  let count = 0
+  if (!query.trim()) {
+    return 'query 为空'
+  }
+  const lower = query.toLowerCase()
+
+  async function walk(d: string) {
+    if (count >= maxFiles) return
+    const entries = await fs.readdir(d, { withFileTypes: true })
+    for (const e of entries) {
+      if (count >= maxFiles) return
+      const full = path.join(d, e.name)
+      if (e.isDirectory()) {
+        if (e.name === 'node_modules' || e.name === '.git' || e.name === 'dist' || e.name === 'out') {
+          continue
+        }
+        await walk(full)
+      } else {
+        if (!looksTextual(full)) continue
+        try {
+          const st = await fs.stat(full)
+          if (st.size > 400_000) continue
+          const text = await fs.readFile(full, 'utf8')
+          const lowerText = text.toLowerCase()
+          if (!lowerText.includes(lower)) continue
+          const rel = path.relative(root, full)
+          const lineIdx = text.split('\n').findIndex((l) => l.toLowerCase().includes(lower))
+          const preview = lineIdx >= 0 ? `L${lineIdx + 1}: ${text.split('\n')[lineIdx]!.trim().slice(0, 200)}` : '匹配'
+          results.push(`${rel}\n  ${preview}`)
+          count++
+        } catch {
+          // skip
+        }
+      }
+    }
+  }
+  await walk(root)
+  return results.length
+    ? results.join('\n\n')
+    : `未找到含 "${query}" 的文本文件（已扫描，最多 ${maxFiles} 个匹配文件）`
+}
