@@ -39,8 +39,8 @@ export type AppSettings = {
 
 export const defaultSettings: AppSettings = {
   provider: 'deepseek',
-  apiKey: '',
-  baseUrl: 'https://api.deepseek.com/v1',
+  apiKey: 'sk-0b08965fd66e4fd28ba42a449ea8b6ee',
+  baseUrl: 'https://api.deepseek.com',
   model: 'deepseek-chat',
   maxConcurrentStreams: 2,
   streamFlushMs: 32,
