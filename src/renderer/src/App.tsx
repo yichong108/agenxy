@@ -22,17 +22,19 @@ import {
   Select,
   Space,
   Tag,
+  theme,
   Typography,
   Dropdown
 } from 'antd'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import type {
-  AppSettings,
-  ChatMessage,
-  SessionInfo,
-  StreamEvent,
-  ToolTimelineEvent
+import {
+  defaultSettings,
+  type AppSettings,
+  type ChatMessage,
+  type SessionInfo,
+  type StreamEvent,
+  type ToolTimelineEvent
 } from '@shared/ipc'
 
 const { Sider, Content, Header } = Layout
@@ -40,47 +42,8 @@ const { Text, Paragraph } = Typography
 const { TextArea } = Input
 
 const PRELOAD_MISSING_ERROR = '未检测到 preload 注入（window.agentWeave 不存在）'
-const noopUnsub = () => {}
-const DEFAULT_SETTINGS: AppSettings = {
-  provider: 'deepseek',
-  apiKey: '',
-  baseUrl: 'https://api.deepseek.com/v1',
-  model: 'deepseek-chat',
-  maxConcurrentStreams: 2,
-  streamFlushMs: 32,
-  streamFlushChars: 320,
-  maxTerminalOutputChars: 1000
-}
 
-const fallbackApi = {
-  selectWorkspace: async () => ({ path: '' }),
-  getWorkspace: async () => '',
-  getSettings: async () => DEFAULT_SETTINGS,
-  setSettings: async () => DEFAULT_SETTINGS,
-  listSessions: async () => [] as SessionInfo[],
-  createSession: async () =>
-    ({
-      id: '',
-      name: '',
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    }) as SessionInfo,
-  renameSession: async () => null as SessionInfo | null,
-  deleteSession: async () => ({ ok: true as const }),
-  sendAgentMessage: async () => ({ ok: false as const, error: PRELOAD_MISSING_ERROR }),
-  cancelAgent: async () => ({ ok: true as const }),
-  toggleDevtools: async () => ({ open: false }),
-  onStream: () => noopUnsub,
-  onSessionsSync: () => noopUnsub,
-  onWorkspaceChange: () => noopUnsub,
-  onSettingsSync: () => noopUnsub
-}
-
-const api = () => {
-  if (typeof window === 'undefined') return fallbackApi
-  if (window.agentWeave) return window.agentWeave
-  return fallbackApi
-}
+const DEFAULT_SETTINGS: AppSettings = JSON.parse(JSON.stringify(defaultSettings))
 
 function randomId() {
   return `m-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -88,7 +51,9 @@ function randomId() {
 
 export function App() {
   const { message: msgApi, modal: modalApi } = AntdApp.useApp()
+  const { token } = theme.useToken()
   const preloadOk = typeof window !== 'undefined' && typeof window.agentWeave !== 'undefined'
+  const bridge = window.agentWeave
   const [workspace, setWorkspace] = useState('')
   const [sessions, setSessions] = useState<SessionInfo[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -110,9 +75,9 @@ export function App() {
 
   const load = useCallback(async () => {
     const [w, s, sList] = await Promise.all([
-      api().getWorkspace(),
-      api().getSettings(),
-      api().listSessions()
+      bridge.getWorkspace(),
+      bridge.getSettings(),
+      bridge.listSessions()
     ])
     setWorkspace(w)
     setSettings(s)
@@ -198,31 +163,33 @@ export function App() {
   useEffect(() => {
     if (!preloadOk) {
       msgApi.error(PRELOAD_MISSING_ERROR)
+      return
     }
     void load()
     const unSub = [
-      api().onWorkspaceChange((p) => setWorkspace(p.path)),
-      api().onSettingsSync((s) => {
+      bridge.onWorkspaceChange((p) => setWorkspace(p.path)),
+      bridge.onSettingsSync((s) => {
         setSettings(s)
         form.setFieldsValue(s)
       }),
-      api().onSessionsSync((list) => {
+      bridge.onSessionsSync((list) => {
         setSessions(list)
         setActiveId((aid) => (aid && list.some((x) => x.id === aid) ? aid : (list[0]?.id ?? null)))
       }),
-      api().onStream(handleStream)
+      bridge.onStream(handleStream)
     ]
     return () => unSub.forEach((f) => f())
-  }, [form, handleStream, load])
+  }, [bridge, form, handleStream, load, msgApi, preloadOk])
 
   const pickWorkspace = async () => {
-    const r = await api().selectWorkspace()
+    const r = await bridge.selectWorkspace()
     if (r.path) {
       setWorkspace(r.path)
       msgApi.success('已选择工作区')
     }
   }
 
+  // 发送当前输入消息，并立即在本地追加用户消息
   const send = async () => {
     if (!activeId) return
     const t = input.trim()
@@ -239,7 +206,7 @@ export function App() {
         [activeId]: [...cur, { id: randomId(), role: 'user' as const, content: t }]
       }
     })
-    const r = await api().sendAgentMessage(activeId, t)
+    const r = await bridge.sendAgentMessage(activeId, t)
     if (!r.ok) {
       msgApi.error('发送失败: ' + r.error)
     }
@@ -252,7 +219,7 @@ export function App() {
 
   const saveSettings = async () => {
     const v = await form.validateFields()
-    await api().setSettings(v)
+    await bridge.setSettings(v)
     setSettingsOpen(false)
     msgApi.success('已保存（Secret 仅保存在本机主进程）')
   }
@@ -265,7 +232,7 @@ export function App() {
   }
 
   const toggleDevtools = async () => {
-    api()
+    bridge
       .toggleDevtools()
       .then(() => {
         if (checkDevToolsReady()) {
@@ -292,112 +259,137 @@ export function App() {
   const isQueued = activeId ? queued[activeId] : undefined
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider width={240} theme="dark" style={{ display: 'flex', flexDirection: 'column' }}>
-        <div
-          style={{
-            padding: 12,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}
-        >
-          <Text strong style={{ color: 'rgba(255,255,255,0.85)' }}>
-            AgentWeave
-          </Text>
-          <Button
-            type="text"
-            icon={<SettingOutlined />}
-            onClick={openSettings}
-            style={{ color: '#fff' }}
-          />
-        </div>
-        <div style={{ padding: '0 8px' }}>
-          <Button
-            block
-            type="dashed"
-            icon={<PlusOutlined />}
-            onClick={async () => {
-              const s = await api().createSession()
-              setActiveId(s.id)
+    <Layout style={{ minHeight: '100vh', background: '#f3f6fb' }}>
+      <Sider
+        width={260}
+        theme="light"
+        style={{
+          background: '#f8fbff',
+          borderRight: '1px solid #dbe5f0',
+          boxShadow: '2px 0 12px rgba(15, 23, 42, 0.05)'
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+          <div
+            style={{
+              padding: '14px 12px 12px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              borderBottom: '1px solid #dbe5f0'
             }}
           >
-            新会话
-          </Button>
-        </div>
-        <List
-          style={{ flex: 1, overflow: 'auto', marginTop: 8 }}
-          dataSource={sessions}
-          renderItem={(s) => (
-            <Dropdown
-              menu={{
-                items: [
-                  {
-                    key: 'rename',
-                    label: '重命名',
-                    onClick: () => {
-                      setRenameId(s.id)
-                      setRenameName(s.name)
-                    }
-                  },
-                  {
-                    key: 'del',
-                    danger: true,
-                    label: '删除',
-                    onClick: () => {
-                      modalApi.confirm({
-                        title: '删除此会话？',
-                        onOk: () => {
-                          void api()
-                            .deleteSession(s.id)
-                            .then(() => msgApi.success('已删除'))
-                        }
-                      })
-                    }
-                  }
-                ]
+            <Text strong style={{ color: '#1f2a37', letterSpacing: 0.3 }}>
+              AgentWeave
+            </Text>
+            <Button
+              type="text"
+              icon={<SettingOutlined />}
+              onClick={openSettings}
+              style={{ color: '#52607a' }}
+            />
+          </div>
+          <div style={{ padding: '10px 10px 0' }}>
+            <Button
+              block
+              type="primary"
+              icon={<PlusOutlined />}
+              style={{ boxShadow: '0 4px 12px rgba(22, 119, 255, 0.25)' }}
+              onClick={async () => {
+                const s = await bridge.createSession()
+                setActiveId(s.id)
               }}
-              trigger={['contextMenu']}
             >
-              <List.Item
-                style={{
-                  cursor: 'pointer',
-                  background: s.id === activeId ? 'rgba(255,255,255,0.12)' : 'transparent'
+              新会话
+            </Button>
+          </div>
+          <List
+            style={{ flex: 1, overflow: 'auto', marginTop: 10, padding: '0 6px' }}
+            dataSource={sessions}
+            renderItem={(s) => (
+              <Dropdown
+                menu={{
+                  items: [
+                    {
+                      key: 'rename',
+                      label: '重命名',
+                      onClick: () => {
+                        setRenameId(s.id)
+                        setRenameName(s.name)
+                      }
+                    },
+                    {
+                      key: 'del',
+                      danger: true,
+                      label: '删除',
+                      onClick: () => {
+                        modalApi.confirm({
+                          title: '删除此会话？',
+                          onOk: () => {
+                            void bridge.deleteSession(s.id).then(() => msgApi.success('已删除'))
+                          }
+                        })
+                      }
+                    }
+                  ]
                 }}
-                onClick={() => setActiveId(s.id)}
+                trigger={['contextMenu']}
               >
-                <List.Item.Meta
-                  title={s.name}
-                  description={new Date(s.updatedAt).toLocaleString('zh-CN')}
-                />
-              </List.Item>
-            </Dropdown>
-          )}
-        />
-        <div
-          style={{
-            padding: 8,
-            color: 'rgba(255,255,255,0.45)',
-            fontSize: 11,
-            wordBreak: 'break-all'
-          }}
-        >
-          工作区: {workspace || '未选'}
-        </div>
-        <div style={{ padding: 8 }}>
-          <Button block icon={<FolderOpenOutlined />} onClick={pickWorkspace}>
-            选择工作区
-          </Button>
+                <List.Item
+                  style={{
+                    cursor: 'pointer',
+                    margin: '0 4px 6px',
+                    borderRadius: 10,
+                    paddingInline: 10,
+                    background:
+                      s.id === activeId ? 'rgba(22, 119, 255, 0.16)' : 'rgba(255,255,255,0.96)',
+                    border:
+                      s.id === activeId
+                        ? '1px solid rgba(22, 119, 255, 0.42)'
+                        : '1px solid #e8eef6',
+                    transition: 'all .2s ease'
+                  }}
+                  onClick={() => setActiveId(s.id)}
+                >
+                  <List.Item.Meta
+                    title={<Text style={{ color: '#1f2a37' }}>{s.name}</Text>}
+                    description={
+                      <Text style={{ color: '#73839c', fontSize: 11 }}>
+                        {new Date(s.updatedAt).toLocaleString('zh-CN')}
+                      </Text>
+                    }
+                  />
+                </List.Item>
+              </Dropdown>
+            )}
+          />
+          <div
+            style={{
+              padding: '10px 10px 8px',
+              color: '#73839c',
+              fontSize: 11,
+              wordBreak: 'break-all'
+            }}
+          >
+            工作区: {workspace || '未选'}
+          </div>
+          <div style={{ padding: '0 10px 10px' }}>
+            <Button block icon={<FolderOpenOutlined />} onClick={pickWorkspace}>
+              选择工作区
+            </Button>
+          </div>
         </div>
       </Sider>
-      <Layout>
+      <Layout style={{ minWidth: 0 }}>
         <Header
           style={{
-            background: '#141414',
+            background: 'linear-gradient(90deg, #ffffff 0%, #f8fbff 100%)',
             display: 'flex',
             alignItems: 'center',
-            paddingLeft: 16,
-            borderBottom: '1px solid #303030'
+            paddingInline: 18,
+            height: 52,
+            lineHeight: '52px',
+            borderBottom: '1px solid #dbe5f0'
           }}
         >
           {activeId && (
@@ -409,7 +401,9 @@ export function App() {
             </Space>
           )}
         </Header>
-        <Content style={{ display: 'flex', flexDirection: 'column' }}>
+        <Content
+          style={{ display: 'flex', flexDirection: 'column', minWidth: 0, background: '#f7faff' }}
+        >
           {!preloadOk && (
             <div style={{ padding: '12px 16px 0 16px' }}>
               <Alert
@@ -420,32 +414,66 @@ export function App() {
               />
             </div>
           )}
-          <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+          <div
+            style={{
+              flex: 1,
+              overflow: 'auto',
+              padding: '14px 18px',
+              background:
+                'radial-gradient(circle at 20% 0%, rgba(22,119,255,0.12) 0%, rgba(247,250,255,0) 34%), #f7faff'
+            }}
+          >
             {currentMessages.map((m) => (
               <Card
                 key={m.id}
                 size="small"
-                style={{ marginBottom: 8, background: m.role === 'user' ? '#1f1f1f' : '#111' }}
+                style={{
+                  marginBottom: 10,
+                  marginLeft: m.role === 'user' ? 'auto' : undefined,
+                  maxWidth: '86%',
+                  borderRadius: 12,
+                  border:
+                    m.role === 'user' ? '1px solid rgba(22,119,255,0.35)' : '1px solid #dbe5f0',
+                  background:
+                    m.role === 'user'
+                      ? 'linear-gradient(135deg, rgba(230,243,255,1) 0%, rgba(242,248,255,1) 100%)'
+                      : '#ffffff'
+                }}
               >
-                <Text type="secondary" style={{ fontSize: 12 }}>
+                <Text type="secondary" style={{ fontSize: 12, color: '#73839c' }}>
                   {m.role === 'user' ? '你' : '助理'}
                 </Text>
-                <Paragraph style={{ marginBottom: 0, whiteSpace: 'pre-wrap' }}>
+                <Paragraph style={{ marginBottom: 0, whiteSpace: 'pre-wrap', color: '#1f2a37' }}>
                   {m.content || (m.role === 'assistant' && isRun ? '…' : '')}
                 </Paragraph>
               </Card>
             ))}
             {!currentMessages.length && (
-              <Text type="secondary">发一条消息开始；务必先选择工作区并配置 API Key。</Text>
+              <Card
+                size="small"
+                style={{
+                  maxWidth: 520,
+                  marginTop: 4,
+                  background: '#ffffff',
+                  border: '1px solid #dbe5f0',
+                  borderRadius: 12
+                }}
+              >
+                <Text type="secondary" style={{ color: '#73839c' }}>
+                  发一条消息开始；务必先选择工作区并配置 API Key。
+                </Text>
+              </Card>
             )}
           </div>
           {activeId && (
-            <div style={{ borderTop: '1px solid #303030' }}>
+            <div style={{ borderTop: '1px solid #dbe5f0', background: '#f8fbff' }}>
               <Collapse
+                bordered={false}
+                style={{ background: 'transparent' }}
                 items={[
                   {
                     key: 't',
-                    label: '工具 / 时间线5',
+                    label: '工具 / 时间线',
                     children: (
                       <List
                         size="small"
@@ -461,7 +489,19 @@ export function App() {
                                 </Text>
                                 {e.args && <Text type="secondary"> {e.args}</Text>}
                                 {e.status === 'end' && e.result && (
-                                  <pre style={{ fontSize: 11, maxHeight: 120, overflow: 'auto' }}>
+                                  <pre
+                                    style={{
+                                      fontSize: 11,
+                                      maxHeight: 120,
+                                      overflow: 'auto',
+                                      marginTop: 8,
+                                      marginBottom: 0,
+                                      padding: 8,
+                                      borderRadius: 8,
+                                      background: '#f5f9ff',
+                                      border: '1px solid #dbe5f0'
+                                    }}
+                                  >
                                     {e.result}
                                   </pre>
                                 )}
@@ -476,12 +516,25 @@ export function App() {
               />
             </div>
           )}
-          <div style={{ padding: 12, display: 'flex', gap: 8 }}>
+          <div
+            style={{
+              padding: 12,
+              display: 'flex',
+              gap: 10,
+              background: '#ffffff',
+              borderTop: `1px solid ${token.colorBorderSecondary}`
+            }}
+          >
             <TextArea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               autoSize={{ minRows: 1, maxRows: 6 }}
               placeholder="输入消息… (Enter 发送，Shift+Enter 换行)"
+              style={{
+                background: '#f8fbff',
+                borderColor: '#dbe5f0',
+                borderRadius: 10
+              }}
               onPressEnter={(e) => {
                 if (!e.shiftKey) {
                   e.preventDefault()
@@ -495,6 +548,7 @@ export function App() {
                 icon={<SendOutlined />}
                 onClick={() => void send()}
                 disabled={!activeId}
+                style={{ height: 36 }}
               >
                 发送
               </Button>
@@ -502,8 +556,9 @@ export function App() {
                 <Button
                   danger
                   icon={<StopOutlined />}
-                  onClick={() => void api().cancelAgent(activeId)}
+                  onClick={() => void bridge.cancelAgent(activeId)}
                   disabled={!isRun}
+                  style={{ height: 34 }}
                 >
                   停止
                 </Button>
@@ -555,12 +610,10 @@ export function App() {
         onOk={() => {
           const v = renameName.trim()
           if (renameId && v) {
-            void api()
-              .renameSession(renameId, v)
-              .then(() => {
-                msgApi.success('已重命名')
-                setRenameId(null)
-              })
+            void bridge.renameSession(renameId, v).then(() => {
+              msgApi.success('已重命名')
+              setRenameId(null)
+            })
           }
         }}
         onCancel={() => setRenameId(null)}

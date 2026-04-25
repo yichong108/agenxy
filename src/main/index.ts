@@ -198,6 +198,16 @@ function registerIpc(): void {
     broadcastSessions()
     return { ok: true as const }
   })
+
+  /**
+   * 发送消息到 Agent
+   * 
+   * 支持并发发送消息
+   * 
+   * @param sessionId 会话 ID
+   * @param text 消息内容
+   * @returns 发送结果
+   */
   ipcMain.handle(IPC.AGENT_SEND, async (_e, sessionId: string, text: string) => {
     if (!text.trim()) return { ok: false as const, error: '空消息' }
     const onQueued = (pos: number) => {
@@ -207,9 +217,13 @@ function registerIpc(): void {
       }
     }
     try {
+      // 发送消息到 Agent
       await runUserMessage(sessionId, text.trim(), onQueued)
+      // 更新会话时间
       touchSession(sessionId)
+      // 广播会话列表
       broadcastSessions()
+      // 返回发送结果
       return { ok: true as const }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)

@@ -1,4 +1,4 @@
-import { App as AntApp, ConfigProvider, theme } from 'antd'
+import { App as AntApp, ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import dayjs from 'dayjs'
 import React from 'react'
@@ -39,12 +39,15 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, AppError
 
 const root = document.getElementById('root')
 if (root) {
+  document.body.style.margin = '0'
+  document.body.style.overflow = 'hidden'
+  root.style.height = '100vh'
+
   ReactDOM.createRoot(root).render(
     <React.StrictMode>
       <ConfigProvider
         locale={zhCN}
         theme={{
-          algorithm: theme.darkAlgorithm,
           token: { borderRadius: 8 }
         }}
       >
