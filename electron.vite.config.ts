@@ -1,10 +1,14 @@
 import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'electron-vite'
+import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
+
+const rootDir = fileURLToPath(new URL('.', import.meta.url))
 
 export default defineConfig({
   main: {
+    plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
         input: {
@@ -14,14 +18,16 @@ export default defineConfig({
     }
   },
   preload: {
+    plugins: [externalizeDepsPlugin()],
     build: {
-      // Electron 以普通脚本方式执行 preload，需 CJS，否则会报 "Cannot use import outside a module"
+      // 沙箱内 preload 以非 ES 模块方式执行，需输出 CJS
+      lib: {
+        entry: resolve(rootDir, 'src/preload/index.ts'),
+        formats: ['cjs']
+      },
       rollupOptions: {
-        input: {
-          index: resolve(__dirname, 'src/preload/index.ts')
-        },
         output: {
-          format: 'cjs',
+          inlineDynamicImports: true,
           entryFileNames: 'index.cjs'
         }
       }

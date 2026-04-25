@@ -41,32 +41,22 @@ const { TextArea } = Input
 
 const PRELOAD_MISSING_ERROR = '未检测到 preload 注入（window.agentWeave 不存在）'
 const noopUnsub = () => {}
+const DEFAULT_SETTINGS: AppSettings = {
+  provider: 'deepseek',
+  apiKey: '',
+  baseUrl: 'https://api.deepseek.com/v1',
+  model: 'deepseek-chat',
+  maxConcurrentStreams: 2,
+  streamFlushMs: 32,
+  streamFlushChars: 320,
+  maxTerminalOutputChars: 1000
+}
 
 const fallbackApi = {
   selectWorkspace: async () => ({ path: '' }),
   getWorkspace: async () => '',
-  getSettings: async () =>
-    ({
-      provider: 'deepseek',
-      apiKey: '',
-      baseUrl: 'https://api.deepseek.com/v1',
-      model: 'deepseek-chat',
-      maxConcurrentStreams: 2,
-      streamFlushMs: 32,
-      streamFlushChars: 320,
-      maxTerminalOutputChars: 1000
-    }) as AppSettings,
-  setSettings: async () =>
-    ({
-      provider: 'deepseek',
-      apiKey: '',
-      baseUrl: 'https://api.deepseek.com/v1',
-      model: 'deepseek-chat',
-      maxConcurrentStreams: 2,
-      streamFlushMs: 32,
-      streamFlushChars: 320,
-      maxTerminalOutputChars: 1000
-    }) as AppSettings,
+  getSettings: async () => DEFAULT_SETTINGS,
+  setSettings: async () => DEFAULT_SETTINGS,
   listSessions: async () => [] as SessionInfo[],
   createSession: async () =>
     ({
@@ -104,7 +94,7 @@ export function App() {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [input, setInput] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [settings, setSettings] = useState<AppSettings | null>(null)
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
   const [form] = Form.useForm<AppSettings>()
   const [renameId, setRenameId] = useState<string | null>(null)
   const [renameName, setRenameName] = useState('')
@@ -126,9 +116,10 @@ export function App() {
     ])
     setWorkspace(w)
     setSettings(s)
+    form.setFieldsValue(s)
     setSessions(sList)
     setActiveId((prev) => (prev == null && sList.length > 0 ? sList[0]!.id : prev))
-  }, [])
+  }, [form])
 
   const handleStream = useCallback(
     (e: StreamEvent) => {
@@ -255,9 +246,7 @@ export function App() {
   }
 
   const openSettings = () => {
-    if (settings) {
-      form.setFieldsValue(settings)
-    }
+    form.setFieldsValue(settings)
     setSettingsOpen(true)
   }
 
@@ -456,7 +445,7 @@ export function App() {
                 items={[
                   {
                     key: 't',
-                    label: '工具 / 时间线',
+                    label: '工具 / 时间线5',
                     children: (
                       <List
                         size="small"
@@ -532,34 +521,32 @@ export function App() {
         width={520}
         destroyOnHidden
       >
-        {settings && (
-          <Form form={form} layout="vertical" initialValues={settings}>
-            <Form.Item name="provider" label="提供方" rules={[{ required: true }]}>
-              <Select options={[{ value: 'deepseek', label: 'DeepSeek' }]} />
-            </Form.Item>
-            <Form.Item name="baseUrl" label="Base URL" rules={[{ required: true }]}>
-              <Input placeholder="如 https://api.deepseek.com/v1" />
-            </Form.Item>
-            <Form.Item name="model" label="Model" rules={[{ required: true }]}>
-              <Input />
-            </Form.Item>
-            <Form.Item name="apiKey" label="API Key" rules={[{ required: true }]} hasFeedback>
-              <Input.Password autoComplete="off" placeholder="仅保存在本机" />
-            </Form.Item>
-            <Form.Item name="maxConcurrentStreams" label="最大并行流">
-              <InputNumber min={1} max={8} style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item name="streamFlushMs" label="流式合并间隔 (ms)">
-              <InputNumber min={8} max={200} style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item name="streamFlushChars" label="流式合并字符数">
-              <InputNumber min={32} max={2000} style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item name="maxTerminalOutputChars" label="终端输出最大字符">
-              <InputNumber min={1} max={1000} style={{ width: '100%' }} />
-            </Form.Item>
-          </Form>
-        )}
+        <Form form={form} layout="vertical" initialValues={DEFAULT_SETTINGS}>
+          <Form.Item name="provider" label="提供方" rules={[{ required: true }]}>
+            <Select options={[{ value: 'deepseek', label: 'DeepSeek' }]} />
+          </Form.Item>
+          <Form.Item name="baseUrl" label="Base URL" rules={[{ required: true }]}>
+            <Input placeholder="如 https://api.deepseek.com/v1" />
+          </Form.Item>
+          <Form.Item name="model" label="Model" rules={[{ required: true }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="apiKey" label="API Key" rules={[{ required: true }]} hasFeedback>
+            <Input.Password autoComplete="off" placeholder="仅保存在本机" />
+          </Form.Item>
+          <Form.Item name="maxConcurrentStreams" label="最大并行流">
+            <InputNumber min={1} max={8} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="streamFlushMs" label="流式合并间隔 (ms)">
+            <InputNumber min={8} max={200} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="streamFlushChars" label="流式合并字符数">
+            <InputNumber min={32} max={2000} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="maxTerminalOutputChars" label="终端输出最大字符">
+            <InputNumber min={1} max={1000} style={{ width: '100%' }} />
+          </Form.Item>
+        </Form>
       </Modal>
 
       <Modal

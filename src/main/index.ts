@@ -1,4 +1,4 @@
-import { existsSync, watch, type FSWatcher } from 'node:fs'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -19,10 +19,8 @@ import { getSettings, getWorkspace, setSettings, setWorkspace } from './store.js
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const isDev = !app.isPackaged
+const enableReactDevtoolsExt = process.env['ENABLE_REACT_DEVTOOLS_EXT'] === '1'
 let mainWindow: BrowserWindow | null = null
-let devWatcher: FSWatcher | null = null
-let restartTimer: NodeJS.Timeout | null = null
-let hasRetriedDevLoad = false
 
 function setupConsoleUtf8(): void {
   if (process.platform !== 'win32') return
@@ -35,6 +33,10 @@ setupConsoleUtf8()
 
 async function loadReactDevtoolsExtension(): Promise<void> {
   if (!isDev) return
+  if (!enableReactDevtoolsExt) {
+    console.log('[react-devtools] 扩展自动注入已关闭（设置 ENABLE_REACT_DEVTOOLS_EXT=1 可开启）')
+    return
+  }
 
   const extensionPath = path.resolve(__dirname, '../../extensions/react-devtools')
 
@@ -80,14 +82,6 @@ async function loadReactDevtoolsExtension(): Promise<void> {
   }
 }
 
-function getRendererUrl(): string {
-  return (
-    process.env['ELECTRON_RENDERER_URL'] ||
-    process.env['VITE_DEV_SERVER_URL'] ||
-    'http://localhost:5173'
-  )
-}
-
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) {
   app.quit()
@@ -110,18 +104,21 @@ function createWindow(): void {
       preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      // React DevTools 在 sandbox renderer 中可能无法正确注入
-      // 开发环境关闭 sandbox，生产环境继续保持开启
-      sandbox: !isDev
+      sandbox: true
     },
     show: false
   })
-  if (isDev) {
-    void mainWindow.loadURL(getRendererUrl())
-    // 页面 DOM 就绪后再打开 DevTools，确保 React DevTools 面板已完成注入
-    mainWindow.webContents.once('dom-ready', () => {
-      mainWindow?.webContents.openDevTools({ mode: 'detach' })
-    })
+  const rendererUrl = process.env['ELECTRON_RENDERER_URL']
+  if (rendererUrl) {
+    void mainWindow.loadURL(rendererUrl)
+    if (isDev) {
+      mainWindow.webContents.once('dom-ready', () => {
+        if (!mainWindow || mainWindow.isDestroyed()) return
+        if (!mainWindow.webContents.isDevToolsOpened()) {
+          mainWindow.webContents.openDevTools({ mode: 'detach' })
+        }
+      })
+    }
   } else {
     void mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
@@ -136,45 +133,27 @@ function createWindow(): void {
       console.error(
         `[renderer] load failed code=${errorCode} desc=${errorDescription} url=${validatedURL}`
       )
-      if (isDev && !hasRetriedDevLoad) {
-        hasRetriedDevLoad = true
-        setTimeout(() => {
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            void mainWindow.loadURL(getRendererUrl())
-          }
-        }, 500)
-      }
     }
   )
+  if (isDev) {
+    mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      const levels = ['debug', 'info', 'warn', 'error']
+      const label = levels[level] ?? String(level)
+      console.log(`[renderer:${label}] ${message} (${sourceId}:${line})`)
+    })
+  }
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     console.error(`[renderer] process gone: reason=${details.reason}, exitCode=${details.exitCode}`)
   })
   bindAgentIpc(mainWindow.webContents)
   mainWindow.webContents.on('did-finish-load', () => {
+    console.log(`[renderer] did-finish-load: ${mainWindow?.webContents.getURL() || '(unknown)'}`)
     mainWindow?.webContents.send(EVENTS.SESSIONS_SYNC, getSessions())
     mainWindow?.webContents.send(EVENTS.WORKSPACE_CHANGED, { path: getWorkspace() })
   })
   mainWindow.on('closed', () => {
     mainWindow = null
   })
-}
-
-function setupDevAutoRestart(): void {
-  if (!isDev || devWatcher) return
-  const watchPath = path.resolve(__dirname, '../../src')
-  try {
-    devWatcher = watch(watchPath, { recursive: true }, (_eventType, filename) => {
-      if (!filename) return
-      // 防抖，避免一次保存触发多次重启
-      if (restartTimer) clearTimeout(restartTimer)
-      restartTimer = setTimeout(() => {
-        app.relaunch()
-        app.exit(0)
-      }, 250)
-    })
-  } catch {
-    // 监听失败时不阻塞应用启动
-  }
 }
 
 function broadcastSessions(): void {
@@ -267,7 +246,6 @@ app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return
   void (async () => {
     await loadReactDevtoolsExtension()
-    setupDevAutoRestart()
     loadSessionList()
     registerIpc()
     createWindow()
@@ -280,17 +258,6 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
-  }
-})
-
-app.on('before-quit', () => {
-  if (restartTimer) {
-    clearTimeout(restartTimer)
-    restartTimer = null
-  }
-  if (devWatcher) {
-    devWatcher.close()
-    devWatcher = null
   }
 })
 

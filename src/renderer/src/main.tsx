@@ -9,6 +9,34 @@ import { App } from './App'
 
 dayjs.locale('zh-cn')
 
+type AppErrorBoundaryState = {
+  error: Error | null
+}
+
+class AppErrorBoundary extends React.Component<React.PropsWithChildren, AppErrorBoundaryState> {
+  state: AppErrorBoundaryState = { error: null }
+
+  static getDerivedStateFromError(error: Error): AppErrorBoundaryState {
+    return { error }
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo): void {
+    console.error('[renderer] React 渲染异常:', error, info.componentStack)
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 16, color: '#fff', background: '#141414', minHeight: '100vh' }}>
+          <h3 style={{ marginTop: 0 }}>渲染异常（已阻止白屏）</h3>
+          <pre style={{ whiteSpace: 'pre-wrap' }}>{this.state.error.message}</pre>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 const root = document.getElementById('root')
 if (root) {
   ReactDOM.createRoot(root).render(
@@ -20,9 +48,11 @@ if (root) {
           token: { borderRadius: 8 }
         }}
       >
-        <AntApp>
-          <App />
-        </AntApp>
+        <AppErrorBoundary>
+          <AntApp>
+            <App />
+          </AntApp>
+        </AppErrorBoundary>
       </ConfigProvider>
     </React.StrictMode>
   )
