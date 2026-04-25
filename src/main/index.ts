@@ -24,6 +24,11 @@ const isDev = !app.isPackaged
 let mainWindow: BrowserWindow | null = null
 let devWatcher: FSWatcher | null = null
 let restartTimer: NodeJS.Timeout | null = null
+let hasRetriedDevLoad = false
+
+function getRendererUrl(): string {
+  return process.env['ELECTRON_RENDERER_URL'] || process.env['VITE_DEV_SERVER_URL'] || 'http://localhost:5173'
+}
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) {
@@ -49,19 +54,37 @@ function createWindow(): void {
       nodeIntegration: false,
       sandbox: true
     },
-    show: true
+    show: false
   })
   if (isDev) {
-    const devUrl = process.env['ELECTRON_RENDERER_URL'] || process.env['VITE_DEV_SERVER_URL']
-    if (devUrl) {
-      mainWindow.loadURL(devUrl)
-    } else {
-      mainWindow.loadURL('http://localhost:5173')
-    }
+    void mainWindow.loadURL(getRendererUrl())
     mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
+    void mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show()
+  })
+  mainWindow.webContents.on(
+    'did-fail-load',
+    (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (!isMainFrame) return
+      console.error(
+        `[renderer] load failed code=${errorCode} desc=${errorDescription} url=${validatedURL}`
+      )
+      if (isDev && !hasRetriedDevLoad) {
+        hasRetriedDevLoad = true
+        setTimeout(() => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            void mainWindow.loadURL(getRendererUrl())
+          }
+        }, 500)
+      }
+    }
+  )
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error(`[renderer] process gone: reason=${details.reason}, exitCode=${details.exitCode}`)
+  })
   bindAgentIpc(mainWindow.webContents)
   mainWindow.webContents.on('did-finish-load', () => {
     mainWindow?.webContents.send(EVENTS.SESSIONS_SYNC, getSessions())

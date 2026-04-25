@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   App as AntdApp,
+  Alert,
   Button,
   Card,
   Collapse,
@@ -29,11 +30,55 @@ const { Sider, Content, Header } = Layout
 const { Text, Paragraph } = Typography
 const { TextArea } = Input
 
+const PRELOAD_MISSING_ERROR = '未检测到 preload 注入（window.agentWeave 不存在）'
+const noopUnsub = () => {}
+
+const fallbackApi = {
+  selectWorkspace: async () => ({ path: '' }),
+  getWorkspace: async () => '',
+  getSettings: async () => ({
+    provider: 'deepseek',
+    apiKey: '',
+    baseUrl: 'https://api.deepseek.com/v1',
+    model: 'deepseek-chat',
+    maxConcurrentStreams: 2,
+    streamFlushMs: 32,
+    streamFlushChars: 320,
+    maxTerminalOutputChars: 1000
+  } as AppSettings),
+  setSettings: async () =>
+    ({
+      provider: 'deepseek',
+      apiKey: '',
+      baseUrl: 'https://api.deepseek.com/v1',
+      model: 'deepseek-chat',
+      maxConcurrentStreams: 2,
+      streamFlushMs: 32,
+      streamFlushChars: 320,
+      maxTerminalOutputChars: 1000
+    } as AppSettings),
+  listSessions: async () => [] as SessionInfo[],
+  createSession: async () =>
+    ({
+      id: '',
+      name: '',
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    } as SessionInfo),
+  renameSession: async () => null as SessionInfo | null,
+  deleteSession: async () => ({ ok: true as const }),
+  sendAgentMessage: async () => ({ ok: false as const, error: PRELOAD_MISSING_ERROR }),
+  cancelAgent: async () => ({ ok: true as const }),
+  onStream: () => noopUnsub,
+  onSessionsSync: () => noopUnsub,
+  onWorkspaceChange: () => noopUnsub,
+  onSettingsSync: () => noopUnsub
+}
+
 const api = () => {
-  if (typeof window === 'undefined' || !window.agentWeave) {
-    throw new Error('preload 未注入')
-  }
-  return window.agentWeave
+  if (typeof window === 'undefined') return fallbackApi
+  if (window.agentWeave) return window.agentWeave
+  return fallbackApi
 }
 
 function randomId() {
@@ -42,6 +87,7 @@ function randomId() {
 
 export function App() {
   const { message: msgApi, modal: modalApi } = AntdApp.useApp()
+  const preloadOk = typeof window !== 'undefined' && typeof window.agentWeave !== 'undefined'
   const [workspace, setWorkspace] = useState('')
   const [sessions, setSessions] = useState<SessionInfo[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -136,6 +182,9 @@ export function App() {
   }, [msgApi])
 
   useEffect(() => {
+    if (!preloadOk) {
+      msgApi.error(PRELOAD_MISSING_ERROR)
+    }
     void load()
     const unSub = [
       api().onWorkspaceChange((p) => setWorkspace(p.path)),
@@ -283,6 +332,16 @@ export function App() {
           )}
         </Header>
         <Content style={{ display: 'flex', flexDirection: 'column' }}>
+          {!preloadOk && (
+            <div style={{ padding: '12px 16px 0 16px' }}>
+              <Alert
+                type="error"
+                showIcon
+                message="preload 注入失败"
+                description="当前窗口未接收到主进程暴露的 API（window.agentWeave）。请重启 dev 进程后重试。"
+              />
+            </div>
+          )}
           <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
             {currentMessages.map((m) => (
               <Card key={m.id} size="small" style={{ marginBottom: 8, background: m.role === 'user' ? '#1f1f1f' : '#111' }}>
