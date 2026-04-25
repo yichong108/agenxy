@@ -45,7 +45,7 @@ export const defaultSettings: AppSettings = {
   maxConcurrentStreams: 2,
   streamFlushMs: 32,
   streamFlushChars: 320,
-  maxTerminalOutputChars: 32_000
+  maxTerminalOutputChars: 1_000
 }
 
 export type SessionInfo = {

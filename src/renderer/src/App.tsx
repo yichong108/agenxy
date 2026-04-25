@@ -366,7 +366,7 @@ export function App() {
               />
             </Form.Item>
             <Form.Item name="baseUrl" label="Base URL" rules={[{ required: true }]}>
-              <Input placeholder="如 https://api.openai.com/v1" />
+              <Input placeholder="如 https://api.deepseek.com/v1" />
             </Form.Item>
             <Form.Item name="model" label="Model" rules={[{ required: true }]}>
               <Input />
@@ -384,7 +384,7 @@ export function App() {
               <InputNumber min={32} max={2000} style={{ width: '100%' }} />
             </Form.Item>
             <Form.Item name="maxTerminalOutputChars" label="终端输出最大字符">
-              <InputNumber min={2000} max={200000} style={{ width: '100%' }} />
+              <InputNumber min={1} max={1000} style={{ width: '100%' }} />
             </Form.Item>
           </Form>
         )}

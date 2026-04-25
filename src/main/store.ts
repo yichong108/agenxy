@@ -19,6 +19,14 @@ const store = new Store<StoreSchema>({
   }
 })
 
+function normalizeSettings(input: Partial<AppSettings>): AppSettings {
+  const merged = { ...defaultSettings, ...input }
+  return {
+    ...merged,
+    maxTerminalOutputChars: Math.min(1000, Math.max(1, merged.maxTerminalOutputChars))
+  }
+}
+
 export function getWorkspace(): string {
   return store.get('workspace') || ''
 }
@@ -28,11 +36,11 @@ export function setWorkspace(dir: string): void {
 }
 
 export function getSettings(): AppSettings {
-  return { ...defaultSettings, ...store.get('settings') }
+  return normalizeSettings(store.get('settings'))
 }
 
 export function setSettings(patch: Partial<AppSettings>): AppSettings {
-  const next = { ...getSettings(), ...patch }
+  const next = normalizeSettings({ ...getSettings(), ...patch })
   store.set('settings', next)
   return next
 }
