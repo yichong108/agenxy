@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  PlusOutlined,
+  SendOutlined,
+  SettingOutlined,
+  StopOutlined,
+  FolderOpenOutlined
+} from '@ant-design/icons'
 import {
   App as AntdApp,
   Alert,
@@ -17,14 +23,15 @@ import {
   Typography,
   Dropdown
 } from 'antd'
-import {
-  PlusOutlined,
-  SendOutlined,
-  SettingOutlined,
-  StopOutlined,
-  FolderOpenOutlined
-} from '@ant-design/icons'
-import type { AppSettings, ChatMessage, SessionInfo, StreamEvent, ToolTimelineEvent } from '@shared/ipc'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+
+import type {
+  AppSettings,
+  ChatMessage,
+  SessionInfo,
+  StreamEvent,
+  ToolTimelineEvent
+} from '@shared/ipc'
 
 const { Sider, Content, Header } = Layout
 const { Text, Paragraph } = Typography
@@ -36,16 +43,17 @@ const noopUnsub = () => {}
 const fallbackApi = {
   selectWorkspace: async () => ({ path: '' }),
   getWorkspace: async () => '',
-  getSettings: async () => ({
-    provider: 'deepseek',
-    apiKey: '',
-    baseUrl: 'https://api.deepseek.com/v1',
-    model: 'deepseek-chat',
-    maxConcurrentStreams: 2,
-    streamFlushMs: 32,
-    streamFlushChars: 320,
-    maxTerminalOutputChars: 1000
-  } as AppSettings),
+  getSettings: async () =>
+    ({
+      provider: 'deepseek',
+      apiKey: '',
+      baseUrl: 'https://api.deepseek.com/v1',
+      model: 'deepseek-chat',
+      maxConcurrentStreams: 2,
+      streamFlushMs: 32,
+      streamFlushChars: 320,
+      maxTerminalOutputChars: 1000
+    }) as AppSettings,
   setSettings: async () =>
     ({
       provider: 'deepseek',
@@ -56,7 +64,7 @@ const fallbackApi = {
       streamFlushMs: 32,
       streamFlushChars: 320,
       maxTerminalOutputChars: 1000
-    } as AppSettings),
+    }) as AppSettings,
   listSessions: async () => [] as SessionInfo[],
   createSession: async () =>
     ({
@@ -64,7 +72,7 @@ const fallbackApi = {
       name: '',
       createdAt: Date.now(),
       updatedAt: Date.now()
-    } as SessionInfo),
+    }) as SessionInfo,
   renameSession: async () => null as SessionInfo | null,
   deleteSession: async () => ({ ok: true as const }),
   sendAgentMessage: async () => ({ ok: false as const, error: PRELOAD_MISSING_ERROR }),
@@ -107,79 +115,90 @@ export function App() {
   const assistantMsgId = useRef<Record<string, string | null>>({})
 
   const load = useCallback(async () => {
-    const [w, s, sList] = await Promise.all([api().getWorkspace(), api().getSettings(), api().listSessions()])
+    const [w, s, sList] = await Promise.all([
+      api().getWorkspace(),
+      api().getSettings(),
+      api().listSessions()
+    ])
     setWorkspace(w)
     setSettings(s)
     setSessions(sList)
     setActiveId((prev) => (prev == null && sList.length > 0 ? sList[0]!.id : prev))
   }, [])
 
-  const handleStream = useCallback((e: StreamEvent) => {
-    if (e.type === 'run-start') {
-      setRunning((r) => ({ ...r, [e.sessionId]: true }))
-      setQueued((q) => ({ ...q, [e.sessionId]: undefined }))
-      streamBuf.current[e.sessionId] = ''
-      const aid = randomId()
-      assistantMsgId.current[e.sessionId] = aid
-      setMessages((m) => {
-        const cur = m[e.sessionId] ?? []
-        return {
-          ...m,
-          [e.sessionId]: [...cur, { id: aid, role: 'assistant' as const, content: '' }]
-        }
-      })
-      setTimeline((t) => ({ ...t, [e.sessionId]: [] }))
-      return
-    }
-    if (e.type === 'queued') {
-      setQueued((q) => ({ ...q, [e.sessionId]: e.position }))
-      return
-    }
-    if (e.type === 'text-delta') {
-      streamBuf.current[e.sessionId] = (streamBuf.current[e.sessionId] ?? '') + e.text
-      const buf = streamBuf.current[e.sessionId]!
-      const amId = assistantMsgId.current[e.sessionId]
-      if (!amId) return
-      setMessages((m) => {
-        const cur = [...(m[e.sessionId] ?? [])]
-        const idx = cur.findIndex((c) => c.id === amId)
-        if (idx < 0) return m
-        const next = { ...cur[idx]!, content: buf }
-        cur[idx] = next
-        return { ...m, [e.sessionId]: cur }
-      })
-      return
-    }
-    if (e.type === 'tool') {
-      const te = e.event
-      setTimeline((t) => {
-        const list = [...(t[e.sessionId] ?? [])]
-        if (te.kind === 'tool') {
-          const same = list.find(
-            (x): x is Extract<ToolTimelineEvent, { kind: 'tool' }> => x.kind === 'tool' && x.id === te.id
-          )
-          if (same && te.status === 'end') {
-            const next: Extract<ToolTimelineEvent, { kind: 'tool' }> = { ...te }
-            return { ...t, [e.sessionId]: list.map((x) => (x.kind === 'tool' && x.id === te.id ? next : x)) }
+  const handleStream = useCallback(
+    (e: StreamEvent) => {
+      if (e.type === 'run-start') {
+        setRunning((r) => ({ ...r, [e.sessionId]: true }))
+        setQueued((q) => ({ ...q, [e.sessionId]: undefined }))
+        streamBuf.current[e.sessionId] = ''
+        const aid = randomId()
+        assistantMsgId.current[e.sessionId] = aid
+        setMessages((m) => {
+          const cur = m[e.sessionId] ?? []
+          return {
+            ...m,
+            [e.sessionId]: [...cur, { id: aid, role: 'assistant' as const, content: '' }]
           }
-        }
-        list.push(te)
-        return { ...t, [e.sessionId]: list }
-      })
-      return
-    }
-    if (e.type === 'error') {
-      msgApi.error(e.message)
-      setRunning((r) => ({ ...r, [e.sessionId]: false }))
-      return
-    }
-    if (e.type === 'done') {
-      setRunning((r) => ({ ...r, [e.sessionId]: false }))
-      setQueued((q) => ({ ...q, [e.sessionId]: undefined }))
-      streamBuf.current[e.sessionId] = ''
-      assistantMsgId.current[e.sessionId] = null
-    }
-  }, [msgApi])
+        })
+        setTimeline((t) => ({ ...t, [e.sessionId]: [] }))
+        return
+      }
+      if (e.type === 'queued') {
+        setQueued((q) => ({ ...q, [e.sessionId]: e.position }))
+        return
+      }
+      if (e.type === 'text-delta') {
+        streamBuf.current[e.sessionId] = (streamBuf.current[e.sessionId] ?? '') + e.text
+        const buf = streamBuf.current[e.sessionId]!
+        const amId = assistantMsgId.current[e.sessionId]
+        if (!amId) return
+        setMessages((m) => {
+          const cur = [...(m[e.sessionId] ?? [])]
+          const idx = cur.findIndex((c) => c.id === amId)
+          if (idx < 0) return m
+          const next = { ...cur[idx]!, content: buf }
+          cur[idx] = next
+          return { ...m, [e.sessionId]: cur }
+        })
+        return
+      }
+      if (e.type === 'tool') {
+        const te = e.event
+        setTimeline((t) => {
+          const list = [...(t[e.sessionId] ?? [])]
+          if (te.kind === 'tool') {
+            const same = list.find(
+              (x): x is Extract<ToolTimelineEvent, { kind: 'tool' }> =>
+                x.kind === 'tool' && x.id === te.id
+            )
+            if (same && te.status === 'end') {
+              const next: Extract<ToolTimelineEvent, { kind: 'tool' }> = { ...te }
+              return {
+                ...t,
+                [e.sessionId]: list.map((x) => (x.kind === 'tool' && x.id === te.id ? next : x))
+              }
+            }
+          }
+          list.push(te)
+          return { ...t, [e.sessionId]: list }
+        })
+        return
+      }
+      if (e.type === 'error') {
+        msgApi.error(e.message)
+        setRunning((r) => ({ ...r, [e.sessionId]: false }))
+        return
+      }
+      if (e.type === 'done') {
+        setRunning((r) => ({ ...r, [e.sessionId]: false }))
+        setQueued((q) => ({ ...q, [e.sessionId]: undefined }))
+        streamBuf.current[e.sessionId] = ''
+        assistantMsgId.current[e.sessionId] = null
+      }
+    },
+    [msgApi]
+  )
 
   useEffect(() => {
     if (!preloadOk) {
@@ -194,7 +213,7 @@ export function App() {
       }),
       api().onSessionsSync((list) => {
         setSessions(list)
-        setActiveId((aid) => (aid && list.some((x) => x.id === aid) ? aid : list[0]?.id ?? null))
+        setActiveId((aid) => (aid && list.some((x) => x.id === aid) ? aid : (list[0]?.id ?? null)))
       }),
       api().onStream(handleStream)
     ]
@@ -246,11 +265,11 @@ export function App() {
   }
 
   const currentMessages = useMemo(
-    () => (activeId ? messages[activeId] ?? [] : []),
+    () => (activeId ? (messages[activeId] ?? []) : []),
     [activeId, messages]
   )
   const currentTimeline = useMemo(
-    () => (activeId ? timeline[activeId] ?? [] : []),
+    () => (activeId ? (timeline[activeId] ?? []) : []),
     [activeId, timeline]
   )
   const isRun = activeId ? running[activeId] : false
@@ -259,12 +278,34 @@ export function App() {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sider width={240} theme="dark" style={{ display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text strong style={{ color: 'rgba(255,255,255,0.85)' }}>AgentWeave</Text>
-          <Button type="text" icon={<SettingOutlined />} onClick={openSettings} style={{ color: '#fff' }} />
+        <div
+          style={{
+            padding: 12,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}
+        >
+          <Text strong style={{ color: 'rgba(255,255,255,0.85)' }}>
+            AgentWeave
+          </Text>
+          <Button
+            type="text"
+            icon={<SettingOutlined />}
+            onClick={openSettings}
+            style={{ color: '#fff' }}
+          />
         </div>
         <div style={{ padding: '0 8px' }}>
-          <Button block type="dashed" icon={<PlusOutlined />} onClick={async () => { const s = await api().createSession(); setActiveId(s.id) }}>
+          <Button
+            block
+            type="dashed"
+            icon={<PlusOutlined />}
+            onClick={async () => {
+              const s = await api().createSession()
+              setActiveId(s.id)
+            }}
+          >
             新会话
           </Button>
         </div>
@@ -303,15 +344,28 @@ export function App() {
               trigger={['contextMenu']}
             >
               <List.Item
-                style={{ cursor: 'pointer', background: s.id === activeId ? 'rgba(255,255,255,0.12)' : 'transparent' }}
+                style={{
+                  cursor: 'pointer',
+                  background: s.id === activeId ? 'rgba(255,255,255,0.12)' : 'transparent'
+                }}
                 onClick={() => setActiveId(s.id)}
               >
-                <List.Item.Meta title={s.name} description={new Date(s.updatedAt).toLocaleString('zh-CN')} />
+                <List.Item.Meta
+                  title={s.name}
+                  description={new Date(s.updatedAt).toLocaleString('zh-CN')}
+                />
               </List.Item>
             </Dropdown>
           )}
         />
-        <div style={{ padding: 8, color: 'rgba(255,255,255,0.45)', fontSize: 11, wordBreak: 'break-all' }}>
+        <div
+          style={{
+            padding: 8,
+            color: 'rgba(255,255,255,0.45)',
+            fontSize: 11,
+            wordBreak: 'break-all'
+          }}
+        >
           工作区: {workspace || '未选'}
         </div>
         <div style={{ padding: 8 }}>
@@ -321,7 +375,15 @@ export function App() {
         </div>
       </Sider>
       <Layout>
-        <Header style={{ background: '#141414', display: 'flex', alignItems: 'center', paddingLeft: 16, borderBottom: '1px solid #303030' }}>
+        <Header
+          style={{
+            background: '#141414',
+            display: 'flex',
+            alignItems: 'center',
+            paddingLeft: 16,
+            borderBottom: '1px solid #303030'
+          }}
+        >
           {activeId && (
             <Space>
               <Text type="secondary">会话</Text>
@@ -344,40 +406,58 @@ export function App() {
           )}
           <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
             {currentMessages.map((m) => (
-              <Card key={m.id} size="small" style={{ marginBottom: 8, background: m.role === 'user' ? '#1f1f1f' : '#111' }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>{m.role === 'user' ? '你' : '助理'}</Text>
-                <Paragraph style={{ marginBottom: 0, whiteSpace: 'pre-wrap' }}>{m.content || (m.role === 'assistant' && isRun ? '…' : '')}</Paragraph>
+              <Card
+                key={m.id}
+                size="small"
+                style={{ marginBottom: 8, background: m.role === 'user' ? '#1f1f1f' : '#111' }}
+              >
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {m.role === 'user' ? '你' : '助理'}
+                </Text>
+                <Paragraph style={{ marginBottom: 0, whiteSpace: 'pre-wrap' }}>
+                  {m.content || (m.role === 'assistant' && isRun ? '…' : '')}
+                </Paragraph>
               </Card>
             ))}
-            {!currentMessages.length && <Text type="secondary">发一条消息开始；务必先选择工作区并配置 API Key。</Text>}
+            {!currentMessages.length && (
+              <Text type="secondary">发一条消息开始；务必先选择工作区并配置 API Key。</Text>
+            )}
           </div>
           {activeId && (
             <div style={{ borderTop: '1px solid #303030' }}>
-              <Collapse items={[
-                { key: 't', label: '工具 / 时间线', children: (
-                  <List
-                    size="small"
-                    dataSource={currentTimeline}
-                    renderItem={(e) => (
-                      <List.Item>
-                        {e.kind === 'error' ? (
-                          <Text type="danger">{e.message}</Text>
-                        ) : (
-                          <>
-                            <Text code>
-                              {e.name} {e.status === 'start' ? '…' : '✓'}
-                            </Text>
-                            {e.args && <Text type="secondary"> {e.args}</Text>}
-                            {e.status === 'end' && e.result && (
-                              <pre style={{ fontSize: 11, maxHeight: 120, overflow: 'auto' }}>{e.result}</pre>
+              <Collapse
+                items={[
+                  {
+                    key: 't',
+                    label: '工具 / 时间线',
+                    children: (
+                      <List
+                        size="small"
+                        dataSource={currentTimeline}
+                        renderItem={(e) => (
+                          <List.Item>
+                            {e.kind === 'error' ? (
+                              <Text type="danger">{e.message}</Text>
+                            ) : (
+                              <>
+                                <Text code>
+                                  {e.name} {e.status === 'start' ? '…' : '✓'}
+                                </Text>
+                                {e.args && <Text type="secondary"> {e.args}</Text>}
+                                {e.status === 'end' && e.result && (
+                                  <pre style={{ fontSize: 11, maxHeight: 120, overflow: 'auto' }}>
+                                    {e.result}
+                                  </pre>
+                                )}
+                              </>
                             )}
-                          </>
+                          </List.Item>
                         )}
-                      </List.Item>
-                    )}
-                  />
-                ) }
-              ]} />
+                      />
+                    )
+                  }
+                ]}
+              />
             </div>
           )}
           <div style={{ padding: 12, display: 'flex', gap: 8 }}>
@@ -394,11 +474,21 @@ export function App() {
               }}
             />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <Button type="primary" icon={<SendOutlined />} onClick={() => void send()} disabled={!activeId}>
+              <Button
+                type="primary"
+                icon={<SendOutlined />}
+                onClick={() => void send()}
+                disabled={!activeId}
+              >
                 发送
               </Button>
               {activeId && (
-                <Button danger icon={<StopOutlined />} onClick={() => void api().cancelAgent(activeId)} disabled={!isRun}>
+                <Button
+                  danger
+                  icon={<StopOutlined />}
+                  onClick={() => void api().cancelAgent(activeId)}
+                  disabled={!isRun}
+                >
                   停止
                 </Button>
               )}
@@ -418,11 +508,7 @@ export function App() {
         {settings && (
           <Form form={form} layout="vertical" initialValues={settings}>
             <Form.Item name="provider" label="提供方" rules={[{ required: true }]}>
-              <Select
-                options={[
-                  { value: 'deepseek', label: 'DeepSeek' }
-                ]}
-              />
+              <Select options={[{ value: 'deepseek', label: 'DeepSeek' }]} />
             </Form.Item>
             <Form.Item name="baseUrl" label="Base URL" rules={[{ required: true }]}>
               <Input placeholder="如 https://api.deepseek.com/v1" />
@@ -467,7 +553,11 @@ export function App() {
         okText="保存"
         destroyOnHidden
       >
-        <Input value={renameName} onChange={(e) => setRenameName(e.target.value)} placeholder="名称" />
+        <Input
+          value={renameName}
+          onChange={(e) => setRenameName(e.target.value)}
+          placeholder="名称"
+        />
       </Modal>
     </Layout>
   )

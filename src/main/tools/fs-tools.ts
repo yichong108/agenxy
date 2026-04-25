@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
+
 import { resolveSafePath, ensureWorkspaceExists } from '../path-guard.js'
 
 const MAX_READ = 500_000
@@ -54,7 +55,11 @@ export async function readFileTool(workspace: string, relPath: string): Promise<
   return await fs.readFile(file, 'utf8')
 }
 
-export async function writeFileTool(workspace: string, relPath: string, content: string): Promise<string> {
+export async function writeFileTool(
+  workspace: string,
+  relPath: string,
+  content: string
+): Promise<string> {
   const root = ensureWorkspaceExists(workspace)
   const file = resolveSafePath(relPath, root)
   await fs.mkdir(path.dirname(file), { recursive: true })
@@ -120,7 +125,12 @@ export async function searchWorkspace(
       if (count >= maxFiles) return
       const full = path.join(d, e.name)
       if (e.isDirectory()) {
-        if (e.name === 'node_modules' || e.name === '.git' || e.name === 'dist' || e.name === 'out') {
+        if (
+          e.name === 'node_modules' ||
+          e.name === '.git' ||
+          e.name === 'dist' ||
+          e.name === 'out'
+        ) {
           continue
         }
         await walk(full)
@@ -134,7 +144,10 @@ export async function searchWorkspace(
           if (!lowerText.includes(lower)) continue
           const rel = path.relative(root, full)
           const lineIdx = text.split('\n').findIndex((l) => l.toLowerCase().includes(lower))
-          const preview = lineIdx >= 0 ? `L${lineIdx + 1}: ${text.split('\n')[lineIdx]!.trim().slice(0, 200)}` : '匹配'
+          const preview =
+            lineIdx >= 0
+              ? `L${lineIdx + 1}: ${text.split('\n')[lineIdx]!.trim().slice(0, 200)}`
+              : '匹配'
           results.push(`${rel}\n  ${preview}`)
           count++
         } catch {

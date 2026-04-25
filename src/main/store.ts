@@ -1,6 +1,8 @@
 import path from 'node:path'
+
 import { app } from 'electron'
 import Store from 'electron-store'
+
 import { defaultSettings, type AppSettings, type SessionInfo } from '../shared/ipc.js'
 
 type StoreSchema = {

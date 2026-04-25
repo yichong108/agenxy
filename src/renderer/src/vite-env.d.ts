@@ -11,7 +11,10 @@ type Api = {
   createSession: (name?: string) => Promise<SessionInfo>
   renameSession: (id: string, name: string) => Promise<SessionInfo | null>
   deleteSession: (id: string) => Promise<{ ok: true }>
-  sendAgentMessage: (sessionId: string, text: string) => Promise<{ ok: true } | { ok: false; error: string }>
+  sendAgentMessage: (
+    sessionId: string,
+    text: string
+  ) => Promise<{ ok: true } | { ok: false; error: string }>
   cancelAgent: (sessionId: string) => Promise<{ ok: true }>
   onStream: (cb: (e: StreamEvent) => void) => () => void
   onSessionsSync: (cb: (s: SessionInfo[]) => void) => () => void

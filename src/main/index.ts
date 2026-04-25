@@ -1,15 +1,12 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import { watch, type FSWatcher } from 'node:fs'
+import { existsSync, watch, type FSWatcher } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import {
-  bindAgentIpc,
-  cancelRun,
-  runUserMessage,
-  resetQueue
-} from './agent/agent-service.js'
+
+import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron'
+
 import { IPC, EVENTS, type AppSettings, type StreamEvent } from '../shared/ipc.js'
-import { getSettings, getWorkspace, setSettings, setWorkspace } from './store.js'
+
+import { bindAgentIpc, cancelRun, runUserMessage, resetQueue } from './agent/agent-service.js'
 import {
   loadSessionList,
   getSessions,
@@ -18,6 +15,7 @@ import {
   deleteSession,
   touchSession
 } from './sessions.js'
+import { getSettings, getWorkspace, setSettings, setWorkspace } from './store.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const isDev = !app.isPackaged
@@ -26,8 +24,30 @@ let devWatcher: FSWatcher | null = null
 let restartTimer: NodeJS.Timeout | null = null
 let hasRetriedDevLoad = false
 
+async function loadReactDevtoolsExtension(): Promise<void> {
+  if (!isDev || process.platform !== 'win32') return
+
+  const extensionPath = path.resolve(__dirname, '../../extensions/react-devtools')
+  if (!existsSync(extensionPath)) {
+    console.warn(`[react-devtools] 扩展目录不存在: ${extensionPath}`)
+    return
+  }
+
+  try {
+    await session.defaultSession.loadExtension(extensionPath, { allowFileAccess: true })
+    console.log('[react-devtools] 扩展加载成功')
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
+    console.error('[react-devtools] 扩展加载失败:', msg)
+  }
+}
+
 function getRendererUrl(): string {
-  return process.env['ELECTRON_RENDERER_URL'] || process.env['VITE_DEV_SERVER_URL'] || 'http://localhost:5173'
+  return (
+    process.env['ELECTRON_RENDERER_URL'] ||
+    process.env['VITE_DEV_SERVER_URL'] ||
+    'http://localhost:5173'
+  )
 }
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
@@ -170,7 +190,11 @@ function registerIpc(): void {
       return { ok: true as const }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      mainWindow?.webContents.send(EVENTS.AGENT_STREAM, { type: 'error', sessionId, message } as StreamEvent)
+      mainWindow?.webContents.send(EVENTS.AGENT_STREAM, {
+        type: 'error',
+        sessionId,
+        message
+      } as StreamEvent)
       return { ok: false as const, error: message }
     }
   })
@@ -186,6 +210,7 @@ function registerIpc(): void {
 
 app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return
+  void loadReactDevtoolsExtension()
   setupDevAutoRestart()
   loadSessionList()
   registerIpc()

@@ -1,14 +1,27 @@
-import { AIMessage, HumanMessage, SystemMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages'
+import {
+  AIMessage,
+  HumanMessage,
+  SystemMessage,
+  ToolMessage,
+  type BaseMessage
+} from '@langchain/core/messages'
 import { tool } from '@langchain/core/tools'
 import { ChatOpenAI } from '@langchain/openai'
 import type { WebContents } from 'electron'
 import { z } from 'zod'
-import { StreamBatcher } from './batcher.js'
-import { ConcurrencyQueue } from './queue.js'
+
+import {
+  EVENTS,
+  type AppSettings,
+  type StreamEvent,
+  type ToolTimelineEvent
+} from '../../shared/ipc.js'
 import { getSettings, getWorkspace } from '../store.js'
 import { listDirTool, readFileTool, searchWorkspace, writeFileTool } from '../tools/fs-tools.js'
 import { runCommand, killCommand } from '../tools/terminal.js'
-import { EVENTS, type AppSettings, type StreamEvent, type ToolTimelineEvent } from '../../shared/ipc.js'
+
+import { StreamBatcher } from './batcher.js'
+import { ConcurrencyQueue } from './queue.js'
 
 type SessionRuntime = {
   /** 不含 system；system 在每次请求时拼入 */
@@ -81,7 +94,7 @@ function makeTools(
       },
       {
         name: 'read_file',
-      description: '读取工作区内 UTF-8 文本文件，path 为相对工作区',
+        description: '读取工作区内 UTF-8 文本文件，path 为相对工作区',
         schema: z.object({ path: z.string() })
       }
     ),
@@ -95,7 +108,7 @@ function makeTools(
       },
       {
         name: 'write_file',
-      description: '写入或覆盖工作区文件，自动创建父目录',
+        description: '写入或覆盖工作区文件，自动创建父目录',
         schema: z.object({ path: z.string(), content: z.string() })
       }
     ),
@@ -109,8 +122,11 @@ function makeTools(
       },
       {
         name: 'list_dir',
-      description: '列出目录，path 为相对或空为根，depth 1-3',
-        schema: z.object({ path: z.string().optional(), depth: z.number().int().min(1).max(3).optional() })
+        description: '列出目录，path 为相对或空为根，depth 1-3',
+        schema: z.object({
+          path: z.string().optional(),
+          depth: z.number().int().min(1).max(3).optional()
+        })
       }
     ),
     tool(
@@ -118,12 +134,18 @@ function makeTools(
         const id = `find-${Date.now()}`
         onTool({ kind: 'tool', id, name: 'search_workspace', status: 'start', args: query })
         const r = await searchWorkspace(root, query, { maxFiles: 50 })
-        onTool({ kind: 'tool', id, name: 'search_workspace', status: 'end', result: r.slice(0, 8_000) })
+        onTool({
+          kind: 'tool',
+          id,
+          name: 'search_workspace',
+          status: 'end',
+          result: r.slice(0, 8_000)
+        })
         return r
       },
       {
         name: 'search_workspace',
-      description: '在文本类源码中按子串搜索，适合找符号',
+        description: '在文本类源码中按子串搜索，适合找符号',
         schema: z.object({ query: z.string() })
       }
     ),
@@ -137,7 +159,7 @@ function makeTools(
       },
       {
         name: 'run_terminal',
-      description: '在工作区根目录执行一条 shell 命令',
+        description: '在工作区根目录执行一条 shell 命令',
         schema: z.object({ command: z.string() })
       }
     )
@@ -273,8 +295,15 @@ export async function runUserMessage(
           }
           try {
             const toolResult = await targetTool.invoke(call.args ?? {}, { signal: ac.signal })
-            const toolText = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult)
-            onTool({ kind: 'tool', id: callId, name: toolName, status: 'end', result: toolText.slice(0, 8_000) })
+            const toolText =
+              typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult)
+            onTool({
+              kind: 'tool',
+              id: callId,
+              name: toolName,
+              status: 'end',
+              result: toolText.slice(0, 8_000)
+            })
             session.messages.push(new ToolMessage({ tool_call_id: callId, content: toolText }))
           } catch (toolErr) {
             const toolMessage = toolErr instanceof Error ? toolErr.message : String(toolErr)

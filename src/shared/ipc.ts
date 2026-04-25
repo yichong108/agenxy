@@ -66,7 +66,14 @@ export type ChatMessage = {
 }
 
 export type ToolTimelineEvent =
-  | { kind: 'tool'; id: string; name: string; status: 'start' | 'end'; args?: string; result?: string }
+  | {
+      kind: 'tool'
+      id: string
+      name: string
+      status: 'start' | 'end'
+      args?: string
+      result?: string
+    }
   | { kind: 'error'; message: string }
 
 export type StreamEvent =

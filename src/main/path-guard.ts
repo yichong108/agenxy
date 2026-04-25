@@ -1,5 +1,5 @@
-import path from 'node:path'
 import fs from 'node:fs'
+import path from 'node:path'
 
 /**
  * 将用户传入路径解析为工作区内绝对路径，防止穿越。

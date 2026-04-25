@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto'
+
+import type { SessionInfo } from '../shared/ipc.js'
+
 import { clearSessionState, initSessionState } from './agent/agent-service.js'
 import { getSessionsMeta, setSessionsMeta } from './store.js'
-import type { SessionInfo } from '../shared/ipc.js'
 
 let list: SessionInfo[] = []
 let nameCounter = 1
