@@ -1,6 +1,7 @@
-import { createAnthropic } from '@ai-sdk/anthropic'
-import { createOpenAI } from '@ai-sdk/openai'
-import { streamText, tool, type CoreMessage, type TextStreamPart } from 'ai'
+import { ChatAnthropic } from '@langchain/anthropic'
+import { AIMessage, HumanMessage, SystemMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages'
+import { tool } from '@langchain/core/tools'
+import { ChatOpenAI } from '@langchain/openai'
 import type { WebContents } from 'electron'
 import { z } from 'zod'
 import { StreamBatcher } from './batcher.js'
@@ -12,10 +13,15 @@ import { EVENTS, type AppSettings, type StreamEvent, type ToolTimelineEvent } fr
 
 type SessionRuntime = {
   /** 不含 system；system 在每次请求时拼入 */
-  coreMessages: CoreMessage[]
+  messages: BaseMessage[]
   controller: AbortController | null
   /** 与终端 key 同会话一致 */
   terminalKey: string
+}
+
+type NamedTool = {
+  name: string
+  invoke: (input: unknown, config?: { signal?: AbortSignal }) => Promise<unknown>
 }
 
 const sessions = new Map<string, SessionRuntime>()
@@ -39,17 +45,25 @@ function createLanguageModel(settings: AppSettings) {
     throw new Error('请先在「设置」中配置 API Key')
   }
   if (settings.provider === 'anthropic') {
-    const a = createAnthropic({
+    return new ChatAnthropic({
       apiKey: settings.apiKey,
-      baseURL: settings.baseUrl?.trim() || undefined
+      model: settings.model,
+      anthropicApiUrl: settings.baseUrl?.trim() || undefined,
+      streaming: true,
+      temperature: 0
     })
-    return a(settings.model)
   }
-  const o = createOpenAI({
+  const defaultBaseURL =
+    settings.provider === 'deepseek' ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1'
+  return new ChatOpenAI({
     apiKey: settings.apiKey,
-    baseURL: settings.baseUrl?.trim() || 'https://api.openai.com/v1'
+    model: settings.model,
+    configuration: {
+      baseURL: settings.baseUrl?.trim() || defaultBaseURL
+    },
+    streaming: true,
+    temperature: 0
   })
-  return o(settings.model)
 }
 
 function buildSystemPrompt(root: string): string {
@@ -67,72 +81,97 @@ function makeTools(
   onTool: (e: ToolTimelineEvent) => void
 ) {
   const termKey = `term:${sessionId}`
-  return {
-    read_file: tool({
-      description: '读取工作区内 UTF-8 文本文件，path 为相对工作区',
-      parameters: z.object({ path: z.string() }),
-      execute: async ({ path: p }) => {
+  const tools = [
+    tool(
+      async ({ path: p }) => {
         const id = `read-${Date.now()}`
         onTool({ kind: 'tool', id, name: 'read_file', status: 'start', args: p })
         const r = await readFileTool(root, p)
         onTool({ kind: 'tool', id, name: 'read_file', status: 'end', result: r.slice(0, 8_000) })
         return r
+      },
+      {
+        name: 'read_file',
+      description: '读取工作区内 UTF-8 文本文件，path 为相对工作区',
+        schema: z.object({ path: z.string() })
       }
-    }),
-    write_file: tool({
-      description: '写入或覆盖工作区文件，自动创建父目录',
-      parameters: z.object({ path: z.string(), content: z.string() }),
-      execute: async ({ path: p, content }) => {
+    ),
+    tool(
+      async ({ path: p, content }) => {
         const id = `w-${Date.now()}`
         onTool({ kind: 'tool', id, name: 'write_file', status: 'start', args: p })
         const r = await writeFileTool(root, p, content)
         onTool({ kind: 'tool', id, name: 'write_file', status: 'end', result: r })
         return r
+      },
+      {
+        name: 'write_file',
+      description: '写入或覆盖工作区文件，自动创建父目录',
+        schema: z.object({ path: z.string(), content: z.string() })
       }
-    }),
-    list_dir: tool({
-      description: '列出目录，path 为相对或空为根，depth 1-3',
-      parameters: z.object({ path: z.string().optional(), depth: z.number().int().min(1).max(3).optional() }),
-      execute: async ({ path: p, depth }) => {
+    ),
+    tool(
+      async ({ path: p, depth }) => {
         const id = `ls-${Date.now()}`
         onTool({ kind: 'tool', id, name: 'list_dir', status: 'start', args: p || '.' })
         const r = await listDirTool(root, p || '.', { depth: depth ?? 2 })
         onTool({ kind: 'tool', id, name: 'list_dir', status: 'end', result: r.slice(0, 8_000) })
         return r
+      },
+      {
+        name: 'list_dir',
+      description: '列出目录，path 为相对或空为根，depth 1-3',
+        schema: z.object({ path: z.string().optional(), depth: z.number().int().min(1).max(3).optional() })
       }
-    }),
-    search_workspace: tool({
-      description: '在文本类源码中按子串搜索，适合找符号',
-      parameters: z.object({ query: z.string() }),
-      execute: async ({ query }) => {
+    ),
+    tool(
+      async ({ query }) => {
         const id = `find-${Date.now()}`
         onTool({ kind: 'tool', id, name: 'search_workspace', status: 'start', args: query })
         const r = await searchWorkspace(root, query, { maxFiles: 50 })
         onTool({ kind: 'tool', id, name: 'search_workspace', status: 'end', result: r.slice(0, 8_000) })
         return r
+      },
+      {
+        name: 'search_workspace',
+      description: '在文本类源码中按子串搜索，适合找符号',
+        schema: z.object({ query: z.string() })
       }
-    }),
-    run_terminal: tool({
-      description: '在工作区根目录执行一条 shell 命令',
-      parameters: z.object({ command: z.string() }),
-      execute: async ({ command }, { abortSignal }) => {
+    ),
+    tool(
+      async ({ command }) => {
         const id = `sh-${Date.now()}`
         onTool({ kind: 'tool', id, name: 'run_terminal', status: 'start', args: command })
-        if (abortSignal?.aborted) {
-          onTool({ kind: 'tool', id, name: 'run_terminal', status: 'end', result: '已取消' })
-          return '已取消'
-        }
         const r = await runCommand(termKey, root, command, settings.maxTerminalOutputChars)
         onTool({ kind: 'tool', id, name: 'run_terminal', status: 'end', result: r.slice(0, 4_000) })
         return r
+      },
+      {
+        name: 'run_terminal',
+      description: '在工作区根目录执行一条 shell 命令',
+        schema: z.object({ command: z.string() })
       }
-    })
-  } as const
+    )
+  ]
+  const byName = new Map<string, NamedTool>(tools.map((x) => [x.name, x as NamedTool]))
+  return { tools, byName }
 }
 
-function responseMessageToCore(m: { id: string; role: 'assistant' | 'tool'; content: unknown }): CoreMessage {
-  const { id: _i, ...rest } = m as { id: string } & CoreMessage
-  return rest as CoreMessage
+function contentToText(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part
+        if (part && typeof part === 'object' && 'text' in part) {
+          const text = (part as { text?: unknown }).text
+          return typeof text === 'string' ? text : ''
+        }
+        return ''
+      })
+      .join('')
+  }
+  return ''
 }
 
 export function bindAgentIpc(wc: WebContents): void {
@@ -142,15 +181,15 @@ export function bindAgentIpc(wc: WebContents): void {
 export function initSessionState(sessionId: string): void {
   if (!sessions.has(sessionId)) {
     sessions.set(sessionId, {
-      coreMessages: [],
+      messages: [],
       controller: null,
       terminalKey: `term:${sessionId}`
     })
   }
 }
 
-export function getSessionCoreMessages(sessionId: string): CoreMessage[] {
-  return sessions.get(sessionId)?.coreMessages ?? []
+export function getSessionCoreMessages(sessionId: string): BaseMessage[] {
+  return sessions.get(sessionId)?.messages ?? []
 }
 
 export function clearSessionState(sessionId: string): void {
@@ -188,7 +227,7 @@ export async function runUserMessage(
   await queue.run(async () => {
     onQueued(0) // 0 = 已获执行权（不展示排队条）
     const session = sessions.get(sessionId) ?? {
-      coreMessages: [],
+      messages: [],
       controller: null,
       terminalKey: `term:${sessionId}`
     }
@@ -199,53 +238,64 @@ export async function runUserMessage(
     const batcher = new StreamBatcher(settings.streamFlushMs, settings.streamFlushChars, (t) => {
       emit({ type: 'text-delta', sessionId, text: t })
     })
-    const toolNotified = new Set<string>()
     const onTool = (e: ToolTimelineEvent) => {
       emit({ type: 'tool', sessionId, event: e })
     }
-    const tools = makeTools(sessionId, root, settings, onTool)
-    session.coreMessages.push({ role: 'user', content: userText })
+    const { tools, byName } = makeTools(sessionId, root, settings, onTool)
+    const model = createLanguageModel(settings).bindTools(tools)
+    session.messages.push(new HumanMessage(userText))
     const system = buildSystemPrompt(root)
-    const model = createLanguageModel(settings)
-    const messages: CoreMessage[] = [{ role: 'system', content: system }, ...session.coreMessages]
     try {
-      const result = streamText({
-        model,
-        tools,
-        maxSteps: 16,
-        messages,
-        abortSignal: ac.signal
-      })
-      for await (const part of result.fullStream) {
+      for (let step = 0; step < 16; step += 1) {
         if (ac.signal.aborted) break
-        const p = part as TextStreamPart<typeof tools>
-        if (p.type === 'text-delta') {
-          batcher.push(p.textDelta)
-        } else if (p.type === 'tool-call' && 'toolName' in p) {
-          const id = (p as { toolCallId: string; toolName: string }).toolCallId
-          if (!toolNotified.has(id)) {
-            toolNotified.add(id)
-            onTool({
-              kind: 'tool',
-              id,
-              name: (p as { toolName: string }).toolName,
-              status: 'start',
-              args: '…'
-            })
+        let streamedChars = 0
+        const response = await model.invoke([new SystemMessage(system), ...session.messages], {
+          signal: ac.signal,
+          callbacks: [
+            {
+              handleLLMNewToken(token: string) {
+                streamedChars += token.length
+                batcher.push(token)
+              }
+            }
+          ]
+        })
+        session.messages.push(response)
+        const toolCalls = (response as AIMessage).tool_calls ?? []
+        if (!toolCalls.length) {
+          const text = contentToText(response.content)
+          if (text && streamedChars === 0) {
+            batcher.push(text)
           }
-        } else if (p.type === 'error') {
-          onTool({ kind: 'error', message: String((p as { error: unknown }).error) })
+          break
+        }
+        for (const call of toolCalls) {
+          const callId = call.id || `tc-${Date.now()}`
+          const toolName = call.name
+          const toolArgs = JSON.stringify(call.args ?? {})
+          onTool({ kind: 'tool', id: callId, name: toolName, status: 'start', args: toolArgs })
+          const targetTool = byName.get(toolName)
+          if (!targetTool) {
+            const notFound = `未找到工具: ${toolName}`
+            onTool({ kind: 'error', message: notFound })
+            onTool({ kind: 'tool', id: callId, name: toolName, status: 'end', result: notFound })
+            session.messages.push(new ToolMessage({ tool_call_id: callId, content: notFound }))
+            continue
+          }
+          try {
+            const toolResult = await targetTool.invoke(call.args ?? {}, { signal: ac.signal })
+            const toolText = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult)
+            onTool({ kind: 'tool', id: callId, name: toolName, status: 'end', result: toolText.slice(0, 8_000) })
+            session.messages.push(new ToolMessage({ tool_call_id: callId, content: toolText }))
+          } catch (toolErr) {
+            const toolMessage = toolErr instanceof Error ? toolErr.message : String(toolErr)
+            onTool({ kind: 'error', message: toolMessage })
+            onTool({ kind: 'tool', id: callId, name: toolName, status: 'end', result: toolMessage })
+            session.messages.push(new ToolMessage({ tool_call_id: callId, content: toolMessage }))
+          }
         }
       }
       batcher.flush()
-      const allSteps = await result.steps
-      for (const st of allSteps) {
-        for (const m of st.response.messages) {
-          session.coreMessages.push(
-            responseMessageToCore(m as { id: string; role: 'assistant' | 'tool'; content: unknown })
-          )
-        }
-      }
       emit({ type: 'done', sessionId })
     } catch (e) {
       batcher.flush()

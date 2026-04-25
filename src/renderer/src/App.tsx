@@ -363,7 +363,8 @@ export function App() {
                 options={[
                   { value: 'openai-compatible', label: 'OpenAI 兼容 API' },
                   { value: 'openai', label: 'OpenAI' },
-                  { value: 'anthropic', label: 'Anthropic' }
+                  { value: 'anthropic', label: 'Anthropic' },
+                  { value: 'deepseek', label: 'DeepSeek' }
                 ]}
               />
             </Form.Item>

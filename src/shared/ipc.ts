@@ -23,7 +23,7 @@ export const EVENTS = {
 
 export type AppSettings = {
   /** openai 兼容可填 baseURL，Anthropic 可留空 */
-  provider: 'openai' | 'anthropic' | 'openai-compatible'
+  provider: 'openai' | 'anthropic' | 'openai-compatible' | 'deepseek'
   apiKey: string
   baseUrl: string
   model: string
