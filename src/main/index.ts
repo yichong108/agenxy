@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { watch, type FSWatcher } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -21,6 +22,8 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const isDev = !app.isPackaged
 let mainWindow: BrowserWindow | null = null
+let devWatcher: FSWatcher | null = null
+let restartTimer: NodeJS.Timeout | null = null
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) {
@@ -67,6 +70,24 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+}
+
+function setupDevAutoRestart(): void {
+  if (!isDev || devWatcher) return
+  const watchPath = path.resolve(__dirname, '../../src')
+  try {
+    devWatcher = watch(watchPath, { recursive: true }, (_eventType, filename) => {
+      if (!filename) return
+      // 防抖，避免一次保存触发多次重启
+      if (restartTimer) clearTimeout(restartTimer)
+      restartTimer = setTimeout(() => {
+        app.relaunch()
+        app.exit(0)
+      }, 250)
+    })
+  } catch {
+    // 监听失败时不阻塞应用启动
+  }
 }
 
 function broadcastSessions(): void {
@@ -142,6 +163,7 @@ function registerIpc(): void {
 
 app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return
+  setupDevAutoRestart()
   loadSessionList()
   registerIpc()
   createWindow()
@@ -153,6 +175,17 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
+  }
+})
+
+app.on('before-quit', () => {
+  if (restartTimer) {
+    clearTimeout(restartTimer)
+    restartTimer = null
+  }
+  if (devWatcher) {
+    devWatcher.close()
+    devWatcher = null
   }
 })
 
