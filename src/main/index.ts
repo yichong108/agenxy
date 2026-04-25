@@ -4,7 +4,13 @@ import { fileURLToPath } from 'node:url'
 
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron'
 
-import { IPC, EVENTS, type AppSettings, type StreamEvent } from '../shared/ipc.js'
+import {
+  IPC,
+  EVENTS,
+  type AppSettings,
+  type RendererUiState,
+  type StreamEvent
+} from '../shared/ipc.js'
 
 import { bindAgentIpc, cancelRun, runUserMessage, resetQueue } from './agent/agent-service.js'
 import {
@@ -15,7 +21,14 @@ import {
   deleteSession,
   touchSession
 } from './sessions.js'
-import { getSettings, getWorkspace, setSettings, setWorkspace } from './store.js'
+import {
+  getSettings,
+  getUiState,
+  getWorkspace,
+  setSettings,
+  setUiState,
+  setWorkspace
+} from './store.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const isDev = !app.isPackaged
@@ -182,6 +195,8 @@ function registerIpc(): void {
     mainWindow?.webContents.send(EVENTS.SETTINGS_SYNC, next)
     return next
   })
+  ipcMain.handle(IPC.UI_STATE_GET, () => getUiState())
+  ipcMain.handle(IPC.UI_STATE_SET, (_e, patch: Partial<RendererUiState>) => setUiState(patch))
   ipcMain.handle(IPC.SESSIONS_LIST, () => getSessions())
   ipcMain.handle(IPC.SESSIONS_CREATE, (_e, name?: string) => {
     const s = createSession(name)
@@ -201,9 +216,9 @@ function registerIpc(): void {
 
   /**
    * 发送消息到 Agent
-   * 
+   *
    * 支持并发发送消息
-   * 
+   *
    * @param sessionId 会话 ID
    * @param text 消息内容
    * @returns 发送结果

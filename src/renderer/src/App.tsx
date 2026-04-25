@@ -37,11 +37,13 @@ import {
   type ToolTimelineEvent
 } from '@shared/ipc'
 
+import { useUiStore } from './store/ui-store'
+
 const { Sider, Content, Header } = Layout
 const { Text, Paragraph } = Typography
 const { TextArea } = Input
 
-const PRELOAD_MISSING_ERROR = '未检测到 preload 注入（window.agentWeave 不存在）'
+const PRELOAD_MISSING_ERROR = '未检测到 preload 注入（window.bridge 不存在）'
 
 const DEFAULT_SETTINGS: AppSettings = JSON.parse(JSON.stringify(defaultSettings))
 
@@ -52,12 +54,15 @@ function randomId() {
 export function App() {
   const { message: msgApi, modal: modalApi } = AntdApp.useApp()
   const { token } = theme.useToken()
-  const preloadOk = typeof window !== 'undefined' && typeof window.agentWeave !== 'undefined'
-  const bridge = window.agentWeave
+  const preloadOk = typeof window !== 'undefined' && typeof window.bridge !== 'undefined'
+  const bridge = window.bridge
   const [workspace, setWorkspace] = useState('')
   const [sessions, setSessions] = useState<SessionInfo[]>([])
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [input, setInput] = useState('')
+  const activeId = useUiStore((s) => s.activeSessionId)
+  const setActiveId = useUiStore((s) => s.setActiveSessionId)
+  const input = useUiStore((s) => s.inputDraft)
+  const setInput = useUiStore((s) => s.setInputDraft)
+  const hydrateUiStore = useUiStore((s) => s.hydrateFromMain)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
   const [form] = Form.useForm<AppSettings>()
@@ -83,7 +88,9 @@ export function App() {
     setSettings(s)
     form.setFieldsValue(s)
     setSessions(sList)
-    setActiveId((prev) => (prev == null && sList.length > 0 ? sList[0]!.id : prev))
+    const currentActiveId = useUiStore.getState().activeSessionId
+    if (currentActiveId && sList.some((x) => x.id === currentActiveId)) return
+    setActiveId(sList[0]?.id ?? null)
   }, [form])
 
   const handleStream = useCallback(
@@ -165,7 +172,10 @@ export function App() {
       msgApi.error(PRELOAD_MISSING_ERROR)
       return
     }
-    void load()
+    void (async () => {
+      await hydrateUiStore()
+      await load()
+    })()
     const unSub = [
       bridge.onWorkspaceChange((p) => setWorkspace(p.path)),
       bridge.onSettingsSync((s) => {
@@ -174,12 +184,14 @@ export function App() {
       }),
       bridge.onSessionsSync((list) => {
         setSessions(list)
-        setActiveId((aid) => (aid && list.some((x) => x.id === aid) ? aid : (list[0]?.id ?? null)))
+        const currentActiveId = useUiStore.getState().activeSessionId
+        if (currentActiveId && list.some((x) => x.id === currentActiveId)) return
+        setActiveId(list[0]?.id ?? null)
       }),
       bridge.onStream(handleStream)
     ]
     return () => unSub.forEach((f) => f())
-  }, [bridge, form, handleStream, load, msgApi, preloadOk])
+  }, [bridge, form, handleStream, hydrateUiStore, load, msgApi, preloadOk, setActiveId])
 
   const pickWorkspace = async () => {
     const r = await bridge.selectWorkspace()
@@ -410,7 +422,7 @@ export function App() {
                 type="error"
                 showIcon
                 message="preload 注入失败"
-                description="当前窗口未接收到主进程暴露的 API（window.agentWeave）。请重启 dev 进程后重试。"
+                description="当前窗口未接收到主进程暴露的 API（window.bridge）。请重启 dev 进程后重试。"
               />
             </div>
           )}

@@ -1,12 +1,14 @@
 /// <reference types="vite/client" />
 
-import type { AppSettings, SessionInfo, StreamEvent } from '@shared/ipc'
+import type { AppSettings, RendererUiState, SessionInfo, StreamEvent } from '@shared/ipc'
 
 type Api = {
   selectWorkspace: () => Promise<{ path: string }>
   getWorkspace: () => Promise<string>
   getSettings: () => Promise<AppSettings>
   setSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>
+  getUiState: () => Promise<RendererUiState>
+  setUiState: (patch: Partial<RendererUiState>) => Promise<RendererUiState>
   listSessions: () => Promise<SessionInfo[]>
   createSession: (name?: string) => Promise<SessionInfo>
   renameSession: (id: string, name: string) => Promise<SessionInfo | null>
@@ -25,7 +27,7 @@ type Api = {
 
 declare global {
   interface Window {
-    agentWeave: Api
+    bridge: Api
   }
 }
 

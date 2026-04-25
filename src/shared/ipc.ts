@@ -5,6 +5,8 @@ export const IPC = {
   WORKSPACE_GET: 'workspace:get',
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',
+  UI_STATE_GET: 'ui-state:get',
+  UI_STATE_SET: 'ui-state:set',
   SESSIONS_LIST: 'sessions:list',
   SESSIONS_CREATE: 'sessions:create',
   SESSIONS_RENAME: 'sessions:rename',
@@ -47,6 +49,16 @@ export const defaultSettings: AppSettings = {
   streamFlushMs: 32,
   streamFlushChars: 320,
   maxTerminalOutputChars: 1_000
+}
+
+export type RendererUiState = {
+  activeSessionId: string | null
+  inputDraft: string
+}
+
+export const defaultRendererUiState: RendererUiState = {
+  activeSessionId: null,
+  inputDraft: ''
 }
 
 export type SessionInfo = {

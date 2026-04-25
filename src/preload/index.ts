@@ -1,6 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-import { EVENTS, IPC, type AppSettings, type SessionInfo, type StreamEvent } from '../shared/ipc.js'
+import {
+  EVENTS,
+  IPC,
+  type AppSettings,
+  type RendererUiState,
+  type SessionInfo,
+  type StreamEvent
+} from '../shared/ipc.js'
 
 const api = {
   selectWorkspace: () => ipcRenderer.invoke(IPC.WORKSPACE_SELECT) as Promise<{ path: string }>,
@@ -8,6 +15,9 @@ const api = {
   getSettings: () => ipcRenderer.invoke(IPC.SETTINGS_GET) as Promise<AppSettings>,
   setSettings: (patch: Partial<AppSettings>) =>
     ipcRenderer.invoke(IPC.SETTINGS_SET, patch) as Promise<AppSettings>,
+  getUiState: () => ipcRenderer.invoke(IPC.UI_STATE_GET) as Promise<RendererUiState>,
+  setUiState: (patch: Partial<RendererUiState>) =>
+    ipcRenderer.invoke(IPC.UI_STATE_SET, patch) as Promise<RendererUiState>,
   listSessions: () => ipcRenderer.invoke(IPC.SESSIONS_LIST) as Promise<SessionInfo[]>,
   createSession: (name?: string) =>
     ipcRenderer.invoke(IPC.SESSIONS_CREATE, name) as Promise<SessionInfo>,
@@ -52,6 +62,6 @@ const api = {
   }
 }
 
-contextBridge.exposeInMainWorld('agentWeave', api)
+contextBridge.exposeInMainWorld('bridge', api)
 
 export type AgentWeaveApi = typeof api
