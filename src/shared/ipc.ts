@@ -22,8 +22,8 @@ export const EVENTS = {
 } as const
 
 export type AppSettings = {
-  /** openai 兼容可填 baseURL，Anthropic 可留空 */
-  provider: 'openai' | 'anthropic' | 'openai-compatible' | 'deepseek'
+  /** 当前仅支持 DeepSeek */
+  provider: 'deepseek'
   apiKey: string
   baseUrl: string
   model: string
@@ -38,10 +38,10 @@ export type AppSettings = {
 }
 
 export const defaultSettings: AppSettings = {
-  provider: 'openai-compatible',
+  provider: 'deepseek',
   apiKey: '',
-  baseUrl: 'https://api.openai.com/v1',
-  model: 'gpt-4o-mini',
+  baseUrl: 'https://api.deepseek.com/v1',
+  model: 'deepseek-chat',
   maxConcurrentStreams: 2,
   streamFlushMs: 32,
   streamFlushChars: 320,

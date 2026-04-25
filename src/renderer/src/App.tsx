@@ -361,9 +361,6 @@ export function App() {
             <Form.Item name="provider" label="提供方" rules={[{ required: true }]}>
               <Select
                 options={[
-                  { value: 'openai-compatible', label: 'OpenAI 兼容 API' },
-                  { value: 'openai', label: 'OpenAI' },
-                  { value: 'anthropic', label: 'Anthropic' },
                   { value: 'deepseek', label: 'DeepSeek' }
                 ]}
               />

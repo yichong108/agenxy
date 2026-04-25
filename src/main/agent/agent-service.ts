@@ -1,4 +1,3 @@
-import { ChatAnthropic } from '@langchain/anthropic'
 import { AIMessage, HumanMessage, SystemMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages'
 import { tool } from '@langchain/core/tools'
 import { ChatOpenAI } from '@langchain/openai'
@@ -44,17 +43,7 @@ function createLanguageModel(settings: AppSettings) {
   if (!settings.apiKey?.trim()) {
     throw new Error('请先在「设置」中配置 API Key')
   }
-  if (settings.provider === 'anthropic') {
-    return new ChatAnthropic({
-      apiKey: settings.apiKey,
-      model: settings.model,
-      anthropicApiUrl: settings.baseUrl?.trim() || undefined,
-      streaming: true,
-      temperature: 0
-    })
-  }
-  const defaultBaseURL =
-    settings.provider === 'deepseek' ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1'
+  const defaultBaseURL = 'https://api.deepseek.com/v1'
   return new ChatOpenAI({
     apiKey: settings.apiKey,
     model: settings.model,
