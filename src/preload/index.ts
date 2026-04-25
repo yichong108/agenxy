@@ -21,6 +21,7 @@ const api = {
     >,
   cancelAgent: (sessionId: string) =>
     ipcRenderer.invoke(IPC.AGENT_CANCEL, sessionId) as Promise<{ ok: true }>,
+  toggleDevtools: () => ipcRenderer.invoke(IPC.DEVTOOLS_TOGGLE) as Promise<{ open: boolean }>,
   onStream: (cb: (e: StreamEvent) => void) => {
     const h = (_: Electron.IpcRendererEvent, p: StreamEvent) => cb(p)
     ipcRenderer.on(EVENTS.AGENT_STREAM, h)

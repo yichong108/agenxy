@@ -1,4 +1,5 @@
 import {
+  BugOutlined,
   PlusOutlined,
   SendOutlined,
   SettingOutlined,
@@ -12,6 +13,7 @@ import {
   Card,
   Collapse,
   Form,
+  FloatButton,
   Input,
   InputNumber,
   Layout,
@@ -77,6 +79,7 @@ const fallbackApi = {
   deleteSession: async () => ({ ok: true as const }),
   sendAgentMessage: async () => ({ ok: false as const, error: PRELOAD_MISSING_ERROR }),
   cancelAgent: async () => ({ ok: true as const }),
+  toggleDevtools: async () => ({ open: false }),
   onStream: () => noopUnsub,
   onSessionsSync: () => noopUnsub,
   onWorkspaceChange: () => noopUnsub,
@@ -105,6 +108,7 @@ export function App() {
   const [form] = Form.useForm<AppSettings>()
   const [renameId, setRenameId] = useState<string | null>(null)
   const [renameName, setRenameName] = useState('')
+  const isDevEnv = import.meta.env.DEV
 
   const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({})
   const [timeline, setTimeline] = useState<Record<string, ToolTimelineEvent[]>>({})
@@ -262,6 +266,11 @@ export function App() {
     await api().setSettings(v)
     setSettingsOpen(false)
     msgApi.success('已保存（Secret 仅保存在本机主进程）')
+  }
+
+  const toggleDevtools = async () => {
+    const res = await api().toggleDevtools()
+    msgApi.info(res.open ? 'DevTools 已打开' : 'DevTools 已关闭')
   }
 
   const currentMessages = useMemo(
@@ -559,6 +568,15 @@ export function App() {
           placeholder="名称"
         />
       </Modal>
+
+      {isDevEnv && (
+        <FloatButton
+          icon={<BugOutlined />}
+          tooltip="切换 DevTools"
+          onClick={() => void toggleDevtools()}
+          style={{ right: 24, bottom: 24 }}
+        />
+      )}
     </Layout>
   )
 }

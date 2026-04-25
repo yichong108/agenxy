@@ -78,7 +78,6 @@ function createWindow(): void {
   })
   if (isDev) {
     void mainWindow.loadURL(getRendererUrl())
-    mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
     void mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
@@ -205,6 +204,17 @@ function registerIpc(): void {
   ipcMain.handle(IPC.AGENT_STATUS, () => {
     // 可选：主进程不暴露细粒度
     return { ok: true as const }
+  })
+  ipcMain.handle(IPC.DEVTOOLS_TOGGLE, () => {
+    if (!isDev || !mainWindow || mainWindow.isDestroyed()) {
+      return { open: false }
+    }
+    if (mainWindow.webContents.isDevToolsOpened()) {
+      mainWindow.webContents.closeDevTools()
+      return { open: false }
+    }
+    mainWindow.webContents.openDevTools({ mode: 'detach' })
+    return { open: true }
   })
 }
 
