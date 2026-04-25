@@ -73,7 +73,45 @@ function buildSystemPrompt(root: string): string {
 - 在工具中使用**相对工作区根**的路径（如 src/index.ts），不要使用 ../ 尝试逃出工作区。
 - 可调用工具: read_file, write_file, list_dir, search_workspace, run_terminal。
 - run_terminal 在沙盒目录（工作区根）下执行 shell 命令。Windows 为 cmd 风格。
+- 当用户要求“查看/读取工作区文件”或“列出目录”时，优先调用 read_file/list_dir 再回答。
 - 回答简洁、可执行；修改代码前先 read/list。`
+}
+
+type FileToolHint =
+  | { type: 'read'; pathHint: string }
+  | { type: 'list'; pathHint: string; depthHint?: number }
+
+function parseFileToolHint(text: string): FileToolHint | null {
+  const raw = text.trim()
+  if (!raw) return null
+
+  const readSlash = raw.match(/^\/(?:read|cat)\s+(.+)$/i)
+  if (readSlash?.[1]) {
+    return { type: 'read', pathHint: readSlash[1].trim() }
+  }
+  const listSlash = raw.match(/^\/(?:ls|list)\s*([^\s]+)?(?:\s+(\d+))?$/i)
+  if (listSlash) {
+    const maybeDepth = listSlash[2] ? Number.parseInt(listSlash[2], 10) : undefined
+    return {
+      type: 'list',
+      pathHint: (listSlash[1] || '.').trim(),
+      depthHint: Number.isFinite(maybeDepth) ? maybeDepth : undefined
+    }
+  }
+
+  const readZh = raw.match(/^(?:查看|读取)(?:工作区)?(?:文件)?[:：\s]+(.+)$/)
+  if (readZh?.[1]) {
+    return { type: 'read', pathHint: readZh[1].trim() }
+  }
+  const listZh = raw.match(/^(?:列出|查看)(?:工作区)?(?:目录|文件夹)?[:：\s]+(.+)$/)
+  if (listZh?.[1]) {
+    return { type: 'list', pathHint: listZh[1].trim() }
+  }
+  const listRootZh = raw.match(/^(?:列出|查看)(?:工作区)?(?:目录|文件夹)$/)
+  if (listRootZh) {
+    return { type: 'list', pathHint: '.' }
+  }
+  return null
 }
 
 function makeTools(
@@ -89,7 +127,7 @@ function makeTools(
         const id = `read-${Date.now()}`
         onTool({ kind: 'tool', id, name: 'read_file', status: 'start', args: p })
         const r = await readFileTool(root, p)
-        onTool({ kind: 'tool', id, name: 'read_file', status: 'end', result: r.slice(0, 8_000) })
+        onTool({ kind: 'tool', id, name: 'read_file', status: 'end', result: r.slice(0, 1_000) })
         return r
       },
       {
@@ -246,12 +284,15 @@ export async function runUserMessage(
     const ac = new AbortController()
     session.controller = ac
     emit({ type: 'run-start', sessionId })
-    const batcher = new StreamBatcher(settings.streamFlushMs, settings.streamFlushChars, (t) => {
-      emit({ type: 'text-delta', sessionId, text: t })
-    })
     const onTool = (e: ToolTimelineEvent) => {
       emit({ type: 'tool', sessionId, event: e })
     }
+    const fileToolHint = parseFileToolHint(userText)
+    const mustUseToolFirst = !!fileToolHint
+    let hasToolCall = false
+    const batcher = new StreamBatcher(settings.streamFlushMs, settings.streamFlushChars, (t) => {
+      emit({ type: 'text-delta', sessionId, text: t })
+    })
     const { tools, byName } = makeTools(sessionId, root, settings, onTool)
     const model = createLanguageModel(settings).bindTools(tools)
     session.messages.push(new HumanMessage(userText))
@@ -259,27 +300,55 @@ export async function runUserMessage(
     try {
       for (let step = 0; step < 16; step += 1) {
         if (ac.signal.aborted) break
+        const suppressStream = mustUseToolFirst && !hasToolCall
+        const forceToolSystem =
+          mustUseToolFirst && !hasToolCall
+            ? new SystemMessage(
+                fileToolHint?.type === 'read'
+                  ? `当前用户请求属于文件读取。你必须先调用 read_file 工具后再给最终回答。可参考路径: ${fileToolHint.pathHint}`
+                  : `当前用户请求属于目录查看。你必须先调用 list_dir 工具后再给最终回答。可参考路径: ${fileToolHint?.pathHint ?? '.'}，可参考 depth: ${fileToolHint?.depthHint ?? 2}`
+              )
+            : null
         let streamedChars = 0
-        const response = await model.invoke([new SystemMessage(system), ...session.messages], {
-          signal: ac.signal,
-          callbacks: [
-            {
-              handleLLMNewToken(token: string) {
-                streamedChars += token.length
-                batcher.push(token)
+        const response = await model.invoke(
+          [
+            new SystemMessage(system),
+            ...(forceToolSystem ? [forceToolSystem] : []),
+            ...session.messages
+          ],
+          {
+            signal: ac.signal,
+            callbacks: [
+              {
+                handleLLMNewToken(token: string) {
+                  if (suppressStream) return
+                  streamedChars += token.length
+                  batcher.push(token)
+                }
               }
-            }
-          ]
-        })
+            ]
+          }
+        )
         session.messages.push(response)
         const toolCalls = (response as AIMessage).tool_calls ?? []
         if (!toolCalls.length) {
+          if (mustUseToolFirst && !hasToolCall) {
+            session.messages.push(
+              new HumanMessage(
+                fileToolHint?.type === 'read'
+                  ? `请先调用 read_file 读取文件后再回答。参考路径: ${fileToolHint.pathHint}`
+                  : `请先调用 list_dir 列出目录后再回答。参考路径: ${fileToolHint?.pathHint ?? '.'}`
+              )
+            )
+            continue
+          }
           const text = contentToText(response.content)
           if (text && streamedChars === 0) {
             batcher.push(text)
           }
           break
         }
+        hasToolCall = true
         for (const call of toolCalls) {
           const callId = call.id || `tc-${Date.now()}`
           const toolName = call.name
@@ -302,7 +371,7 @@ export async function runUserMessage(
               id: callId,
               name: toolName,
               status: 'end',
-              result: toolText.slice(0, 8_000)
+              result: toolText.slice(0, 1_000)
             })
             session.messages.push(new ToolMessage({ tool_call_id: callId, content: toolText }))
           } catch (toolErr) {

@@ -95,8 +95,8 @@ export function App() {
 
   const handleStream = useCallback(
     (e: StreamEvent) => {
-      console.log(e);
-      
+      console.log(e)
+
       if (e.type === 'run-start') {
         setRunning((r) => ({ ...r, [e.sessionId]: true }))
         setQueued((q) => ({ ...q, [e.sessionId]: undefined }))
@@ -394,7 +394,7 @@ export function App() {
           </div>
         </div>
       </Sider>
-      <Layout style={{ minWidth: 0 }}>
+      <Layout style={{ minWidth: 0, minHeight: 0 }}>
         <Header
           style={{
             background: 'linear-gradient(90deg, #ffffff 0%, #f8fbff 100%)',
@@ -416,7 +416,13 @@ export function App() {
           )}
         </Header>
         <Content
-          style={{ display: 'flex', flexDirection: 'column', minWidth: 0, background: '#f7faff' }}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            minWidth: 0,
+            minHeight: 0,
+            background: '#f7faff'
+          }}
         >
           {!preloadOk && (
             <div style={{ padding: '12px 16px 0 16px' }}>
@@ -428,115 +434,127 @@ export function App() {
               />
             </div>
           )}
-          <div
-            style={{
-              flex: 1,
-              overflow: 'auto',
-              padding: '14px 18px',
-              background:
-                'radial-gradient(circle at 20% 0%, rgba(22,119,255,0.12) 0%, rgba(247,250,255,0) 34%), #f7faff'
-            }}
-          >
-            {currentMessages.map((m) => (
-              <Card
-                key={m.id}
-                size="small"
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <div
+              style={{
+                flex: 1,
+                minHeight: 0,
+                overflow: 'auto',
+                padding: '14px 18px',
+                background:
+                  'radial-gradient(circle at 20% 0%, rgba(22,119,255,0.12) 0%, rgba(247,250,255,0) 34%), #f7faff'
+              }}
+            >
+              {currentMessages.map((m) => (
+                <Card
+                  key={m.id}
+                  size="small"
+                  style={{
+                    marginBottom: 10,
+                    marginLeft: m.role === 'user' ? 'auto' : undefined,
+                    maxWidth: '86%',
+                    borderRadius: 12,
+                    border:
+                      m.role === 'user' ? '1px solid rgba(22,119,255,0.35)' : '1px solid #dbe5f0',
+                    background:
+                      m.role === 'user'
+                        ? 'linear-gradient(135deg, rgba(230,243,255,1) 0%, rgba(242,248,255,1) 100%)'
+                        : '#ffffff'
+                  }}
+                >
+                  <Text type="secondary" style={{ fontSize: 12, color: '#73839c' }}>
+                    {m.role === 'user' ? '你' : '助理'}
+                  </Text>
+                  <Paragraph style={{ marginBottom: 0, whiteSpace: 'pre-wrap', color: '#1f2a37' }}>
+                    {m.content || (m.role === 'assistant' && isRun ? '…' : '')}
+                  </Paragraph>
+                </Card>
+              ))}
+              {!currentMessages.length && (
+                <Card
+                  size="small"
+                  style={{
+                    maxWidth: 520,
+                    marginTop: 4,
+                    background: '#ffffff',
+                    border: '1px solid #dbe5f0',
+                    borderRadius: 12
+                  }}
+                >
+                  <Text type="secondary" style={{ color: '#73839c' }}>
+                    发一条消息开始；务必先选择工作区并配置 API Key。
+                  </Text>
+                </Card>
+              )}
+            </div>
+            {activeId && (
+              <div
                 style={{
-                  marginBottom: 10,
-                  marginLeft: m.role === 'user' ? 'auto' : undefined,
-                  maxWidth: '86%',
-                  borderRadius: 12,
-                  border:
-                    m.role === 'user' ? '1px solid rgba(22,119,255,0.35)' : '1px solid #dbe5f0',
-                  background:
-                    m.role === 'user'
-                      ? 'linear-gradient(135deg, rgba(230,243,255,1) 0%, rgba(242,248,255,1) 100%)'
-                      : '#ffffff'
+                  borderTop: '1px solid #dbe5f0',
+                  background: '#f8fbff',
+                  maxHeight: 240,
+                  overflow: 'auto',
+                  flexShrink: 0
                 }}
               >
-                <Text type="secondary" style={{ fontSize: 12, color: '#73839c' }}>
-                  {m.role === 'user' ? '你' : '助理'}
-                </Text>
-                <Paragraph style={{ marginBottom: 0, whiteSpace: 'pre-wrap', color: '#1f2a37' }}>
-                  {m.content || (m.role === 'assistant' && isRun ? '…' : '')}
-                </Paragraph>
-              </Card>
-            ))}
-            {!currentMessages.length && (
-              <Card
-                size="small"
-                style={{
-                  maxWidth: 520,
-                  marginTop: 4,
-                  background: '#ffffff',
-                  border: '1px solid #dbe5f0',
-                  borderRadius: 12
-                }}
-              >
-                <Text type="secondary" style={{ color: '#73839c' }}>
-                  发一条消息开始；务必先选择工作区并配置 API Key。
-                </Text>
-              </Card>
+                <Collapse
+                  bordered={false}
+                  style={{ background: 'transparent' }}
+                  items={[
+                    {
+                      key: 't',
+                      label: '工具 / 时间线',
+                      children: (
+                        <List
+                          size="small"
+                          dataSource={currentTimeline}
+                          renderItem={(e) => (
+                            <List.Item>
+                              {e.kind === 'error' ? (
+                                <Text type="danger">{e.message}</Text>
+                              ) : (
+                                <>
+                                  <Text code>
+                                    {e.name} {e.status === 'start' ? '…' : '✓'}
+                                  </Text>
+                                  {e.args && <Text type="secondary"> {e.args}</Text>}
+                                  {e.status === 'end' && e.result && (
+                                    <pre
+                                      style={{
+                                        fontSize: 11,
+                                        maxHeight: 120,
+                                        overflow: 'auto',
+                                        marginTop: 8,
+                                        marginBottom: 0,
+                                        padding: 8,
+                                        borderRadius: 8,
+                                        background: '#f5f9ff',
+                                        border: '1px solid #dbe5f0'
+                                      }}
+                                    >
+                                      {e.result}
+                                    </pre>
+                                  )}
+                                </>
+                              )}
+                            </List.Item>
+                          )}
+                        />
+                      )
+                    }
+                  ]}
+                />
+              </div>
             )}
           </div>
-          {activeId && (
-            <div style={{ borderTop: '1px solid #dbe5f0', background: '#f8fbff' }}>
-              <Collapse
-                bordered={false}
-                style={{ background: 'transparent' }}
-                items={[
-                  {
-                    key: 't',
-                    label: '工具 / 时间线',
-                    children: (
-                      <List
-                        size="small"
-                        dataSource={currentTimeline}
-                        renderItem={(e) => (
-                          <List.Item>
-                            {e.kind === 'error' ? (
-                              <Text type="danger">{e.message}</Text>
-                            ) : (
-                              <>
-                                <Text code>
-                                  {e.name} {e.status === 'start' ? '…' : '✓'}
-                                </Text>
-                                {e.args && <Text type="secondary"> {e.args}</Text>}
-                                {e.status === 'end' && e.result && (
-                                  <pre
-                                    style={{
-                                      fontSize: 11,
-                                      maxHeight: 120,
-                                      overflow: 'auto',
-                                      marginTop: 8,
-                                      marginBottom: 0,
-                                      padding: 8,
-                                      borderRadius: 8,
-                                      background: '#f5f9ff',
-                                      border: '1px solid #dbe5f0'
-                                    }}
-                                  >
-                                    {e.result}
-                                  </pre>
-                                )}
-                              </>
-                            )}
-                          </List.Item>
-                        )}
-                      />
-                    )
-                  }
-                ]}
-              />
-            </div>
-          )}
           <div
             style={{
               padding: 12,
               display: 'flex',
               gap: 10,
               background: '#ffffff',
-              borderTop: `1px solid ${token.colorBorderSecondary}`
+              borderTop: `1px solid ${token.colorBorderSecondary}`,
+              flexShrink: 0
             }}
           >
             <TextArea
