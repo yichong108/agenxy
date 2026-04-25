@@ -95,6 +95,8 @@ export function App() {
 
   const handleStream = useCallback(
     (e: StreamEvent) => {
+      console.log(e);
+      
       if (e.type === 'run-start') {
         setRunning((r) => ({ ...r, [e.sessionId]: true }))
         setQueued((q) => ({ ...q, [e.sessionId]: undefined }))

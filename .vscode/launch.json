@@ -1,0 +1,41 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "启动 Electron Dev (Main)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:debug"],
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": true,
+      "skipFiles": ["<node_internals>/**", "${workspaceFolder}/node_modules/**"]
+    },
+    {
+      "name": "附加 Main (9229)",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "restart": true,
+      "skipFiles": ["<node_internals>/**", "${workspaceFolder}/node_modules/**"]
+    },
+    {
+      "name": "附加 Renderer (9222)",
+      "type": "chrome",
+      "request": "attach",
+      "port": 9222,
+      "address": "127.0.0.1",
+      "urlFilter": "http://localhost:5173/*",
+      "timeout": 60000,
+      "restart": true,
+      "webRoot": "${workspaceFolder}/src/renderer"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Electron 全栈调试",
+      "configurations": ["启动 Electron Dev (Main)", "附加 Renderer (9222)"]
+    }
+  ]
+}
