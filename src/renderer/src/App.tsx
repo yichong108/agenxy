@@ -268,9 +268,27 @@ export function App() {
     msgApi.success('已保存（Secret 仅保存在本机主进程）')
   }
 
+  // 检查 React DevTools 是否已加载完成
+  const checkDevToolsReady = (): boolean => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const hook = (window as any).__REACT_DEVTOOLS_GLOBAL_HOOK__
+    return !!(hook && (hook.renderers?.size > 0 || hook._renderers))
+  }
+
   const toggleDevtools = async () => {
-    const res = await api().toggleDevtools()
-    msgApi.info(res.open ? 'DevTools 已打开' : 'DevTools 已关闭')
+    api()
+      .toggleDevtools()
+      .then(() => {
+        if (checkDevToolsReady()) {
+          console.log('✅ React DevTools 已就绪')
+        } else {
+          console.log('[devtool]⏳ 正在等待 React DevTools 加载完成...')
+        }
+        window.location.reload()
+      })
+      .catch((err: Error) => {
+        console.error('打开 DevTools 失败:', err)
+      })
   }
 
   const currentMessages = useMemo(

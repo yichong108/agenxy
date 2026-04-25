@@ -5,7 +5,7 @@
   "main": "out/main/index.js",
   "type": "module",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "node ./scripts/dev.mjs",
     "build": "electron-vite build && electron-builder",
     "build:app": "electron-vite build",
     "preview": "electron-vite preview",
@@ -36,6 +36,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^35.1.5",
     "electron-builder": "^26.0.12",
+    "electron-devtools-installer": "^4.0.0",
     "electron-vite": "^5.0.0",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",

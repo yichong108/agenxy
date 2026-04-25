@@ -24,21 +24,59 @@ let devWatcher: FSWatcher | null = null
 let restartTimer: NodeJS.Timeout | null = null
 let hasRetriedDevLoad = false
 
+function setupConsoleUtf8(): void {
+  if (process.platform !== 'win32') return
+  process.env['LANG'] = process.env['LANG'] || 'zh_CN.UTF-8'
+  process.stdout.setDefaultEncoding('utf8')
+  process.stderr.setDefaultEncoding('utf8')
+}
+
+setupConsoleUtf8()
+
 async function loadReactDevtoolsExtension(): Promise<void> {
-  if (!isDev || process.platform !== 'win32') return
+  if (!isDev) return
 
   const extensionPath = path.resolve(__dirname, '../../extensions/react-devtools')
-  if (!existsSync(extensionPath)) {
-    console.warn(`[react-devtools] 扩展目录不存在: ${extensionPath}`)
-    return
+
+  const removeExistingReactDevtools = (): void => {
+    try {
+      const all = session.defaultSession.getAllExtensions()
+      for (const ext of all) {
+        if (ext.name.toLowerCase().includes('react developer tools')) {
+          session.defaultSession.removeExtension(ext.id)
+          console.log(`[react-devtools] 已移除旧扩展: ${ext.name} (${ext.id})`)
+        }
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      console.warn('[react-devtools] 移除旧扩展失败:', msg)
+    }
+  }
+
+  removeExistingReactDevtools()
+
+  if (existsSync(extensionPath)) {
+    try {
+      await session.defaultSession.loadExtension(extensionPath, { allowFileAccess: true })
+      console.log('[react-devtools] 本地离线扩展加载成功')
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      console.error('[react-devtools] 本地扩展加载失败:', msg)
+    }
+  } else {
+    console.warn(`[react-devtools] 本地扩展目录不存在: ${extensionPath}`)
   }
 
   try {
-    await session.defaultSession.loadExtension(extensionPath, { allowFileAccess: true })
-    console.log('[react-devtools] 扩展加载成功')
+    const exts = session.defaultSession.getAllExtensions()
+    const extNames = exts.map((ext) => ext.name).join(', ')
+    console.log(`[react-devtools] 当前已加载扩展: ${extNames || '(无)'}`)
+    for (const ext of exts) {
+      console.log(`[react-devtools] 扩展详情: name=${ext.name}, id=${ext.id}, path=${ext.path}`)
+    }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
-    console.error('[react-devtools] 扩展加载失败:', msg)
+    console.error('[react-devtools] 读取扩展列表失败:', msg)
   }
 }
 
@@ -72,16 +110,23 @@ function createWindow(): void {
       preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      // React DevTools 在 sandbox renderer 中可能无法正确注入
+      // 开发环境关闭 sandbox，生产环境继续保持开启
+      sandbox: !isDev
     },
     show: false
   })
   if (isDev) {
     void mainWindow.loadURL(getRendererUrl())
+    // 页面 DOM 就绪后再打开 DevTools，确保 React DevTools 面板已完成注入
+    mainWindow.webContents.once('dom-ready', () => {
+      mainWindow?.webContents.openDevTools({ mode: 'detach' })
+    })
   } else {
     void mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
   mainWindow.once('ready-to-show', () => {
+    mainWindow?.maximize()
     mainWindow?.show()
   })
   mainWindow.webContents.on(
@@ -220,14 +265,16 @@ function registerIpc(): void {
 
 app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return
-  void loadReactDevtoolsExtension()
-  setupDevAutoRestart()
-  loadSessionList()
-  registerIpc()
-  createWindow()
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
+  void (async () => {
+    await loadReactDevtoolsExtension()
+    setupDevAutoRestart()
+    loadSessionList()
+    registerIpc()
+    createWindow()
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
+  })()
 })
 
 app.on('window-all-closed', () => {
