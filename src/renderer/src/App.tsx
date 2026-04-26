@@ -37,7 +37,7 @@ import {
 import { useUiStore } from './store/ui-store'
 import './App.scss'
 
-const { Text, Paragraph } = Typography
+const { Text } = Typography
 const { TextArea } = Input
 
 const PRELOAD_MISSING_ERROR = '未检测到 preload 注入（window.bridge 不存在）'
@@ -518,12 +518,9 @@ export function App() {
                   size="small"
                   className={`app-message-card ${m.role === 'user' ? 'is-user' : 'is-assistant'}`}
                 >
-                  <Text type="secondary" className="app-message-role">
-                    {m.role === 'user' ? '你' : '助理'}
-                  </Text>
-                  <Paragraph className="app-message-content">
+                  <div className="app-message-content">
                     {m.content || (m.role === 'assistant' && isRun ? '…' : '')}
-                  </Paragraph>
+                  </div>
                   {m.role === 'assistant' &&
                     m.id === latestAssistantMessageId &&
                     currentTimeline.length > 0 && (
