@@ -15,7 +15,6 @@ import {
   FloatButton,
   Input,
   InputNumber,
-  Layout,
   List,
   Modal,
   Select,
@@ -38,7 +37,6 @@ import {
 
 import { useUiStore } from './store/ui-store'
 
-const { Sider, Content, Header } = Layout
 const { Text, Paragraph } = Typography
 const { TextArea } = Input
 
@@ -338,11 +336,10 @@ export function App() {
   const currentRunStats = activeId ? runStats[activeId] : undefined
 
   return (
-    <Layout style={{ minHeight: '100vh', background: '#f3f6fb' }}>
-      <Sider
-        width={260}
-        theme="light"
+    <div style={{ minHeight: '100vh', background: '#f3f6fb', display: 'flex' }}>
+      <div
         style={{
+          width: 260,
           background: '#f8fbff',
           borderRight: '1px solid #dbe5f0',
           boxShadow: '2px 0 12px rgba(15, 23, 42, 0.05)'
@@ -458,9 +455,9 @@ export function App() {
             </Button>
           </div>
         </div>
-      </Sider>
-      <Layout style={{ minWidth: 0, minHeight: 0 }}>
-        <Header
+      </div>
+      <div style={{ minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', flex: 1 }}>
+        <div
           style={{
             background: 'linear-gradient(90deg, #ffffff 0%, #f8fbff 100%)',
             display: 'flex',
@@ -488,14 +485,15 @@ export function App() {
               )}
             </Space>
           )}
-        </Header>
-        <Content
+        </div>
+        <div
           style={{
             display: 'flex',
             flexDirection: 'column',
             minWidth: 0,
             minHeight: 0,
-            background: '#f7faff'
+            background: '#f7faff',
+            flex: 1
           }}
         >
           {!preloadOk && (
@@ -658,8 +656,8 @@ export function App() {
               )}
             </div>
           </div>
-        </Content>
-      </Layout>
+        </div>
+      </div>
 
       <Modal
         title="设置（模型与密钥）"
@@ -728,6 +726,6 @@ export function App() {
           style={{ right: 24, bottom: 24 }}
         />
       )}
-    </Layout>
+    </div>
   )
 }
