@@ -23,7 +23,12 @@ import {
   Typography,
   Dropdown
 } from 'antd'
+import { findAndReplace } from 'mdast-util-find-and-replace'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import rehypeHighlight from 'rehype-highlight'
+import remarkGfm from 'remark-gfm'
+import 'highlight.js/styles/github.css'
 
 import {
   defaultSettings,
@@ -57,6 +62,35 @@ function appendAssistantText(list: ChatMessage[], text: string, forceNew = false
   }
   next.push({ id: randomId(), role: 'assistant', content: text })
   return next
+}
+
+function remarkLinkifyBareUrls() {
+  return (tree: Parameters<typeof findAndReplace>[0]) => {
+    findAndReplace(
+      tree,
+      [
+        [
+          /https?:\/\/[^\s<>()]+/g,
+          (rawUrl: string) => {
+            const match = rawUrl.match(/^(.*?)([),.;!?，。！？、；：]+)?$/)
+            const pureUrl = match?.[1] ?? rawUrl
+            const trailing = match?.[2] ?? ''
+            const linkNode = {
+              type: 'link' as const,
+              url: pureUrl,
+              title: null,
+              children: [{ type: 'text' as const, value: pureUrl }]
+            }
+            if (!trailing) return linkNode
+            return [linkNode, { type: 'text' as const, value: trailing }]
+          }
+        ]
+      ],
+      {
+        ignore: ['link', 'linkReference', 'code', 'inlineCode']
+      }
+    )
+  }
 }
 
 type RunStats = {
@@ -411,6 +445,41 @@ export function App() {
   const hasInput = input.trim().length > 0
   const showSendButton = !isRun || hasInput
   const showStopButton = Boolean(activeId && isRun && !hasInput)
+  const openExternalWithConfirm = useCallback(
+    (href: string) => {
+      const target = (() => {
+        try {
+          const parsed = new URL(href)
+          return parsed.host || href
+        } catch {
+          return href
+        }
+      })()
+      modalApi.confirm({
+        title: '即将打开外部链接',
+        content: `目标地址：${target}`,
+        okText: '继续打开',
+        cancelText: '取消',
+        onOk: async () => {
+          const r = await bridge.openExternal(href)
+          if (!r.ok) msgApi.warning('打开链接失败')
+        }
+      })
+    },
+    [bridge, modalApi, msgApi]
+  )
+  const onMarkdownClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const target = event.target as HTMLElement | null
+      const anchor = target?.closest('a')
+      if (!anchor) return
+      const href = anchor.getAttribute('href') ?? ''
+      if (!/^(https?:|mailto:)/i.test(href)) return
+      event.preventDefault()
+      openExternalWithConfirm(href)
+    },
+    [openExternalWithConfirm]
+  )
 
   useEffect(() => {
     // 切换会话后默认回到底部，便于继续跟随最新回复。
@@ -564,7 +633,18 @@ export function App() {
                   className={`app-message-card ${m.role === 'user' ? 'is-user' : 'is-assistant'}`}
                 >
                   <div className="app-message-content">
-                    {m.content || (m.role === 'assistant' && isRun ? '…' : '')}
+                    {m.role === 'assistant' ? (
+                      <div className="app-message-markdown" onClick={onMarkdownClick}>
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm, remarkLinkifyBareUrls]}
+                          rehypePlugins={[rehypeHighlight]}
+                        >
+                          {m.content || (isRun ? '…' : '')}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (
+                      m.content
+                    )}
                   </div>
                   {m.role === 'assistant' &&
                     m.id === latestAssistantMessageId &&

@@ -273,6 +273,19 @@ function registerIpc(): void {
     mainWindow.webContents.openDevTools({ mode: 'detach' })
     return { open: true }
   })
+  ipcMain.handle(IPC.EXTERNAL_OPEN, async (_e, url: string) => {
+    if (!url || typeof url !== 'string') return { ok: false as const }
+    try {
+      const parsed = new URL(url)
+      if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
+        return { ok: false as const }
+      }
+      await shell.openExternal(url)
+      return { ok: true as const }
+    } catch {
+      return { ok: false as const }
+    }
+  })
 }
 
 app.whenReady().then(() => {

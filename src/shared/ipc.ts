@@ -15,7 +15,8 @@ export const IPC = {
   AGENT_SEND: 'agent:send',
   AGENT_CANCEL: 'agent:cancel',
   AGENT_STATUS: 'agent:status',
-  DEVTOOLS_TOGGLE: 'devtools:toggle'
+  DEVTOOLS_TOGGLE: 'devtools:toggle',
+  EXTERNAL_OPEN: 'external:open'
 } as const
 
 export const EVENTS = {

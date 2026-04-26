@@ -26,6 +26,7 @@ type Api = {
   ) => Promise<{ ok: true } | { ok: false; error: string }>
   cancelAgent: (sessionId: string) => Promise<{ ok: true }>
   toggleDevtools: () => Promise<{ open: boolean }>
+  openExternal: (url: string) => Promise<{ ok: boolean }>
   onStream: (cb: (e: StreamEvent) => void) => () => void
   onSessionsSync: (cb: (s: SessionInfo[]) => void) => () => void
   onWorkspaceChange: (cb: (p: { path: string }) => void) => () => void

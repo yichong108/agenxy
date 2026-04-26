@@ -156,8 +156,73 @@
 
 .app-message-content {
   margin: 0;
-  white-space: pre-wrap;
   color: #1f2a37;
+}
+
+.app-message-card.is-user .app-message-content {
+  white-space: pre-wrap;
+}
+
+.app-message-markdown {
+  color: #1f2a37;
+  line-height: 1.65;
+  word-break: break-word;
+}
+
+.app-message-markdown > *:first-child {
+  margin-top: 0;
+}
+
+.app-message-markdown > *:last-child {
+  margin-bottom: 0;
+}
+
+.app-message-markdown p {
+  margin: 0 0 8px;
+}
+
+.app-message-markdown ul,
+.app-message-markdown ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.app-message-markdown li {
+  margin: 4px 0;
+}
+
+.app-message-markdown blockquote {
+  margin: 8px 0;
+  padding: 4px 10px;
+  border-left: 3px solid #9bb4d1;
+  color: #52607a;
+  background: #f8fbff;
+}
+
+.app-message-markdown code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: #f2f6fc;
+}
+
+.app-message-markdown pre {
+  margin: 8px 0;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid #dbe5f0;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.app-message-markdown pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.app-message-markdown a {
+  color: #1677ff;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .app-timeline-wrap {
