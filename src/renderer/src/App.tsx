@@ -51,6 +51,16 @@ function randomId() {
   return `m-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
+type RunStats = {
+  runId?: string
+  traceId?: string
+  startedAt?: number
+  durationMs?: number
+  toolCalls: number
+  toolErrors: number
+  status: 'running' | 'done' | 'error'
+}
+
 export function App() {
   const { message: msgApi, modal: modalApi } = AntdApp.useApp()
   const { token } = theme.useToken()
@@ -74,6 +84,7 @@ export function App() {
   const [timeline, setTimeline] = useState<Record<string, ToolTimelineEvent[]>>({})
   const [running, setRunning] = useState<Record<string, boolean>>({})
   const [queued, setQueued] = useState<Record<string, number | undefined>>({})
+  const [runStats, setRunStats] = useState<Record<string, RunStats | undefined>>({})
 
   const streamBuf = useRef<Record<string, string>>({})
   const assistantMsgId = useRef<Record<string, string | null>>({})
@@ -98,8 +109,21 @@ export function App() {
       console.log(e)
 
       if (e.type === 'run-start') {
+        const startedAt = e.timestampMs ?? Date.now()
         setRunning((r) => ({ ...r, [e.sessionId]: true }))
         setQueued((q) => ({ ...q, [e.sessionId]: undefined }))
+        setRunStats((s) => ({
+          ...s,
+          [e.sessionId]: {
+            runId: e.runId,
+            traceId: e.traceId,
+            startedAt,
+            durationMs: 0,
+            toolCalls: 0,
+            toolErrors: 0,
+            status: 'running'
+          }
+        }))
         streamBuf.current[e.sessionId] = ''
         const aid = randomId()
         assistantMsgId.current[e.sessionId] = aid
@@ -134,6 +158,20 @@ export function App() {
       }
       if (e.type === 'tool') {
         const te = e.event
+        setRunStats((s) => {
+          const cur = s[e.sessionId]
+          if (!cur) return s
+          const isToolStart = te.kind === 'tool' && te.status === 'start'
+          const isToolError = te.kind === 'error'
+          return {
+            ...s,
+            [e.sessionId]: {
+              ...cur,
+              toolCalls: cur.toolCalls + (isToolStart ? 1 : 0),
+              toolErrors: cur.toolErrors + (isToolError ? 1 : 0)
+            }
+          }
+        })
         setTimeline((t) => {
           const list = [...(t[e.sessionId] ?? [])]
           if (te.kind === 'tool') {
@@ -157,11 +195,31 @@ export function App() {
       if (e.type === 'error') {
         msgApi.error(e.message)
         setRunning((r) => ({ ...r, [e.sessionId]: false }))
+        setRunStats((s) => {
+          const cur = s[e.sessionId]
+          if (!cur) return s
+          const durationMs =
+            e.durationMs ?? (cur.startedAt ? Math.max(0, Date.now() - cur.startedAt) : undefined)
+          return {
+            ...s,
+            [e.sessionId]: { ...cur, durationMs, status: 'error' }
+          }
+        })
         return
       }
       if (e.type === 'done') {
         setRunning((r) => ({ ...r, [e.sessionId]: false }))
         setQueued((q) => ({ ...q, [e.sessionId]: undefined }))
+        setRunStats((s) => {
+          const cur = s[e.sessionId]
+          if (!cur) return s
+          const durationMs =
+            e.durationMs ?? (cur.startedAt ? Math.max(0, Date.now() - cur.startedAt) : undefined)
+          return {
+            ...s,
+            [e.sessionId]: { ...cur, durationMs, status: 'done' }
+          }
+        })
         streamBuf.current[e.sessionId] = ''
         assistantMsgId.current[e.sessionId] = null
       }
@@ -271,6 +329,7 @@ export function App() {
   )
   const isRun = activeId ? running[activeId] : false
   const isQueued = activeId ? queued[activeId] : undefined
+  const currentRunStats = activeId ? runStats[activeId] : undefined
 
   return (
     <Layout style={{ minHeight: '100vh', background: '#f3f6fb' }}>
@@ -412,6 +471,15 @@ export function App() {
               <Text>{sessions.find((s) => s.id === activeId)?.name}</Text>
               {isRun && <Tag color="processing">执行中</Tag>}
               {isQueued && isQueued > 0 && <Tag color="warning">排队 #{isQueued}</Tag>}
+              {currentRunStats && (
+                <Text type="secondary">
+                  本轮: {currentRunStats.toolCalls} 次调用 / {currentRunStats.toolErrors} 次错误 /{' '}
+                  {((currentRunStats.durationMs ?? 0) / 1000).toFixed(2)}s
+                </Text>
+              )}
+              {currentRunStats?.traceId && (
+                <Tag color="default">trace: {currentRunStats.traceId.slice(-12)}</Tag>
+              )}
             </Space>
           )}
         </Header>

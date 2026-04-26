@@ -40,6 +40,14 @@ const sessions = new Map<string, SessionRuntime>()
 let webContents: WebContents | null = null
 let agentQueue: ConcurrencyQueue | null = null
 
+function makeRunId(): string {
+  return `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function makeTraceId(sessionId: string, runId: string): string {
+  return `${sessionId}:${runId}`
+}
+
 function getQueue(settings: AppSettings): ConcurrencyQueue {
   if (!agentQueue) {
     agentQueue = new ConcurrencyQueue(Math.max(1, settings.maxConcurrentStreams))
@@ -118,6 +126,7 @@ function makeTools(
   sessionId: string,
   root: string,
   settings: AppSettings,
+  runCtx: { runId: string; traceId: string },
   onTool: (e: ToolTimelineEvent) => void
 ) {
   const termKey = `term:${sessionId}`
@@ -125,9 +134,29 @@ function makeTools(
     tool(
       async ({ path: p }) => {
         const id = `read-${Date.now()}`
-        onTool({ kind: 'tool', id, name: 'read_file', status: 'start', args: p })
+        const startedAt = Date.now()
+        onTool({
+          kind: 'tool',
+          id,
+          name: 'read_file',
+          status: 'start',
+          args: p,
+          runId: runCtx.runId,
+          traceId: runCtx.traceId,
+          timestampMs: startedAt
+        })
         const r = await readFileTool(root, p)
-        onTool({ kind: 'tool', id, name: 'read_file', status: 'end', result: r.slice(0, 1_000) })
+        onTool({
+          kind: 'tool',
+          id,
+          name: 'read_file',
+          status: 'end',
+          result: r.slice(0, 1_000),
+          runId: runCtx.runId,
+          traceId: runCtx.traceId,
+          timestampMs: Date.now(),
+          durationMs: Date.now() - startedAt
+        })
         return r
       },
       {
@@ -139,9 +168,29 @@ function makeTools(
     tool(
       async ({ path: p, content }) => {
         const id = `w-${Date.now()}`
-        onTool({ kind: 'tool', id, name: 'write_file', status: 'start', args: p })
+        const startedAt = Date.now()
+        onTool({
+          kind: 'tool',
+          id,
+          name: 'write_file',
+          status: 'start',
+          args: p,
+          runId: runCtx.runId,
+          traceId: runCtx.traceId,
+          timestampMs: startedAt
+        })
         const r = await writeFileTool(root, p, content)
-        onTool({ kind: 'tool', id, name: 'write_file', status: 'end', result: r })
+        onTool({
+          kind: 'tool',
+          id,
+          name: 'write_file',
+          status: 'end',
+          result: r,
+          runId: runCtx.runId,
+          traceId: runCtx.traceId,
+          timestampMs: Date.now(),
+          durationMs: Date.now() - startedAt
+        })
         return r
       },
       {
@@ -153,9 +202,29 @@ function makeTools(
     tool(
       async ({ path: p, depth }) => {
         const id = `ls-${Date.now()}`
-        onTool({ kind: 'tool', id, name: 'list_dir', status: 'start', args: p || '.' })
+        const startedAt = Date.now()
+        onTool({
+          kind: 'tool',
+          id,
+          name: 'list_dir',
+          status: 'start',
+          args: p || '.',
+          runId: runCtx.runId,
+          traceId: runCtx.traceId,
+          timestampMs: startedAt
+        })
         const r = await listDirTool(root, p || '.', { depth: depth ?? 2 })
-        onTool({ kind: 'tool', id, name: 'list_dir', status: 'end', result: r.slice(0, 8_000) })
+        onTool({
+          kind: 'tool',
+          id,
+          name: 'list_dir',
+          status: 'end',
+          result: r.slice(0, 8_000),
+          runId: runCtx.runId,
+          traceId: runCtx.traceId,
+          timestampMs: Date.now(),
+          durationMs: Date.now() - startedAt
+        })
         return r
       },
       {
@@ -170,14 +239,28 @@ function makeTools(
     tool(
       async ({ query }) => {
         const id = `find-${Date.now()}`
-        onTool({ kind: 'tool', id, name: 'search_workspace', status: 'start', args: query })
+        const startedAt = Date.now()
+        onTool({
+          kind: 'tool',
+          id,
+          name: 'search_workspace',
+          status: 'start',
+          args: query,
+          runId: runCtx.runId,
+          traceId: runCtx.traceId,
+          timestampMs: startedAt
+        })
         const r = await searchWorkspace(root, query, { maxFiles: 50 })
         onTool({
           kind: 'tool',
           id,
           name: 'search_workspace',
           status: 'end',
-          result: r.slice(0, 8_000)
+          result: r.slice(0, 8_000),
+          runId: runCtx.runId,
+          traceId: runCtx.traceId,
+          timestampMs: Date.now(),
+          durationMs: Date.now() - startedAt
         })
         return r
       },
@@ -190,9 +273,29 @@ function makeTools(
     tool(
       async ({ command }) => {
         const id = `sh-${Date.now()}`
-        onTool({ kind: 'tool', id, name: 'run_terminal', status: 'start', args: command })
+        const startedAt = Date.now()
+        onTool({
+          kind: 'tool',
+          id,
+          name: 'run_terminal',
+          status: 'start',
+          args: command,
+          runId: runCtx.runId,
+          traceId: runCtx.traceId,
+          timestampMs: startedAt
+        })
         const r = await runCommand(termKey, root, command, settings.maxTerminalOutputChars)
-        onTool({ kind: 'tool', id, name: 'run_terminal', status: 'end', result: r.slice(0, 4_000) })
+        onTool({
+          kind: 'tool',
+          id,
+          name: 'run_terminal',
+          status: 'end',
+          result: r.slice(0, 4_000),
+          runId: runCtx.runId,
+          traceId: runCtx.traceId,
+          timestampMs: Date.now(),
+          durationMs: Date.now() - startedAt
+        })
         return r
       },
       {
@@ -282,18 +385,32 @@ export async function runUserMessage(
     }
     sessions.set(sessionId, session)
     const ac = new AbortController()
+    const runId = makeRunId()
+    const traceId = makeTraceId(sessionId, runId)
+    const runStartedAt = Date.now()
     session.controller = ac
-    emit({ type: 'run-start', sessionId })
+    emit({ type: 'run-start', sessionId, runId, traceId, timestampMs: runStartedAt })
     const onTool = (e: ToolTimelineEvent) => {
-      emit({ type: 'tool', sessionId, event: e })
+      emit({
+        type: 'tool',
+        sessionId,
+        runId,
+        traceId,
+        event: {
+          ...e,
+          runId: e.runId ?? runId,
+          traceId: e.traceId ?? traceId,
+          timestampMs: e.timestampMs ?? Date.now()
+        }
+      })
     }
     const fileToolHint = parseFileToolHint(userText)
     const mustUseToolFirst = !!fileToolHint
     let hasToolCall = false
     const batcher = new StreamBatcher(settings.streamFlushMs, settings.streamFlushChars, (t) => {
-      emit({ type: 'text-delta', sessionId, text: t })
+      emit({ type: 'text-delta', sessionId, text: t, runId, traceId })
     })
-    const { tools, byName } = makeTools(sessionId, root, settings, onTool)
+    const { tools, byName } = makeTools(sessionId, root, settings, { runId, traceId }, onTool)
     const model = createLanguageModel(settings).bindTools(tools)
     session.messages.push(new HumanMessage(userText))
     const system = buildSystemPrompt(root)
@@ -353,12 +470,28 @@ export async function runUserMessage(
           const callId = call.id || `tc-${Date.now()}`
           const toolName = call.name
           const toolArgs = JSON.stringify(call.args ?? {})
-          onTool({ kind: 'tool', id: callId, name: toolName, status: 'start', args: toolArgs })
+          const callStartedAt = Date.now()
+          onTool({
+            kind: 'tool',
+            id: callId,
+            name: toolName,
+            status: 'start',
+            args: toolArgs,
+            timestampMs: callStartedAt
+          })
           const targetTool = byName.get(toolName)
           if (!targetTool) {
             const notFound = `未找到工具: ${toolName}`
-            onTool({ kind: 'error', message: notFound })
-            onTool({ kind: 'tool', id: callId, name: toolName, status: 'end', result: notFound })
+            onTool({ kind: 'error', message: notFound, timestampMs: Date.now() })
+            onTool({
+              kind: 'tool',
+              id: callId,
+              name: toolName,
+              status: 'end',
+              result: notFound,
+              timestampMs: Date.now(),
+              durationMs: Date.now() - callStartedAt
+            })
             session.messages.push(new ToolMessage({ tool_call_id: callId, content: notFound }))
             continue
           }
@@ -371,24 +504,61 @@ export async function runUserMessage(
               id: callId,
               name: toolName,
               status: 'end',
-              result: toolText.slice(0, 1_000)
+              result: toolText.slice(0, 1_000),
+              timestampMs: Date.now(),
+              durationMs: Date.now() - callStartedAt
             })
             session.messages.push(new ToolMessage({ tool_call_id: callId, content: toolText }))
           } catch (toolErr) {
             const toolMessage = toolErr instanceof Error ? toolErr.message : String(toolErr)
-            onTool({ kind: 'error', message: toolMessage })
-            onTool({ kind: 'tool', id: callId, name: toolName, status: 'end', result: toolMessage })
+            onTool({
+              kind: 'error',
+              message: toolMessage,
+              timestampMs: Date.now(),
+              durationMs: Date.now() - callStartedAt
+            })
+            onTool({
+              kind: 'tool',
+              id: callId,
+              name: toolName,
+              status: 'end',
+              result: toolMessage,
+              timestampMs: Date.now(),
+              durationMs: Date.now() - callStartedAt
+            })
             session.messages.push(new ToolMessage({ tool_call_id: callId, content: toolMessage }))
           }
         }
       }
       batcher.flush()
-      emit({ type: 'done', sessionId })
+      emit({
+        type: 'done',
+        sessionId,
+        runId,
+        traceId,
+        timestampMs: Date.now(),
+        durationMs: Date.now() - runStartedAt
+      })
     } catch (e) {
       batcher.flush()
       const message = e instanceof Error ? e.message : String(e)
-      emit({ type: 'error', sessionId, message })
-      onTool({ kind: 'error', message })
+      emit({
+        type: 'error',
+        sessionId,
+        message,
+        runId,
+        traceId,
+        timestampMs: Date.now(),
+        durationMs: Date.now() - runStartedAt
+      })
+      onTool({
+        kind: 'error',
+        message,
+        runId,
+        traceId,
+        timestampMs: Date.now(),
+        durationMs: Date.now() - runStartedAt
+      })
     } finally {
       session.controller = null
       batcher.flush()

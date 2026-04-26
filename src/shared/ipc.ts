@@ -84,16 +84,44 @@ export type ToolTimelineEvent =
       id: string
       name: string
       status: 'start' | 'end'
+      traceId?: string
+      runId?: string
+      timestampMs?: number
+      durationMs?: number
       args?: string
       result?: string
     }
-  | { kind: 'error'; message: string }
+  | {
+      kind: 'error'
+      message: string
+      traceId?: string
+      runId?: string
+      timestampMs?: number
+      durationMs?: number
+      errorCode?: string
+    }
 
 export type StreamEvent =
-  | { type: 'text-delta'; sessionId: string; text: string }
-  | { type: 'tool'; sessionId: string; event: ToolTimelineEvent }
-  | { type: 'error'; sessionId: string; message: string }
-  | { type: 'done'; sessionId: string }
-  | { type: 'queued'; sessionId: string; position: number }
-  | { type: 'run-start'; sessionId: string }
+  | { type: 'text-delta'; sessionId: string; text: string; traceId?: string; runId?: string }
+  | { type: 'tool'; sessionId: string; event: ToolTimelineEvent; traceId?: string; runId?: string }
+  | {
+      type: 'error'
+      sessionId: string
+      message: string
+      traceId?: string
+      runId?: string
+      timestampMs?: number
+      durationMs?: number
+      errorCode?: string
+    }
+  | {
+      type: 'done'
+      sessionId: string
+      traceId?: string
+      runId?: string
+      timestampMs?: number
+      durationMs?: number
+    }
+  | { type: 'queued'; sessionId: string; position: number; traceId?: string; runId?: string }
+  | { type: 'run-start'; sessionId: string; traceId?: string; runId?: string; timestampMs?: number }
   | { type: 'replace-messages'; sessionId: string; messages: ChatMessage[] }
