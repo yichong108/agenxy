@@ -23,7 +23,7 @@ import {
   Typography,
   Dropdown
 } from 'antd'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import {
   defaultSettings,
@@ -96,6 +96,24 @@ export function App() {
   const streamBuf = useRef<Record<string, string>>({})
   const assistantMsgId = useRef<Record<string, string | null>>({})
   const hydratedMessageSessions = useRef<Set<string>>(new Set())
+  const messagesScrollRef = useRef<HTMLDivElement | null>(null)
+  const messagesBottomRef = useRef<HTMLDivElement | null>(null)
+  const autoScrollRef = useRef(true)
+
+  const isNearBottom = useCallback((el: HTMLDivElement) => {
+    const threshold = 48
+    return el.scrollTop + el.clientHeight >= el.scrollHeight - threshold
+  }, [])
+
+  const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
+    const el = messagesScrollRef.current
+    const bottomEl = messagesBottomRef.current
+    if (bottomEl) {
+      bottomEl.scrollIntoView({ block: 'end', behavior })
+      return
+    }
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior })
+  }, [])
 
   const ensureSessionMessages = useCallback(
     async (sessionId: string, force = false) => {
@@ -394,6 +412,27 @@ export function App() {
   const showSendButton = !isRun || hasInput
   const showStopButton = Boolean(activeId && isRun && !hasInput)
 
+  useEffect(() => {
+    // 切换会话后默认回到底部，便于继续跟随最新回复。
+    autoScrollRef.current = true
+    const rafId = window.requestAnimationFrame(() => {
+      scrollMessagesToBottom('auto')
+    })
+    return () => window.cancelAnimationFrame(rafId)
+  }, [activeId, scrollMessagesToBottom])
+
+  useLayoutEffect(() => {
+    if (!autoScrollRef.current) return
+    const rafId = window.requestAnimationFrame(() => {
+      scrollMessagesToBottom('auto')
+      // 再补一次，避免流式内容换行导致高度在下一帧继续增长。
+      window.requestAnimationFrame(() => {
+        if (autoScrollRef.current) scrollMessagesToBottom('auto')
+      })
+    })
+    return () => window.cancelAnimationFrame(rafId)
+  }, [currentMessages, currentTimeline, scrollMessagesToBottom])
+
   return (
     <div className="app-shell">
       <div className="app-sidebar">
@@ -511,7 +550,13 @@ export function App() {
             </div>
           )}
           <div className="app-messages-shell">
-            <div className="app-messages-scroll">
+            <div
+              className="app-messages-scroll"
+              ref={messagesScrollRef}
+              onScroll={(e) => {
+                autoScrollRef.current = isNearBottom(e.currentTarget)
+              }}
+            >
               {currentMessages.map((m) => (
                 <Card
                   key={m.id}
@@ -556,6 +601,7 @@ export function App() {
                   </Text>
                 </Card>
               )}
+              <div ref={messagesBottomRef} />
             </div>
           </div>
           <div className="app-composer">
