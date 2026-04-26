@@ -20,7 +20,6 @@ import {
   Select,
   Space,
   Tag,
-  theme,
   Typography,
   Dropdown
 } from 'antd'
@@ -36,6 +35,7 @@ import {
 } from '@shared/ipc'
 
 import { useUiStore } from './store/ui-store'
+import './App.scss'
 
 const { Text, Paragraph } = Typography
 const { TextArea } = Input
@@ -71,7 +71,6 @@ type RunStats = {
 
 export function App() {
   const { message: msgApi, modal: modalApi } = AntdApp.useApp()
-  const { token } = theme.useToken()
   const preloadOk = typeof window !== 'undefined' && typeof window.bridge !== 'undefined'
   const bridge = window.bridge
   const [workspace, setWorkspace] = useState('')
@@ -393,41 +392,26 @@ export function App() {
   const currentRunStats = activeId ? runStats[activeId] : undefined
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f3f6fb', display: 'flex' }}>
-      <div
-        style={{
-          width: 260,
-          background: '#f8fbff',
-          borderRight: '1px solid #dbe5f0',
-          boxShadow: '2px 0 12px rgba(15, 23, 42, 0.05)'
-        }}
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-          <div
-            style={{
-              padding: '14px 12px 12px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              borderBottom: '1px solid #dbe5f0'
-            }}
-          >
-            <Text strong style={{ color: '#1f2a37', letterSpacing: 0.3 }}>
+    <div className="app-shell">
+      <div className="app-sidebar">
+        <div className="app-sidebar-inner">
+          <div className="app-sidebar-header">
+            <Text strong className="app-brand-text">
               AgentWeave
             </Text>
             <Button
               type="text"
               icon={<SettingOutlined />}
               onClick={openSettings}
-              style={{ color: '#52607a' }}
+              className="app-settings-btn"
             />
           </div>
-          <div style={{ padding: '10px 10px 0' }}>
+          <div className="app-new-session-wrap">
             <Button
               block
               type="primary"
               icon={<PlusOutlined />}
-              style={{ boxShadow: '0 4px 12px rgba(22, 119, 255, 0.25)' }}
+              className="app-new-session-btn"
               onClick={async () => {
                 const s = await bridge.createSession()
                 setActiveId(s.id)
@@ -437,7 +421,7 @@ export function App() {
             </Button>
           </div>
           <List
-            style={{ flex: 1, overflow: 'auto', marginTop: 10, padding: '0 6px' }}
+            className="app-session-list"
             dataSource={sessions}
             renderItem={(s) => (
               <Dropdown
@@ -469,25 +453,13 @@ export function App() {
                 trigger={['contextMenu']}
               >
                 <List.Item
-                  style={{
-                    cursor: 'pointer',
-                    margin: '0 4px 6px',
-                    borderRadius: 10,
-                    paddingInline: 10,
-                    background:
-                      s.id === activeId ? 'rgba(22, 119, 255, 0.16)' : 'rgba(255,255,255,0.96)',
-                    border:
-                      s.id === activeId
-                        ? '1px solid rgba(22, 119, 255, 0.42)'
-                        : '1px solid #e8eef6',
-                    transition: 'all .2s ease'
-                  }}
+                  className={`app-session-item ${s.id === activeId ? 'is-active' : ''}`}
                   onClick={() => setActiveId(s.id)}
                 >
                   <List.Item.Meta
-                    title={<Text style={{ color: '#1f2a37' }}>{s.name}</Text>}
+                    title={<Text className="app-session-title">{s.name}</Text>}
                     description={
-                      <Text style={{ color: '#73839c', fontSize: 11 }}>
+                      <Text className="app-session-time">
                         {new Date(s.updatedAt).toLocaleString('zh-CN')}
                       </Text>
                     }
@@ -496,35 +468,16 @@ export function App() {
               </Dropdown>
             )}
           />
-          <div
-            style={{
-              padding: '10px 10px 8px',
-              color: '#73839c',
-              fontSize: 11,
-              wordBreak: 'break-all'
-            }}
-          >
-            工作区: {workspace || '未选'}
-          </div>
-          <div style={{ padding: '0 10px 10px' }}>
+          <div className="app-workspace-info">工作区: {workspace || '未选'}</div>
+          <div className="app-workspace-btn-wrap">
             <Button block icon={<FolderOpenOutlined />} onClick={pickWorkspace}>
               选择工作区
             </Button>
           </div>
         </div>
       </div>
-      <div style={{ minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', flex: 1 }}>
-        <div
-          style={{
-            background: 'linear-gradient(90deg, #ffffff 0%, #f8fbff 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            paddingInline: 18,
-            height: 52,
-            lineHeight: '52px',
-            borderBottom: '1px solid #dbe5f0'
-          }}
-        >
+      <div className="app-main-pane">
+        <div className="app-topbar">
           {activeId && (
             <Space>
               <Text type="secondary">会话</Text>
@@ -543,18 +496,9 @@ export function App() {
             </Space>
           )}
         </div>
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            minWidth: 0,
-            minHeight: 0,
-            background: '#f7faff',
-            flex: 1
-          }}
-        >
+        <div className="app-content">
           {!preloadOk && (
-            <div style={{ padding: '12px 16px 0 16px' }}>
+            <div className="app-preload-alert-wrap">
               <Alert
                 type="error"
                 showIcon
@@ -563,54 +507,28 @@ export function App() {
               />
             </div>
           )}
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            <div
-              style={{
-                flex: 1,
-                minHeight: 0,
-                overflow: 'auto',
-                padding: '14px 18px',
-                background:
-                  'radial-gradient(circle at 20% 0%, rgba(22,119,255,0.12) 0%, rgba(247,250,255,0) 34%), #f7faff'
-              }}
-            >
+          <div className="app-messages-shell">
+            <div className="app-messages-scroll">
               {currentMessages.map((m) => (
                 <Card
                   key={m.id}
                   size="small"
-                  style={{
-                    marginBottom: 10,
-                    marginLeft: m.role === 'user' ? 'auto' : undefined,
-                    maxWidth: '86%',
-                    borderRadius: 12,
-                    border:
-                      m.role === 'user' ? '1px solid rgba(22,119,255,0.35)' : '1px solid #dbe5f0',
-                    background:
-                      m.role === 'user'
-                        ? 'linear-gradient(135deg, rgba(230,243,255,1) 0%, rgba(242,248,255,1) 100%)'
-                        : '#ffffff'
-                  }}
+                  className={`app-message-card ${m.role === 'user' ? 'is-user' : 'is-assistant'}`}
                 >
-                  <Text type="secondary" style={{ fontSize: 12, color: '#73839c' }}>
+                  <Text type="secondary" className="app-message-role">
                     {m.role === 'user' ? '你' : '助理'}
                   </Text>
-                  <Paragraph style={{ marginBottom: 0, whiteSpace: 'pre-wrap', color: '#1f2a37' }}>
+                  <Paragraph className="app-message-content">
                     {m.content || (m.role === 'assistant' && isRun ? '…' : '')}
                   </Paragraph>
                   {m.role === 'assistant' &&
                     m.id === latestAssistantMessageId &&
                     currentTimeline.length > 0 && (
-                      <div
-                        style={{
-                          marginTop: 10,
-                          borderTop: '1px solid #dbe5f0',
-                          paddingTop: 8
-                        }}
-                      >
+                      <div className="app-timeline-wrap">
                         {currentTimeline.map((e, idx) => (
                           <div
                             key={`${e.kind}-${'id' in e ? e.id : idx}-${idx}`}
-                            style={{ marginBottom: 8 }}
+                            className="app-timeline-item"
                           >
                             {e.kind === 'error' ? (
                               <Text type="danger">{e.message}</Text>
@@ -621,21 +539,7 @@ export function App() {
                                 </Text>
                                 {e.args && <Text type="secondary"> {e.args}</Text>}
                                 {e.status === 'end' && e.result && (
-                                  <pre
-                                    style={{
-                                      fontSize: 11,
-                                      maxHeight: 120,
-                                      overflow: 'auto',
-                                      marginTop: 8,
-                                      marginBottom: 0,
-                                      padding: 8,
-                                      borderRadius: 8,
-                                      background: '#f5f9ff',
-                                      border: '1px solid #dbe5f0'
-                                    }}
-                                  >
-                                    {e.result}
-                                  </pre>
+                                  <pre className="app-timeline-result">{e.result}</pre>
                                 )}
                               </>
                             )}
@@ -646,43 +550,21 @@ export function App() {
                 </Card>
               ))}
               {!currentMessages.length && (
-                <Card
-                  size="small"
-                  style={{
-                    maxWidth: 520,
-                    marginTop: 4,
-                    background: '#ffffff',
-                    border: '1px solid #dbe5f0',
-                    borderRadius: 12
-                  }}
-                >
-                  <Text type="secondary" style={{ color: '#73839c' }}>
+                <Card size="small" className="app-empty-card">
+                  <Text type="secondary" className="app-empty-tip">
                     发一条消息开始；务必先选择工作区并配置 API Key。
                   </Text>
                 </Card>
               )}
             </div>
           </div>
-          <div
-            style={{
-              padding: 12,
-              display: 'flex',
-              gap: 10,
-              background: '#ffffff',
-              borderTop: `1px solid ${token.colorBorderSecondary}`,
-              flexShrink: 0
-            }}
-          >
+          <div className="app-composer">
             <TextArea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               autoSize={{ minRows: 1, maxRows: 6 }}
               placeholder="输入消息… (Enter 发送，Shift+Enter 换行)"
-              style={{
-                background: '#f8fbff',
-                borderColor: '#dbe5f0',
-                borderRadius: 10
-              }}
+              className="app-composer-input"
               onPressEnter={(e) => {
                 if (!e.shiftKey) {
                   e.preventDefault()
@@ -690,13 +572,13 @@ export function App() {
                 }
               }}
             />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div className="app-composer-actions">
               <Button
                 type="primary"
                 icon={<SendOutlined />}
                 onClick={() => void send()}
                 disabled={!activeId}
-                style={{ height: 36 }}
+                className="app-send-btn"
               >
                 发送
               </Button>
@@ -706,7 +588,7 @@ export function App() {
                   icon={<StopOutlined />}
                   onClick={() => void bridge.cancelAgent(activeId)}
                   disabled={!isRun}
-                  style={{ height: 34 }}
+                  className="app-stop-btn"
                 >
                   停止
                 </Button>
@@ -738,16 +620,16 @@ export function App() {
             <Input.Password autoComplete="off" placeholder="仅保存在本机" />
           </Form.Item>
           <Form.Item name="maxConcurrentStreams" label="最大并行流">
-            <InputNumber min={1} max={8} style={{ width: '100%' }} />
+            <InputNumber min={1} max={8} className="app-settings-number" />
           </Form.Item>
           <Form.Item name="streamFlushMs" label="流式合并间隔 (ms)">
-            <InputNumber min={8} max={200} style={{ width: '100%' }} />
+            <InputNumber min={8} max={200} className="app-settings-number" />
           </Form.Item>
           <Form.Item name="streamFlushChars" label="流式合并字符数">
-            <InputNumber min={32} max={2000} style={{ width: '100%' }} />
+            <InputNumber min={32} max={2000} className="app-settings-number" />
           </Form.Item>
           <Form.Item name="maxTerminalOutputChars" label="终端输出最大字符">
-            <InputNumber min={1} max={1000} style={{ width: '100%' }} />
+            <InputNumber min={1} max={1000} className="app-settings-number" />
           </Form.Item>
         </Form>
       </Modal>
@@ -780,7 +662,7 @@ export function App() {
           icon={<BugOutlined />}
           tooltip="切换 DevTools"
           onClick={() => void toggleDevtools()}
-          style={{ right: 24, bottom: 24 }}
+          className="app-devtools-float"
         />
       )}
     </div>

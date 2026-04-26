@@ -3,6 +3,8 @@ import zhCN from 'antd/locale/zh_CN'
 import dayjs from 'dayjs'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import 'antd/dist/reset.css'
+import './assets/reset.scss'
 
 import 'dayjs/locale/zh-cn'
 import { App } from './App'
@@ -27,7 +29,7 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, AppError
   render() {
     if (this.state.error) {
       return (
-        <div style={{ padding: 16, color: '#fff', background: '#141414', minHeight: '100vh' }}>
+        <div style={{ padding: 16, color: '#fff', background: '#141414', height: '100%' }}>
           <h3 style={{ marginTop: 0 }}>渲染异常（已阻止白屏）</h3>
           <pre style={{ whiteSpace: 'pre-wrap' }}>{this.state.error.message}</pre>
         </div>
@@ -41,7 +43,7 @@ const root = document.getElementById('root')
 if (root) {
   document.body.style.margin = '0'
   document.body.style.overflow = 'hidden'
-  root.style.height = '100vh'
+  root.style.height = '100%'
 
   ReactDOM.createRoot(root).render(
     <React.StrictMode>
