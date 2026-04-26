@@ -11,7 +11,6 @@ import {
   Alert,
   Button,
   Card,
-  Collapse,
   Form,
   FloatButton,
   Input,
@@ -327,6 +326,13 @@ export function App() {
     () => (activeId ? (timeline[activeId] ?? []) : []),
     [activeId, timeline]
   )
+  const latestAssistantMessageId = useMemo(() => {
+    for (let i = currentMessages.length - 1; i >= 0; i -= 1) {
+      const msg = currentMessages[i]
+      if (msg?.role === 'assistant') return msg.id
+    }
+    return null
+  }, [currentMessages])
   const isRun = activeId ? running[activeId] : false
   const isQueued = activeId ? queued[activeId] : undefined
   const currentRunStats = activeId ? runStats[activeId] : undefined
@@ -536,6 +542,52 @@ export function App() {
                   <Paragraph style={{ marginBottom: 0, whiteSpace: 'pre-wrap', color: '#1f2a37' }}>
                     {m.content || (m.role === 'assistant' && isRun ? '…' : '')}
                   </Paragraph>
+                  {m.role === 'assistant' &&
+                    m.id === latestAssistantMessageId &&
+                    currentTimeline.length > 0 && (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          borderTop: '1px solid #dbe5f0',
+                          paddingTop: 8
+                        }}
+                      >
+                        {currentTimeline.map((e, idx) => (
+                          <div
+                            key={`${e.kind}-${'id' in e ? e.id : idx}-${idx}`}
+                            style={{ marginBottom: 8 }}
+                          >
+                            {e.kind === 'error' ? (
+                              <Text type="danger">{e.message}</Text>
+                            ) : (
+                              <>
+                                <Text code>
+                                  {e.name} {e.status === 'start' ? '…' : '✓'}
+                                </Text>
+                                {e.args && <Text type="secondary"> {e.args}</Text>}
+                                {e.status === 'end' && e.result && (
+                                  <pre
+                                    style={{
+                                      fontSize: 11,
+                                      maxHeight: 120,
+                                      overflow: 'auto',
+                                      marginTop: 8,
+                                      marginBottom: 0,
+                                      padding: 8,
+                                      borderRadius: 8,
+                                      background: '#f5f9ff',
+                                      border: '1px solid #dbe5f0'
+                                    }}
+                                  >
+                                    {e.result}
+                                  </pre>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                 </Card>
               ))}
               {!currentMessages.length && (
@@ -555,65 +607,6 @@ export function App() {
                 </Card>
               )}
             </div>
-            {activeId && (
-              <div
-                style={{
-                  borderTop: '1px solid #dbe5f0',
-                  background: '#f8fbff',
-                  maxHeight: 240,
-                  overflow: 'auto',
-                  flexShrink: 0
-                }}
-              >
-                <Collapse
-                  bordered={false}
-                  style={{ background: 'transparent' }}
-                  items={[
-                    {
-                      key: 't',
-                      label: '工具 / 时间线',
-                      children: (
-                        <List
-                          size="small"
-                          dataSource={currentTimeline}
-                          renderItem={(e) => (
-                            <List.Item>
-                              {e.kind === 'error' ? (
-                                <Text type="danger">{e.message}</Text>
-                              ) : (
-                                <>
-                                  <Text code>
-                                    {e.name} {e.status === 'start' ? '…' : '✓'}
-                                  </Text>
-                                  {e.args && <Text type="secondary"> {e.args}</Text>}
-                                  {e.status === 'end' && e.result && (
-                                    <pre
-                                      style={{
-                                        fontSize: 11,
-                                        maxHeight: 120,
-                                        overflow: 'auto',
-                                        marginTop: 8,
-                                        marginBottom: 0,
-                                        padding: 8,
-                                        borderRadius: 8,
-                                        background: '#f5f9ff',
-                                        border: '1px solid #dbe5f0'
-                                      }}
-                                    >
-                                      {e.result}
-                                    </pre>
-                                  )}
-                                </>
-                              )}
-                            </List.Item>
-                          )}
-                        />
-                      )
-                    }
-                  ]}
-                />
-              </div>
-            )}
           </div>
           <div
             style={{
