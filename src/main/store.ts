@@ -7,6 +7,7 @@ import {
   defaultRendererUiState,
   defaultSettings,
   type AppSettings,
+  type ChatMessage,
   type RendererUiState,
   type SessionInfo
 } from '../shared/ipc.js'
@@ -15,8 +16,10 @@ type StoreSchema = {
   workspace: string
   settings: AppSettings
   uiState: RendererUiState
-  /** 轻量持久化：会话 id+标题；消息仍以内存为主，避免超大 JSON */
+  /** 会话元数据持久化：会话 id、标题、时间 */
   sessionsMeta: SessionInfo[]
+  /** 会话问答持久化：按 sessionId 存储 */
+  sessionsMessages: Record<string, ChatMessage[]>
 }
 
 const store = new Store<StoreSchema>({
@@ -25,7 +28,8 @@ const store = new Store<StoreSchema>({
     workspace: '',
     settings: { ...defaultSettings },
     uiState: { ...defaultRendererUiState },
-    sessionsMeta: []
+    sessionsMeta: [],
+    sessionsMessages: {}
   }
 })
 
@@ -78,6 +82,24 @@ export function getSessionsMeta(): SessionInfo[] {
 
 export function setSessionsMeta(list: SessionInfo[]): void {
   store.set('sessionsMeta', list)
+}
+
+export function getSessionMessages(sessionId: string): ChatMessage[] {
+  const all = store.get('sessionsMessages') || {}
+  return all[sessionId] || []
+}
+
+export function setSessionMessages(sessionId: string, list: ChatMessage[]): void {
+  const all = store.get('sessionsMessages') || {}
+  all[sessionId] = list
+  store.set('sessionsMessages', all)
+}
+
+export function deleteSessionMessages(sessionId: string): void {
+  const all = store.get('sessionsMessages') || {}
+  if (!(sessionId in all)) return
+  delete all[sessionId]
+  store.set('sessionsMessages', all)
 }
 
 export function userDataPath(): string {

@@ -1,6 +1,12 @@
 /// <reference types="vite/client" />
 
-import type { AppSettings, RendererUiState, SessionInfo, StreamEvent } from '@shared/ipc'
+import type {
+  AppSettings,
+  ChatMessage,
+  RendererUiState,
+  SessionInfo,
+  StreamEvent
+} from '@shared/ipc'
 
 type Api = {
   selectWorkspace: () => Promise<{ path: string }>
@@ -10,6 +16,7 @@ type Api = {
   getUiState: () => Promise<RendererUiState>
   setUiState: (patch: Partial<RendererUiState>) => Promise<RendererUiState>
   listSessions: () => Promise<SessionInfo[]>
+  getSessionMessages: (sessionId: string) => Promise<ChatMessage[]>
   createSession: (name?: string) => Promise<SessionInfo>
   renameSession: (id: string, name: string) => Promise<SessionInfo | null>
   deleteSession: (id: string) => Promise<{ ok: true }>

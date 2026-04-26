@@ -48,6 +48,17 @@ function randomId() {
   return `m-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
+function appendAssistantText(list: ChatMessage[], text: string, forceNew = false): ChatMessage[] {
+  const next = [...list]
+  const last = next[next.length - 1]
+  if (!forceNew && last?.role === 'assistant') {
+    next[next.length - 1] = { ...last, content: text }
+    return next
+  }
+  next.push({ id: randomId(), role: 'assistant', content: text })
+  return next
+}
+
 type RunStats = {
   runId?: string
   traceId?: string
@@ -85,6 +96,18 @@ export function App() {
 
   const streamBuf = useRef<Record<string, string>>({})
   const assistantMsgId = useRef<Record<string, string | null>>({})
+  const hydratedMessageSessions = useRef<Set<string>>(new Set())
+
+  const ensureSessionMessages = useCallback(
+    async (sessionId: string, force = false) => {
+      if (!sessionId) return
+      if (!force && hydratedMessageSessions.current.has(sessionId)) return
+      const list = await bridge.getSessionMessages(sessionId)
+      setMessages((m) => ({ ...m, [sessionId]: list }))
+      hydratedMessageSessions.current.add(sessionId)
+    },
+    [bridge]
+  )
 
   const load = useCallback(async () => {
     const [w, s, sList] = await Promise.all([
@@ -97,14 +120,25 @@ export function App() {
     form.setFieldsValue(s)
     setSessions(sList)
     const currentActiveId = useUiStore.getState().activeSessionId
-    if (currentActiveId && sList.some((x) => x.id === currentActiveId)) return
-    setActiveId(sList[0]?.id ?? null)
-  }, [form])
+    const nextActiveId =
+      currentActiveId && sList.some((x) => x.id === currentActiveId)
+        ? currentActiveId
+        : (sList[0]?.id ?? null)
+    setActiveId(nextActiveId)
+    if (nextActiveId) {
+      await ensureSessionMessages(nextActiveId, true)
+    }
+  }, [ensureSessionMessages, form, setActiveId])
 
   const handleStream = useCallback(
     (e: StreamEvent) => {
       console.log(e)
 
+      if (e.type === 'replace-messages') {
+        setMessages((m) => ({ ...m, [e.sessionId]: e.messages }))
+        hydratedMessageSessions.current.add(e.sessionId)
+        return
+      }
       if (e.type === 'run-start') {
         const startedAt = e.timestampMs ?? Date.now()
         setRunning((r) => ({ ...r, [e.sessionId]: true }))
@@ -191,6 +225,13 @@ export function App() {
       }
       if (e.type === 'error') {
         msgApi.error(e.message)
+        setMessages((m) => {
+          const cur = m[e.sessionId] ?? []
+          return {
+            ...m,
+            [e.sessionId]: appendAssistantText(cur, `执行失败：${e.message}`)
+          }
+        })
         setRunning((r) => ({ ...r, [e.sessionId]: false }))
         setRunStats((s) => {
           const cur = s[e.sessionId]
@@ -241,6 +282,10 @@ export function App() {
       }),
       bridge.onSessionsSync((list) => {
         setSessions(list)
+        const validIds = new Set(list.map((x) => x.id))
+        for (const id of hydratedMessageSessions.current) {
+          if (!validIds.has(id)) hydratedMessageSessions.current.delete(id)
+        }
         const currentActiveId = useUiStore.getState().activeSessionId
         if (currentActiveId && list.some((x) => x.id === currentActiveId)) return
         setActiveId(list[0]?.id ?? null)
@@ -249,6 +294,11 @@ export function App() {
     ]
     return () => unSub.forEach((f) => f())
   }, [bridge, form, handleStream, hydrateUiStore, load, msgApi, preloadOk, setActiveId])
+
+  useEffect(() => {
+    if (!preloadOk || !activeId) return
+    void ensureSessionMessages(activeId)
+  }, [activeId, ensureSessionMessages, preloadOk])
 
   const pickWorkspace = async () => {
     const r = await bridge.selectWorkspace()
@@ -278,6 +328,13 @@ export function App() {
     const r = await bridge.sendAgentMessage(activeId, t)
     if (!r.ok) {
       msgApi.error('发送失败: ' + r.error)
+      setMessages((m) => {
+        const cur = m[activeId] ?? []
+        return {
+          ...m,
+          [activeId]: appendAssistantText(cur, `发送失败：${r.error}`, true)
+        }
+      })
     }
   }
 

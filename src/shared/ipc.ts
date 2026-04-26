@@ -8,6 +8,7 @@ export const IPC = {
   UI_STATE_GET: 'ui-state:get',
   UI_STATE_SET: 'ui-state:set',
   SESSIONS_LIST: 'sessions:list',
+  SESSIONS_GET_MESSAGES: 'sessions:get-messages',
   SESSIONS_CREATE: 'sessions:create',
   SESSIONS_RENAME: 'sessions:rename',
   SESSIONS_DELETE: 'sessions:delete',

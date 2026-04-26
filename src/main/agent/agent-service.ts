@@ -13,10 +13,11 @@ import { z } from 'zod'
 import {
   EVENTS,
   type AppSettings,
+  type ChatMessage,
   type StreamEvent,
   type ToolTimelineEvent
 } from '../../shared/ipc.js'
-import { getSettings, getWorkspace } from '../store.js'
+import { getSessionMessages, getSettings, getWorkspace, setSessionMessages } from '../store.js'
 import { listDirTool, readFileTool, searchWorkspace, writeFileTool } from '../tools/fs-tools.js'
 import { runCommand, killCommand } from '../tools/terminal.js'
 
@@ -39,6 +40,7 @@ type NamedTool = {
 const sessions = new Map<string, SessionRuntime>()
 let webContents: WebContents | null = null
 let agentQueue: ConcurrencyQueue | null = null
+const MAX_PERSISTED_MESSAGES = 200
 
 function makeRunId(): string {
   return `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -58,6 +60,69 @@ function getQueue(settings: AppSettings): ConcurrencyQueue {
 function emit(event: StreamEvent): void {
   if (!webContents || webContents.isDestroyed()) return
   webContents.send(EVENTS.AGENT_STREAM, event)
+}
+
+function trimPersistedMessages(messages: ChatMessage[]): ChatMessage[] {
+  if (messages.length <= MAX_PERSISTED_MESSAGES) return messages
+  return messages.slice(-MAX_PERSISTED_MESSAGES)
+}
+
+function getBaseMessageType(msg: BaseMessage): string {
+  const maybeGetType = (msg as { getType?: () => string }).getType
+  if (typeof maybeGetType === 'function') return maybeGetType.call(msg)
+  const maybeInternalType = (msg as { _getType?: () => string })._getType
+  if (typeof maybeInternalType === 'function') return maybeInternalType.call(msg)
+  return ''
+}
+
+function toPersistedMessages(coreMessages: BaseMessage[]): ChatMessage[] {
+  const out: ChatMessage[] = []
+  for (const msg of coreMessages) {
+    const messageType = getBaseMessageType(msg)
+    if (messageType === 'human') {
+      out.push({
+        id: `u-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        role: 'user',
+        content: contentToText(msg.content)
+      })
+      continue
+    }
+    if (messageType === 'ai') {
+      const content = contentToText(msg.content)
+      if (!content.trim()) continue
+      out.push({
+        id: `a-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        role: 'assistant',
+        content
+      })
+      continue
+    }
+    // system prompt 不进入 UI 历史，避免干扰会话展示
+  }
+  return trimPersistedMessages(out)
+}
+
+function fromPersistedMessages(messages: ChatMessage[]): BaseMessage[] {
+  const list: BaseMessage[] = []
+  for (const msg of messages) {
+    if (!msg.content?.trim()) continue
+    if (msg.role === 'user') {
+      list.push(new HumanMessage(msg.content))
+      continue
+    }
+    if (msg.role === 'assistant') {
+      list.push(new AIMessage(msg.content))
+      continue
+    }
+    if (msg.role === 'system') {
+      list.push(new SystemMessage(msg.content))
+    }
+  }
+  return list
+}
+
+function persistSessionMessages(sessionId: string, coreMessages: BaseMessage[]): void {
+  setSessionMessages(sessionId, toPersistedMessages(coreMessages))
 }
 
 function createLanguageModel(settings: AppSettings) {
@@ -332,8 +397,9 @@ export function bindAgentIpc(wc: WebContents): void {
 
 export function initSessionState(sessionId: string): void {
   if (!sessions.has(sessionId)) {
+    const persisted = getSessionMessages(sessionId)
     sessions.set(sessionId, {
-      messages: [],
+      messages: fromPersistedMessages(persisted),
       controller: null,
       terminalKey: `term:${sessionId}`
     })
@@ -413,6 +479,7 @@ export async function runUserMessage(
     const { tools, byName } = makeTools(sessionId, root, settings, { runId, traceId }, onTool)
     const model = createLanguageModel(settings).bindTools(tools)
     session.messages.push(new HumanMessage(userText))
+    persistSessionMessages(sessionId, session.messages)
     const system = buildSystemPrompt(root)
     try {
       for (let step = 0; step < 16; step += 1) {
@@ -531,6 +598,7 @@ export async function runUserMessage(
         }
       }
       batcher.flush()
+      persistSessionMessages(sessionId, session.messages)
       emit({
         type: 'done',
         sessionId,
@@ -559,6 +627,7 @@ export async function runUserMessage(
         timestampMs: Date.now(),
         durationMs: Date.now() - runStartedAt
       })
+      persistSessionMessages(sessionId, session.messages)
     } finally {
       session.controller = null
       batcher.flush()

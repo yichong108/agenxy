@@ -4,6 +4,7 @@ import {
   EVENTS,
   IPC,
   type AppSettings,
+  type ChatMessage,
   type RendererUiState,
   type SessionInfo,
   type StreamEvent
@@ -19,6 +20,8 @@ const api = {
   setUiState: (patch: Partial<RendererUiState>) =>
     ipcRenderer.invoke(IPC.UI_STATE_SET, patch) as Promise<RendererUiState>,
   listSessions: () => ipcRenderer.invoke(IPC.SESSIONS_LIST) as Promise<SessionInfo[]>,
+  getSessionMessages: (sessionId: string) =>
+    ipcRenderer.invoke(IPC.SESSIONS_GET_MESSAGES, sessionId) as Promise<ChatMessage[]>,
   createSession: (name?: string) =>
     ipcRenderer.invoke(IPC.SESSIONS_CREATE, name) as Promise<SessionInfo>,
   renameSession: (id: string, name: string) =>

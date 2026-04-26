@@ -23,6 +23,7 @@ import {
 } from './sessions.js'
 import {
   getSettings,
+  getSessionMessages,
   getUiState,
   getWorkspace,
   setSettings,
@@ -198,6 +199,9 @@ function registerIpc(): void {
   ipcMain.handle(IPC.UI_STATE_GET, () => getUiState())
   ipcMain.handle(IPC.UI_STATE_SET, (_e, patch: Partial<RendererUiState>) => setUiState(patch))
   ipcMain.handle(IPC.SESSIONS_LIST, () => getSessions())
+  ipcMain.handle(IPC.SESSIONS_GET_MESSAGES, (_e, sessionId: string) =>
+    getSessionMessages(sessionId)
+  )
   ipcMain.handle(IPC.SESSIONS_CREATE, (_e, name?: string) => {
     const s = createSession(name)
     broadcastSessions()

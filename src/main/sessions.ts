@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import type { SessionInfo } from '../shared/ipc.js'
 
 import { clearSessionState, initSessionState } from './agent/agent-service.js'
-import { getSessionsMeta, setSessionsMeta } from './store.js'
+import { deleteSessionMessages, getSessionsMeta, setSessionsMeta } from './store.js'
 
 let list: SessionInfo[] = []
 let nameCounter = 1
@@ -69,6 +69,7 @@ export function deleteSession(id: string): boolean {
   if (i < 0) return false
   list.splice(i, 1)
   clearSessionState(id)
+  deleteSessionMessages(id)
   if (list.length === 0) {
     createSession(undefined, false)
   }
