@@ -390,6 +390,9 @@ export function App() {
   const isRun = activeId ? running[activeId] : false
   const isQueued = activeId ? queued[activeId] : undefined
   const currentRunStats = activeId ? runStats[activeId] : undefined
+  const hasInput = input.trim().length > 0
+  const showSendButton = !isRun || hasInput
+  const showStopButton = Boolean(activeId && isRun && !hasInput)
 
   return (
     <div className="app-shell">
@@ -573,21 +576,22 @@ export function App() {
               }}
             />
             <div className="app-composer-actions">
-              <Button
-                type="primary"
-                icon={<SendOutlined />}
-                onClick={() => void send()}
-                disabled={!activeId}
-                className="app-send-btn"
-              >
-                发送
-              </Button>
-              {activeId && (
+              {showSendButton && (
+                <Button
+                  type="primary"
+                  icon={<SendOutlined />}
+                  onClick={() => void send()}
+                  disabled={!activeId}
+                  className="app-send-btn"
+                >
+                  发送
+                </Button>
+              )}
+              {showStopButton && (
                 <Button
                   danger
                   icon={<StopOutlined />}
-                  onClick={() => void bridge.cancelAgent(activeId)}
-                  disabled={!isRun}
+                  onClick={() => void bridge.cancelAgent(activeId!)}
                   className="app-stop-btn"
                 >
                   停止
