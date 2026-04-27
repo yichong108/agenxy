@@ -80,50 +80,76 @@ export type ChatMessage = {
   toolEvents?: ToolTimelineEvent[]
 }
 
-export type ToolTimelineEvent =
-  | {
-      kind: 'tool'
-      id: string
-      name: string
-      status: 'start' | 'end'
-      traceId?: string
-      runId?: string
-      timestampMs?: number
-      durationMs?: number
-      args?: string
-      result?: string
-    }
-  | {
-      kind: 'error'
-      message: string
-      traceId?: string
-      runId?: string
-      timestampMs?: number
-      durationMs?: number
-      errorCode?: string
-    }
+type RunRef = {
+  traceId?: string
+  runId?: string
+}
 
+type Timing = {
+  timestampMs?: number
+  durationMs?: number
+}
+
+type RunMeta = RunRef & Timing
+
+export type ToolCallEvent = {
+  kind: 'tool'
+  id: string
+  name: string
+  status: 'start' | 'end'
+  args?: string
+  result?: string
+} & RunMeta
+
+export type ToolErrorEvent = {
+  kind: 'error'
+  message: string
+  errorCode?: string
+} & RunMeta
+
+export type ToolTimelineEvent = ToolCallEvent | ToolErrorEvent
+
+type StreamBase = {
+  sessionId: string
+} & RunRef
+
+export type StreamTextDeltaEvent = StreamBase & {
+  type: 'text-delta'
+  text: string
+}
+
+export type StreamToolEvent = StreamBase & {
+  type: 'tool'
+  event: ToolTimelineEvent
+}
+
+export type StreamErrorEvent = StreamBase &
+  Timing & {
+    type: 'error'
+    message: string
+    errorCode?: string
+  }
+
+export type StreamDoneEvent = StreamBase &
+  Timing & {
+    type: 'done'
+  }
+
+export type StreamQueuedEvent = StreamBase & {
+  type: 'queued'
+  position: number
+}
+
+export type StreamRunStartEvent = StreamBase & {
+  type: 'run-start'
+  timestampMs?: number
+}
+
+/** StreamEvent 根据 Agent 一次 run 生命周期的阶段变化定义。 */
 export type StreamEvent =
-  | { type: 'text-delta'; sessionId: string; text: string; traceId?: string; runId?: string }
-  | { type: 'tool'; sessionId: string; event: ToolTimelineEvent; traceId?: string; runId?: string }
-  | {
-      type: 'error'
-      sessionId: string
-      message: string
-      traceId?: string
-      runId?: string
-      timestampMs?: number
-      durationMs?: number
-      errorCode?: string
-    }
-  | {
-      type: 'done'
-      sessionId: string
-      traceId?: string
-      runId?: string
-      timestampMs?: number
-      durationMs?: number
-    }
-  | { type: 'queued'; sessionId: string; position: number; traceId?: string; runId?: string }
-  | { type: 'run-start'; sessionId: string; traceId?: string; runId?: string; timestampMs?: number }
-  | { type: 'replace-messages'; sessionId: string; messages: ChatMessage[] }
+  | StreamTextDeltaEvent
+  | StreamToolEvent
+  | StreamErrorEvent
+  | StreamDoneEvent
+  | StreamQueuedEvent
+  | StreamRunStartEvent
