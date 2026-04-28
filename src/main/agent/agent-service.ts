@@ -455,7 +455,9 @@ export async function runUserMessage(
     const traceId = makeTraceId(sessionId, runId)
     const runStartedAt = Date.now()
     session.controller = ac
+
     emit({ type: 'run-start', sessionId, runId, traceId, timestampMs: runStartedAt })
+
     const onTool = (e: ToolTimelineEvent) => {
       emit({
         type: 'tool',
@@ -481,6 +483,10 @@ export async function runUserMessage(
     session.messages.push(new HumanMessage(userText))
     persistSessionMessages(sessionId, session.messages)
     const system = buildSystemPrompt(root)
+
+    // ReAct 流程
+    // 先模型思考 <-> 调用工具 循环，直到模型思考结束或工具调用结束
+    // human in the loop, 人可能也是工具调用的其中一环
     try {
       for (let step = 0; step < 16; step += 1) {
         if (ac.signal.aborted) break
@@ -494,6 +500,8 @@ export async function runUserMessage(
               )
             : null
         let streamedChars = 0
+
+        // 模型思考
         const response = await model.invoke(
           [
             new SystemMessage(system),
@@ -514,7 +522,11 @@ export async function runUserMessage(
           }
         )
         session.messages.push(response)
+
         const toolCalls = (response as AIMessage).tool_calls ?? []
+
+        // “强制工具优先”失败时的自我纠偏。防止模型“嘴上直接答”而不查文件,通过把约束写进对话历史，提升下一轮触发 tool call 的概率。
+        // 模型表示没有工具调用，直接进入下一轮 ReAct 循环，让模型重试，直到它先调工具。
         if (!toolCalls.length) {
           if (mustUseToolFirst && !hasToolCall) {
             session.messages.push(
@@ -526,12 +538,15 @@ export async function runUserMessage(
             )
             continue
           }
+          // 这段是一个兜底补发逻辑，防止“该轮没有流式 token，但其实有最终文本”被漏发。
           const text = contentToText(response.content)
           if (text && streamedChars === 0) {
             batcher.push(text)
           }
           break
         }
+
+        // 调用工具
         hasToolCall = true
         for (const call of toolCalls) {
           const callId = call.id || `tc-${Date.now()}`
@@ -559,6 +574,7 @@ export async function runUserMessage(
               timestampMs: Date.now(),
               durationMs: Date.now() - callStartedAt
             })
+            // 必须回写 ToolMessage：否则模型会“发起了 tool_call 却没收到对应结果”，下一轮上下文会不完整。
             session.messages.push(new ToolMessage({ tool_call_id: callId, content: notFound }))
             continue
           }

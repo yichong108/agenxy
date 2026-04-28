@@ -184,12 +184,6 @@ export function App() {
   const handleStream = useCallback(
     (e: StreamEvent) => {
       console.log(e)
-
-      if (e.type === 'replace-messages') {
-        setMessages((m) => ({ ...m, [e.sessionId]: e.messages }))
-        hydratedMessageSessions.current.add(e.sessionId)
-        return
-      }
       if (e.type === 'run-start') {
         const startedAt = e.timestampMs ?? Date.now()
         setRunning((r) => ({ ...r, [e.sessionId]: true }))
