@@ -1,11 +1,6 @@
-import {
-  AIMessage,
-  HumanMessage,
-  SystemMessage,
-  ToolMessage,
-  type BaseMessage
-} from '@langchain/core/messages'
+import { AIMessage, HumanMessage, SystemMessage, type BaseMessage } from '@langchain/core/messages'
 import { tool } from '@langchain/core/tools'
+import { createReactAgent } from '@langchain/langgraph/prebuilt'
 import { ChatOpenAI } from '@langchain/openai'
 import type { WebContents } from 'electron'
 import { z } from 'zod'
@@ -23,6 +18,7 @@ import { runCommand, killCommand } from '../tools/terminal.js'
 
 import { StreamBatcher } from './batcher.js'
 import { ConcurrencyQueue } from './queue.js'
+import { buildSkillBundle } from './skills/index.js'
 
 type SessionRuntime = {
   workspaceId: string
@@ -149,7 +145,7 @@ function createLanguageModel(settings: AppSettings) {
 function buildSystemPrompt(root: string): string {
   return `你是协助办公与软件开发的智能体。工作区根目录: ${root}。
 - 在工具中使用**相对工作区根**的路径（如 src/index.ts），不要使用 ../ 尝试逃出工作区。
-- 可调用工具: read_file, write_file, list_dir, search_workspace, run_terminal。
+- 可调用工具: read_file, write_file, list_dir, search_workspace, run_terminal，以及若干 skill_* 技能工具。
 - run_terminal 在沙盒目录（工作区根）下执行 shell 命令。Windows 为 cmd 风格。
 - 当用户要求“查看/读取工作区文件”或“列出目录”时，优先调用 read_file/list_dir 再回答。
 - 回答简洁、可执行；修改代码前先 read/list。`
@@ -192,7 +188,7 @@ function parseFileToolHint(text: string): FileToolHint | null {
   return null
 }
 
-function makeTools(
+async function makeTools(
   sessionId: string,
   root: string,
   settings: AppSettings,
@@ -200,7 +196,7 @@ function makeTools(
   onTool: (e: ToolTimelineEvent) => void
 ) {
   const termKey = `term:${sessionId}`
-  const tools = [
+  const baseTools = [
     tool(
       async ({ path: p }) => {
         const id = `read-${Date.now()}`
@@ -375,8 +371,16 @@ function makeTools(
       }
     )
   ]
+  const skillBundle = await buildSkillBundle({
+    root,
+    termKey,
+    settings,
+    runCtx,
+    onTool
+  })
+  const tools = [...baseTools, ...skillBundle.tools] as unknown as NamedTool[]
   const byName = new Map<string, NamedTool>(tools.map((x) => [x.name, x as NamedTool]))
-  return { tools, byName }
+  return { tools, byName, skillHint: skillBundle.hint }
 }
 
 function contentToText(content: unknown): string {
@@ -470,6 +474,9 @@ export async function runUserMessage(
     emit({ type: 'run-start', sessionId, runId, traceId, timestampMs: runStartedAt })
 
     const onTool = (e: ToolTimelineEvent) => {
+      if (e.kind === 'tool' && e.status === 'start') {
+        hasToolCall = true
+      }
       emit({
         type: 'tool',
         sessionId,
@@ -489,42 +496,68 @@ export async function runUserMessage(
     const batcher = new StreamBatcher(settings.streamFlushMs, settings.streamFlushChars, (t) => {
       emit({ type: 'text-delta', sessionId, text: t, runId, traceId })
     })
-    const { tools, byName } = makeTools(sessionId, root, settings, { runId, traceId }, onTool)
-    const model = createLanguageModel(settings).bindTools(tools)
+    const { tools, skillHint } = await makeTools(
+      sessionId,
+      root,
+      settings,
+      { runId, traceId },
+      onTool
+    )
+    const model = createLanguageModel(settings).bindTools(tools as never[])
     session.messages.push(new HumanMessage(userText))
     persistSessionMessages(session.workspaceId, sessionId, session.messages)
-    const system = buildSystemPrompt(root)
+    const baseSystem = buildSystemPrompt(root)
+    const fileToolInstruction =
+      mustUseToolFirst && fileToolHint
+        ? fileToolHint.type === 'read'
+          ? `当前用户请求属于文件读取。你必须先调用 read_file 工具后再给最终回答。可参考路径: ${fileToolHint.pathHint}`
+          : `当前用户请求属于目录查看。你必须先调用 list_dir 工具后再给最终回答。可参考路径: ${fileToolHint.pathHint}，可参考 depth: ${fileToolHint.depthHint ?? 2}`
+        : ''
+    const runPrompt = [baseSystem, skillHint, fileToolInstruction].filter(Boolean).join('\n')
+    const agent = createReactAgent({
+      llm: model,
+      tools: tools as never[],
+      prompt: runPrompt
+    })
 
     // ReAct 流程
     // 先模型思考 <-> 调用工具 循环，直到模型思考结束或工具调用结束
     // human in the loop, 人可能也是工具调用的其中一环
     try {
-      for (let step = 0; step < 16; step += 1) {
-        if (ac.signal.aborted) break
-        const suppressStream = mustUseToolFirst && !hasToolCall
-        const forceToolSystem =
-          mustUseToolFirst && !hasToolCall
-            ? new SystemMessage(
-                fileToolHint?.type === 'read'
-                  ? `当前用户请求属于文件读取。你必须先调用 read_file 工具后再给最终回答。可参考路径: ${fileToolHint.pathHint}`
-                  : `当前用户请求属于目录查看。你必须先调用 list_dir 工具后再给最终回答。可参考路径: ${fileToolHint?.pathHint ?? '.'}，可参考 depth: ${fileToolHint?.depthHint ?? 2}`
-              )
-            : null
-        let streamedChars = 0
-
-        // 模型思考
-        const response = await model.invoke(
-          [
-            new SystemMessage(system),
-            ...(forceToolSystem ? [forceToolSystem] : []),
-            ...session.messages
-          ],
+      let streamedChars = 0
+      const result = await agent.invoke(
+        { messages: session.messages },
+        {
+          signal: ac.signal,
+          callbacks: [
+            {
+              handleLLMNewToken(token: string) {
+                streamedChars += token.length
+                batcher.push(token)
+              }
+            }
+          ]
+        }
+      )
+      const maybeMessages = (result as { messages?: BaseMessage[] }).messages
+      if (Array.isArray(maybeMessages) && maybeMessages.length > 0) {
+        session.messages = maybeMessages
+      }
+      if (mustUseToolFirst && !hasToolCall) {
+        session.messages.push(
+          new HumanMessage(
+            fileToolHint?.type === 'read'
+              ? `请先调用 read_file 读取文件后再回答。参考路径: ${fileToolHint.pathHint}`
+              : `请先调用 list_dir 列出目录后再回答。参考路径: ${fileToolHint?.pathHint ?? '.'}`
+          )
+        )
+        const retryResult = await agent.invoke(
+          { messages: session.messages },
           {
             signal: ac.signal,
             callbacks: [
               {
                 handleLLMNewToken(token: string) {
-                  if (suppressStream) return
                   streamedChars += token.length
                   batcher.push(token)
                 }
@@ -532,96 +565,18 @@ export async function runUserMessage(
             ]
           }
         )
-        session.messages.push(response)
-
-        const toolCalls = (response as AIMessage).tool_calls ?? []
-
-        // “强制工具优先”失败时的自我纠偏。防止模型“嘴上直接答”而不查文件,通过把约束写进对话历史，提升下一轮触发 tool call 的概率。
-        // 模型表示没有工具调用，直接进入下一轮 ReAct 循环，让模型重试，直到它先调工具。
-        if (!toolCalls.length) {
-          if (mustUseToolFirst && !hasToolCall) {
-            session.messages.push(
-              new HumanMessage(
-                fileToolHint?.type === 'read'
-                  ? `请先调用 read_file 读取文件后再回答。参考路径: ${fileToolHint.pathHint}`
-                  : `请先调用 list_dir 列出目录后再回答。参考路径: ${fileToolHint?.pathHint ?? '.'}`
-              )
-            )
-            continue
-          }
-          // 这段是一个兜底补发逻辑，防止“该轮没有流式 token，但其实有最终文本”被漏发。
-          const text = contentToText(response.content)
-          if (text && streamedChars === 0) {
-            batcher.push(text)
-          }
-          break
+        const retryMessages = (retryResult as { messages?: BaseMessage[] }).messages
+        if (Array.isArray(retryMessages) && retryMessages.length > 0) {
+          session.messages = retryMessages
         }
-
-        // 调用工具
-        hasToolCall = true
-        for (const call of toolCalls) {
-          const callId = call.id || `tc-${Date.now()}`
-          const toolName = call.name
-          const toolArgs = JSON.stringify(call.args ?? {})
-          const callStartedAt = Date.now()
-          onTool({
-            kind: 'tool',
-            id: callId,
-            name: toolName,
-            status: 'start',
-            args: toolArgs,
-            timestampMs: callStartedAt
-          })
-          const targetTool = byName.get(toolName)
-          if (!targetTool) {
-            const notFound = `未找到工具: ${toolName}`
-            onTool({ kind: 'error', message: notFound, timestampMs: Date.now() })
-            onTool({
-              kind: 'tool',
-              id: callId,
-              name: toolName,
-              status: 'end',
-              result: notFound,
-              timestampMs: Date.now(),
-              durationMs: Date.now() - callStartedAt
-            })
-            // 必须回写 ToolMessage：否则模型会“发起了 tool_call 却没收到对应结果”，下一轮上下文会不完整。
-            session.messages.push(new ToolMessage({ tool_call_id: callId, content: notFound }))
-            continue
-          }
-          try {
-            const toolResult = await targetTool.invoke(call.args ?? {}, { signal: ac.signal })
-            const toolText =
-              typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult)
-            onTool({
-              kind: 'tool',
-              id: callId,
-              name: toolName,
-              status: 'end',
-              result: toolText.slice(0, 1_000),
-              timestampMs: Date.now(),
-              durationMs: Date.now() - callStartedAt
-            })
-            session.messages.push(new ToolMessage({ tool_call_id: callId, content: toolText }))
-          } catch (toolErr) {
-            const toolMessage = toolErr instanceof Error ? toolErr.message : String(toolErr)
-            onTool({
-              kind: 'error',
-              message: toolMessage,
-              timestampMs: Date.now(),
-              durationMs: Date.now() - callStartedAt
-            })
-            onTool({
-              kind: 'tool',
-              id: callId,
-              name: toolName,
-              status: 'end',
-              result: toolMessage,
-              timestampMs: Date.now(),
-              durationMs: Date.now() - callStartedAt
-            })
-            session.messages.push(new ToolMessage({ tool_call_id: callId, content: toolMessage }))
-          }
+      }
+      if (streamedChars === 0) {
+        const lastAi = [...session.messages]
+          .reverse()
+          .find((msg) => getBaseMessageType(msg) === 'ai') as AIMessage | undefined
+        const fallback = lastAi ? contentToText(lastAi.content) : ''
+        if (fallback) {
+          batcher.push(fallback)
         }
       }
       batcher.flush()
