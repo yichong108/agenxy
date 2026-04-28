@@ -155,7 +155,9 @@ function normalizeSettings(input: Partial<AppSettings>): AppSettings {
   const merged = { ...defaultSettings, ...input }
   return {
     ...merged,
-    maxTerminalOutputChars: Math.min(1000, Math.max(1, merged.maxTerminalOutputChars))
+    maxTerminalOutputChars: Math.min(1000, Math.max(1, merged.maxTerminalOutputChars)),
+    maxAgentLoopSteps: Math.min(64, Math.max(4, Math.floor(merged.maxAgentLoopSteps))),
+    agentRunTimeoutMs: Math.min(600_000, Math.max(5_000, Math.floor(merged.agentRunTimeoutMs)))
   }
 }
 

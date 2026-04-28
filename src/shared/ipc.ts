@@ -47,6 +47,10 @@ export type AppSettings = {
   streamFlushChars: number
   /** 终端/命令输出单条结果最大字符 */
   maxTerminalOutputChars: number
+  /** ReAct 模型-工具循环最大步数（LangGraph recursionLimit） */
+  maxAgentLoopSteps: number
+  /** 单次 agent 运行超时（毫秒） */
+  agentRunTimeoutMs: number
 }
 
 export const defaultSettings: AppSettings = {
@@ -57,7 +61,9 @@ export const defaultSettings: AppSettings = {
   maxConcurrentStreams: 2,
   streamFlushMs: 32,
   streamFlushChars: 320,
-  maxTerminalOutputChars: 1_000
+  maxTerminalOutputChars: 1_000,
+  maxAgentLoopSteps: 24,
+  agentRunTimeoutMs: 120_000
 }
 
 export type RendererUiState = {

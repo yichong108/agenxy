@@ -188,6 +188,46 @@ function parseFileToolHint(text: string): FileToolHint | null {
   return null
 }
 
+async function invokeAgentWithGuard(
+  agent: ReturnType<typeof createReactAgent>,
+  messages: BaseMessage[],
+  ac: AbortController,
+  onToken: (token: string) => void,
+  options: { recursionLimit: number; timeoutMs: number }
+): Promise<unknown> {
+  const { recursionLimit, timeoutMs } = options
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      ac.abort()
+      reject(new Error(`模型-工具循环超时（>${timeoutMs}ms），已中止本次运行`))
+    }, timeoutMs)
+  })
+  try {
+    return await Promise.race([
+      agent.invoke(
+        { messages },
+        {
+          signal: ac.signal,
+          recursionLimit,
+          callbacks: [
+            {
+              handleLLMNewToken(token: string) {
+                onToken(token)
+              }
+            }
+          ]
+        }
+      ),
+      timeoutPromise
+    ])
+  } finally {
+    if (timer) {
+      clearTimeout(timer)
+    }
+  }
+}
+
 async function makeTools(
   sessionId: string,
   root: string,
@@ -493,6 +533,8 @@ export async function runUserMessage(
     const fileToolHint = parseFileToolHint(userText)
     const mustUseToolFirst = !!fileToolHint
     let hasToolCall = false
+    const recursionLimit = settings.maxAgentLoopSteps
+    const invokeTimeoutMs = settings.agentRunTimeoutMs
     const batcher = new StreamBatcher(settings.streamFlushMs, settings.streamFlushChars, (t) => {
       emit({ type: 'text-delta', sessionId, text: t, runId, traceId })
     })
@@ -525,19 +567,15 @@ export async function runUserMessage(
     // human in the loop, 人可能也是工具调用的其中一环
     try {
       let streamedChars = 0
-      const result = await agent.invoke(
-        { messages: session.messages },
-        {
-          signal: ac.signal,
-          callbacks: [
-            {
-              handleLLMNewToken(token: string) {
-                streamedChars += token.length
-                batcher.push(token)
-              }
-            }
-          ]
-        }
+      const result = await invokeAgentWithGuard(
+        agent,
+        session.messages,
+        ac,
+        (token) => {
+          streamedChars += token.length
+          batcher.push(token)
+        },
+        { recursionLimit, timeoutMs: invokeTimeoutMs }
       )
       const maybeMessages = (result as { messages?: BaseMessage[] }).messages
       if (Array.isArray(maybeMessages) && maybeMessages.length > 0) {
@@ -551,19 +589,15 @@ export async function runUserMessage(
               : `请先调用 list_dir 列出目录后再回答。参考路径: ${fileToolHint?.pathHint ?? '.'}`
           )
         )
-        const retryResult = await agent.invoke(
-          { messages: session.messages },
-          {
-            signal: ac.signal,
-            callbacks: [
-              {
-                handleLLMNewToken(token: string) {
-                  streamedChars += token.length
-                  batcher.push(token)
-                }
-              }
-            ]
-          }
+        const retryResult = await invokeAgentWithGuard(
+          agent,
+          session.messages,
+          ac,
+          (token) => {
+            streamedChars += token.length
+            batcher.push(token)
+          },
+          { recursionLimit, timeoutMs: invokeTimeoutMs }
         )
         const retryMessages = (retryResult as { messages?: BaseMessage[] }).messages
         if (Array.isArray(retryMessages) && retryMessages.length > 0) {
