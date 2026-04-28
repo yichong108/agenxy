@@ -5,19 +5,27 @@ import type {
   ChatMessage,
   RendererUiState,
   SessionInfo,
-  StreamEvent
+  StreamEvent,
+  WorkspaceInfo,
+  WorkspacesPayload
 } from '@shared/ipc'
 
 type Api = {
   selectWorkspace: () => Promise<{ path: string }>
   getWorkspace: () => Promise<string>
+  listWorkspaces: () => Promise<WorkspacesPayload>
+  addWorkspace: (dir: string) => Promise<WorkspaceInfo | null>
+  activateWorkspace: (workspaceId: string) => Promise<WorkspaceInfo | null>
+  renameWorkspace: (workspaceId: string, name: string) => Promise<WorkspaceInfo | null>
+  removeWorkspace: (workspaceId: string) => Promise<{ ok: boolean }>
   getSettings: () => Promise<AppSettings>
   setSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>
   getUiState: () => Promise<RendererUiState>
   setUiState: (patch: Partial<RendererUiState>) => Promise<RendererUiState>
   listSessions: () => Promise<SessionInfo[]>
+  listSessionsByWorkspace: (workspaceId: string) => Promise<SessionInfo[]>
   getSessionMessages: (sessionId: string) => Promise<ChatMessage[]>
-  createSession: (name?: string) => Promise<SessionInfo>
+  createSession: (name?: string) => Promise<SessionInfo | null>
   renameSession: (id: string, name: string) => Promise<SessionInfo | null>
   deleteSession: (id: string) => Promise<{ ok: true }>
   sendAgentMessage: (
@@ -30,6 +38,7 @@ type Api = {
   onStream: (cb: (e: StreamEvent) => void) => () => void
   onSessionsSync: (cb: (s: SessionInfo[]) => void) => () => void
   onWorkspaceChange: (cb: (p: { path: string }) => void) => () => void
+  onWorkspacesSync: (cb: (p: WorkspacesPayload) => void) => () => void
   onSettingsSync: (cb: (s: AppSettings) => void) => () => void
 }
 

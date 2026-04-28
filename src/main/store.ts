@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 
 import { app } from 'electron'
@@ -5,33 +6,150 @@ import Store from 'electron-store'
 
 import {
   defaultRendererUiState,
+  defaultWorkspaceUiState,
   defaultSettings,
   type AppSettings,
   type ChatMessage,
   type RendererUiState,
-  type SessionInfo
+  type SessionInfo,
+  type WorkspaceInfo,
+  type WorkspaceUiState
 } from '../shared/ipc.js'
 
 type StoreSchema = {
-  workspace: string
+  workspaces: WorkspaceInfo[]
+  activeWorkspaceId: string | null
   settings: AppSettings
   uiState: RendererUiState
-  /** 会话元数据持久化：会话 id、标题、时间 */
-  sessionsMeta: SessionInfo[]
-  /** 会话问答持久化：按 sessionId 存储 */
-  sessionsMessages: Record<string, ChatMessage[]>
+  /** 会话元数据持久化：按 workspaceId 分桶 */
+  sessionsMetaByWorkspace: Record<string, SessionInfo[]>
+  /** 会话问答持久化：按 workspaceId + sessionId 存储 */
+  sessionsMessagesByWorkspace: Record<string, Record<string, ChatMessage[]>>
+  /** 兼容旧版字段（仅用于迁移） */
+  workspace?: string
+  sessionsMeta?: SessionInfo[]
+  sessionsMessages?: Record<string, ChatMessage[]>
 }
+
+const DEFAULT_WORKSPACE_ID = 'workspace-default'
 
 const store = new Store<StoreSchema>({
   name: 'agent-weave',
   defaults: {
-    workspace: '',
+    workspaces: [],
+    activeWorkspaceId: null,
     settings: { ...defaultSettings },
     uiState: { ...defaultRendererUiState },
-    sessionsMeta: [],
-    sessionsMessages: {}
+    sessionsMetaByWorkspace: {},
+    sessionsMessagesByWorkspace: {}
   }
 })
+
+function createDefaultWorkspace(timestamp = Date.now()): WorkspaceInfo {
+  return {
+    id: DEFAULT_WORKSPACE_ID,
+    name: '默认工作区',
+    path: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    isDefault: true
+  }
+}
+
+function createWorkspaceFromPath(workspacePath: string, timestamp = Date.now()): WorkspaceInfo {
+  return {
+    id: randomUUID(),
+    name: path.basename(workspacePath) || workspacePath,
+    path: workspacePath,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  }
+}
+
+function normalizeWorkspacePath(dir: string): string {
+  return path.resolve(dir).replace(/[\\/]+$/, '')
+}
+
+function ensureDefaultWorkspace(list: WorkspaceInfo[]): WorkspaceInfo[] {
+  if (list.some((item) => item.id === DEFAULT_WORKSPACE_ID)) {
+    return list
+  }
+  return [createDefaultWorkspace(), ...list]
+}
+
+function normalizeWorkspaces(input: WorkspaceInfo[]): WorkspaceInfo[] {
+  const list = ensureDefaultWorkspace(input)
+  const dedupById = new Map<string, WorkspaceInfo>()
+  const dedupByPath = new Map<string, string>()
+  for (const item of list) {
+    const id = item.id || randomUUID()
+    const normalizedPath = item.path ? normalizeWorkspacePath(item.path) : null
+    if (normalizedPath && dedupByPath.has(normalizedPath)) {
+      continue
+    }
+    if (normalizedPath) dedupByPath.set(normalizedPath, id)
+    dedupById.set(id, {
+      ...item,
+      id,
+      path: normalizedPath,
+      name: item.name || (normalizedPath ? path.basename(normalizedPath) : '默认工作区'),
+      isDefault: id === DEFAULT_WORKSPACE_ID ? true : item.isDefault,
+      updatedAt: item.updatedAt || Date.now(),
+      createdAt: item.createdAt || Date.now()
+    })
+  }
+  return [...dedupById.values()]
+}
+
+function migrateFromLegacyIfNeeded(): void {
+  const currentWorkspaces = store.get('workspaces')
+  if (Array.isArray(currentWorkspaces) && currentWorkspaces.length > 0) {
+    const normalized = normalizeWorkspaces(currentWorkspaces)
+    store.set('workspaces', normalized)
+    const activeWorkspaceId = store.get('activeWorkspaceId')
+    if (!activeWorkspaceId || !normalized.some((x) => x.id === activeWorkspaceId)) {
+      store.set('activeWorkspaceId', normalized[0]?.id ?? null)
+    }
+    return
+  }
+
+  const now = Date.now()
+  const legacyWorkspace = (store.get('workspace') || '').trim()
+  const legacySessionsMeta = store.get('sessionsMeta') || []
+  const legacySessionsMessages = store.get('sessionsMessages') || {}
+  const legacyUiStateRaw = store.get('uiState') as Partial<RendererUiState> &
+    Partial<WorkspaceUiState> & {
+      activeSessionId?: string | null
+      inputDraft?: string
+    }
+
+  const defaultWorkspace = createDefaultWorkspace(now)
+  const nextWorkspaces: WorkspaceInfo[] = [defaultWorkspace]
+  if (legacyWorkspace) {
+    nextWorkspaces.push(createWorkspaceFromPath(normalizeWorkspacePath(legacyWorkspace), now))
+  }
+
+  const activeSessionId =
+    typeof legacyUiStateRaw?.activeSessionId === 'string' ? legacyUiStateRaw.activeSessionId : null
+  const inputDraft =
+    typeof legacyUiStateRaw?.inputDraft === 'string' ? legacyUiStateRaw.inputDraft : ''
+
+  store.set('workspaces', nextWorkspaces)
+  store.set('activeWorkspaceId', defaultWorkspace.id)
+  store.set('sessionsMetaByWorkspace', { [defaultWorkspace.id]: legacySessionsMeta })
+  store.set('sessionsMessagesByWorkspace', { [defaultWorkspace.id]: legacySessionsMessages })
+  store.set('uiState', {
+    activeWorkspaceId: defaultWorkspace.id,
+    byWorkspace: {
+      [defaultWorkspace.id]: {
+        activeSessionId,
+        inputDraft
+      }
+    }
+  })
+}
+
+migrateFromLegacyIfNeeded()
 
 function normalizeSettings(input: Partial<AppSettings>): AppSettings {
   const merged = { ...defaultSettings, ...input }
@@ -42,11 +160,12 @@ function normalizeSettings(input: Partial<AppSettings>): AppSettings {
 }
 
 export function getWorkspace(): string {
-  return store.get('workspace') || ''
+  return getActiveWorkspace()?.path || ''
 }
 
 export function setWorkspace(dir: string): void {
-  store.set('workspace', path.resolve(dir))
+  const workspace = upsertWorkspaceByPath(dir)
+  setActiveWorkspace(workspace.id)
 }
 
 export function getSettings(): AppSettings {
@@ -60,9 +179,17 @@ export function setSettings(patch: Partial<AppSettings>): AppSettings {
 }
 
 function normalizeUiState(input: Partial<RendererUiState>): RendererUiState {
+  const byWorkspaceRaw = input.byWorkspace || {}
+  const byWorkspace: Record<string, WorkspaceUiState> = {}
+  for (const [workspaceId, value] of Object.entries(byWorkspaceRaw)) {
+    byWorkspace[workspaceId] = {
+      activeSessionId: value?.activeSessionId ?? null,
+      inputDraft: value?.inputDraft ?? ''
+    }
+  }
   return {
-    activeSessionId: input.activeSessionId ?? null,
-    inputDraft: input.inputDraft ?? ''
+    activeWorkspaceId: input.activeWorkspaceId ?? null,
+    byWorkspace
   }
 }
 
@@ -71,35 +198,186 @@ export function getUiState(): RendererUiState {
 }
 
 export function setUiState(patch: Partial<RendererUiState>): RendererUiState {
-  const next = normalizeUiState({ ...getUiState(), ...patch })
+  const prev = getUiState()
+  const next = normalizeUiState({
+    ...prev,
+    ...patch,
+    byWorkspace: {
+      ...prev.byWorkspace,
+      ...(patch.byWorkspace || {})
+    }
+  })
   store.set('uiState', next)
   return next
 }
 
-export function getSessionsMeta(): SessionInfo[] {
-  return store.get('sessionsMeta') || []
+export function getWorkspaceUiState(workspaceId: string): WorkspaceUiState {
+  return getUiState().byWorkspace[workspaceId] || { ...defaultWorkspaceUiState }
 }
 
-export function setSessionsMeta(list: SessionInfo[]): void {
-  store.set('sessionsMeta', list)
+export function setWorkspaceUiState(
+  workspaceId: string,
+  patch: Partial<WorkspaceUiState>
+): RendererUiState {
+  const current = getUiState()
+  const prev = current.byWorkspace[workspaceId] || { ...defaultWorkspaceUiState }
+  return setUiState({
+    byWorkspace: {
+      ...current.byWorkspace,
+      [workspaceId]: {
+        activeSessionId: patch.activeSessionId ?? prev.activeSessionId,
+        inputDraft: patch.inputDraft ?? prev.inputDraft
+      }
+    }
+  })
 }
 
-export function getSessionMessages(sessionId: string): ChatMessage[] {
-  const all = store.get('sessionsMessages') || {}
-  return all[sessionId] || []
+export function listWorkspaces(): WorkspaceInfo[] {
+  return normalizeWorkspaces(store.get('workspaces') || [])
 }
 
-export function setSessionMessages(sessionId: string, list: ChatMessage[]): void {
-  const all = store.get('sessionsMessages') || {}
-  all[sessionId] = list
-  store.set('sessionsMessages', all)
+export function getWorkspaceById(workspaceId: string): WorkspaceInfo | null {
+  return listWorkspaces().find((x) => x.id === workspaceId) || null
 }
 
-export function deleteSessionMessages(sessionId: string): void {
-  const all = store.get('sessionsMessages') || {}
-  if (!(sessionId in all)) return
-  delete all[sessionId]
-  store.set('sessionsMessages', all)
+export function getActiveWorkspaceId(): string | null {
+  const list = listWorkspaces()
+  if (list.length === 0) return null
+  const active = store.get('activeWorkspaceId')
+  if (active && list.some((x) => x.id === active)) {
+    return active
+  }
+  const fallback = list[0]!.id
+  store.set('activeWorkspaceId', fallback)
+  return fallback
+}
+
+export function getActiveWorkspace(): WorkspaceInfo | null {
+  const activeId = getActiveWorkspaceId()
+  if (!activeId) return null
+  return getWorkspaceById(activeId)
+}
+
+export function setActiveWorkspace(workspaceId: string): WorkspaceInfo | null {
+  const target = getWorkspaceById(workspaceId)
+  if (!target) return null
+  store.set('activeWorkspaceId', target.id)
+  const uiState = getUiState()
+  if (uiState.activeWorkspaceId !== target.id) {
+    setUiState({ activeWorkspaceId: target.id })
+  }
+  return target
+}
+
+export function upsertWorkspaceByPath(dir: string): WorkspaceInfo {
+  const normalizedPath = normalizeWorkspacePath(dir)
+  const list = listWorkspaces()
+  const existed = list.find((x) => x.path === normalizedPath)
+  if (existed) {
+    return existed
+  }
+  const workspace = createWorkspaceFromPath(normalizedPath)
+  const next = [...list, workspace]
+  store.set('workspaces', next)
+  return workspace
+}
+
+export function renameWorkspace(workspaceId: string, name: string): WorkspaceInfo | null {
+  const nextName = name.trim()
+  if (!nextName) return null
+  const list = listWorkspaces()
+  const idx = list.findIndex((x) => x.id === workspaceId)
+  if (idx < 0) return null
+  const nextItem = {
+    ...list[idx]!,
+    name: nextName,
+    updatedAt: Date.now()
+  }
+  list[idx] = nextItem
+  store.set('workspaces', list)
+  return nextItem
+}
+
+export function removeWorkspace(workspaceId: string): boolean {
+  if (workspaceId === DEFAULT_WORKSPACE_ID) return false
+  const list = listWorkspaces()
+  const next = list.filter((x) => x.id !== workspaceId)
+  if (next.length === list.length) return false
+  store.set('workspaces', ensureDefaultWorkspace(next))
+  const activeId = getActiveWorkspaceId()
+  if (activeId === workspaceId) {
+    setActiveWorkspace(DEFAULT_WORKSPACE_ID)
+  }
+  const uiState = getUiState()
+  if (uiState.byWorkspace[workspaceId]) {
+    const copied = { ...uiState.byWorkspace }
+    delete copied[workspaceId]
+    setUiState({ byWorkspace: copied })
+  }
+  return true
+}
+
+export function getDefaultWorkspaceId(): string {
+  return DEFAULT_WORKSPACE_ID
+}
+
+export function getSessionsMeta(workspaceId: string): SessionInfo[] {
+  const all = store.get('sessionsMetaByWorkspace') || {}
+  return all[workspaceId] || []
+}
+
+export function getAllSessionsMetaByWorkspace(): Record<string, SessionInfo[]> {
+  return store.get('sessionsMetaByWorkspace') || {}
+}
+
+export function setSessionsMeta(workspaceId: string, list: SessionInfo[]): void {
+  const all = store.get('sessionsMetaByWorkspace') || {}
+  all[workspaceId] = list
+  store.set('sessionsMetaByWorkspace', all)
+}
+
+export function getSessionMessages(workspaceId: string, sessionId: string): ChatMessage[] {
+  const all = store.get('sessionsMessagesByWorkspace') || {}
+  const bucket = all[workspaceId] || {}
+  return bucket[sessionId] || []
+}
+
+export function setSessionMessages(
+  workspaceId: string,
+  sessionId: string,
+  list: ChatMessage[]
+): void {
+  const all = store.get('sessionsMessagesByWorkspace') || {}
+  const bucket = all[workspaceId] || {}
+  bucket[sessionId] = list
+  all[workspaceId] = bucket
+  store.set('sessionsMessagesByWorkspace', all)
+}
+
+export function deleteSessionMessages(workspaceId: string, sessionId: string): void {
+  const all = store.get('sessionsMessagesByWorkspace') || {}
+  const bucket = all[workspaceId] || {}
+  if (!(sessionId in bucket)) return
+  delete bucket[sessionId]
+  all[workspaceId] = bucket
+  store.set('sessionsMessagesByWorkspace', all)
+}
+
+export function moveWorkspaceSessionData(fromWorkspaceId: string, toWorkspaceId: string): void {
+  if (fromWorkspaceId === toWorkspaceId) return
+  const allMeta = store.get('sessionsMetaByWorkspace') || {}
+  const allMessages = store.get('sessionsMessagesByWorkspace') || {}
+  const fromMeta = allMeta[fromWorkspaceId] || []
+  const toMeta = allMeta[toWorkspaceId] || []
+  allMeta[toWorkspaceId] = [...toMeta, ...fromMeta]
+  delete allMeta[fromWorkspaceId]
+
+  const fromMessages = allMessages[fromWorkspaceId] || {}
+  const toMessages = allMessages[toWorkspaceId] || {}
+  allMessages[toWorkspaceId] = { ...toMessages, ...fromMessages }
+  delete allMessages[fromWorkspaceId]
+  store.set('sessionsMetaByWorkspace', allMeta)
+  store.set('sessionsMessagesByWorkspace', allMessages)
 }
 
 export function userDataPath(): string {

@@ -15,7 +15,6 @@ import {
   FloatButton,
   Input,
   InputNumber,
-  List,
   Modal,
   Select,
   Space,
@@ -36,7 +35,8 @@ import {
   type ChatMessage,
   type SessionInfo,
   type StreamEvent,
-  type ToolTimelineEvent
+  type ToolTimelineEvent,
+  type WorkspaceInfo
 } from '@shared/ipc'
 
 import { useUiStore } from './store/ui-store'
@@ -107,8 +107,24 @@ export function App() {
   const { message: msgApi, modal: modalApi } = AntdApp.useApp()
   const preloadOk = typeof window !== 'undefined' && typeof window.bridge !== 'undefined'
   const bridge = window.bridge
-  const [workspace, setWorkspace] = useState('')
+  const bridgeCompat = bridge as typeof bridge & {
+    listWorkspaces?: () => Promise<{ list: WorkspaceInfo[]; activeWorkspaceId: string | null }>
+    listSessionsByWorkspace?: (workspaceId: string) => Promise<SessionInfo[]>
+    onWorkspacesSync?: (
+      cb: (payload: { list: WorkspaceInfo[]; activeWorkspaceId: string | null }) => void
+    ) => () => void
+    activateWorkspace?: (workspaceId: string) => Promise<WorkspaceInfo | null>
+  }
+  const supportsMultiWorkspaceApi =
+    typeof bridgeCompat.listWorkspaces === 'function' &&
+    typeof bridgeCompat.onWorkspacesSync === 'function' &&
+    typeof bridgeCompat.activateWorkspace === 'function'
+  const legacyWorkspaceId = 'legacy-single-workspace'
+  const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([])
   const [sessions, setSessions] = useState<SessionInfo[]>([])
+  const [sessionsByWorkspace, setSessionsByWorkspace] = useState<Record<string, SessionInfo[]>>({})
+  const activeWorkspaceId = useUiStore((s) => s.activeWorkspaceId)
+  const setActiveWorkspaceId = useUiStore((s) => s.setActiveWorkspaceId)
   const activeId = useUiStore((s) => s.activeSessionId)
   const setActiveId = useUiStore((s) => s.setActiveSessionId)
   const input = useUiStore((s) => s.inputDraft)
@@ -117,6 +133,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
   const [form] = Form.useForm<AppSettings>()
+  const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState<Set<string>>(new Set())
   const [renameId, setRenameId] = useState<string | null>(null)
   const [renameName, setRenameName] = useState('')
   const isDevEnv = import.meta.env.DEV
@@ -161,25 +178,82 @@ export function App() {
   )
 
   const load = useCallback(async () => {
-    const [w, s, sList] = await Promise.all([
+    const settingsResult = await bridge.getSettings()
+    setSettings(settingsResult)
+    form.setFieldsValue(settingsResult)
+
+    if (supportsMultiWorkspaceApi) {
+      const workspacePayload = await bridgeCompat.listWorkspaces!()
+      const workspaceList = workspacePayload.list
+      setWorkspaces(workspaceList)
+      setActiveWorkspaceId(workspacePayload.activeWorkspaceId)
+      setExpandedWorkspaceIds(new Set(workspaceList.map((workspace) => workspace.id)))
+
+      const sessionsMap: Record<string, SessionInfo[]> = {}
+      const listByWorkspace = bridgeCompat.listSessionsByWorkspace
+      if (listByWorkspace) {
+        const entries = await Promise.all(
+          workspaceList.map(async (workspace) => {
+            const list = await listByWorkspace(workspace.id)
+            return [workspace.id, list] as const
+          })
+        )
+        for (const [workspaceId, list] of entries) {
+          sessionsMap[workspaceId] = list
+        }
+      } else {
+        const activeId = workspacePayload.activeWorkspaceId
+        sessionsMap[activeId ?? ''] = await bridge.listSessions()
+      }
+      setSessionsByWorkspace(sessionsMap)
+      const activeList = sessionsMap[workspacePayload.activeWorkspaceId ?? ''] ?? []
+      setSessions(activeList)
+      const currentActiveId = useUiStore.getState().activeSessionId
+      const nextActiveId =
+        currentActiveId && activeList.some((x) => x.id === currentActiveId)
+          ? currentActiveId
+          : (activeList[0]?.id ?? null)
+      setActiveId(nextActiveId)
+      if (nextActiveId) {
+        await ensureSessionMessages(nextActiveId, true)
+      }
+      return
+    }
+
+    const [legacyPath, legacySessions] = await Promise.all([
       bridge.getWorkspace(),
-      bridge.getSettings(),
       bridge.listSessions()
     ])
-    setWorkspace(w)
-    setSettings(s)
-    form.setFieldsValue(s)
-    setSessions(sList)
+    const legacyWorkspace: WorkspaceInfo = {
+      id: legacyWorkspaceId,
+      name: legacyPath ? '当前工作区' : '默认工作区',
+      path: legacyPath || null,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    }
+    setWorkspaces([legacyWorkspace])
+    setActiveWorkspaceId(legacyWorkspace.id)
+    setExpandedWorkspaceIds(new Set([legacyWorkspace.id]))
+    setSessionsByWorkspace({ [legacyWorkspace.id]: legacySessions })
+    setSessions(legacySessions)
     const currentActiveId = useUiStore.getState().activeSessionId
     const nextActiveId =
-      currentActiveId && sList.some((x) => x.id === currentActiveId)
+      currentActiveId && legacySessions.some((x) => x.id === currentActiveId)
         ? currentActiveId
-        : (sList[0]?.id ?? null)
+        : (legacySessions[0]?.id ?? null)
     setActiveId(nextActiveId)
     if (nextActiveId) {
       await ensureSessionMessages(nextActiveId, true)
     }
-  }, [ensureSessionMessages, form, setActiveId])
+  }, [
+    bridge,
+    bridgeCompat,
+    ensureSessionMessages,
+    form,
+    setActiveId,
+    setActiveWorkspaceId,
+    supportsMultiWorkspaceApi
+  ])
 
   const handleStream = useCallback(
     (e: StreamEvent) => {
@@ -320,13 +394,50 @@ export function App() {
       await load()
     })()
     const unSub = [
-      bridge.onWorkspaceChange((p) => setWorkspace(p.path)),
+      supportsMultiWorkspaceApi
+        ? bridgeCompat.onWorkspacesSync!((payload) => {
+            setWorkspaces(payload.list)
+            setActiveWorkspaceId(payload.activeWorkspaceId)
+            setExpandedWorkspaceIds(new Set(payload.list.map((workspace) => workspace.id)))
+            const listByWorkspace = bridgeCompat.listSessionsByWorkspace
+            if (!listByWorkspace) return
+            void Promise.all(
+              payload.list.map(async (workspace) => {
+                const list = await listByWorkspace(workspace.id)
+                return [workspace.id, list] as const
+              })
+            ).then((entries) => {
+              setSessionsByWorkspace((prev) => {
+                const next = { ...prev }
+                for (const [workspaceId, list] of entries) {
+                  next[workspaceId] = list
+                }
+                return next
+              })
+            })
+          })
+        : bridge.onWorkspaceChange((p) => {
+            const legacyWorkspace: WorkspaceInfo = {
+              id: legacyWorkspaceId,
+              name: p.path ? '当前工作区' : '默认工作区',
+              path: p.path || null,
+              createdAt: Date.now(),
+              updatedAt: Date.now()
+            }
+            setWorkspaces([legacyWorkspace])
+            setActiveWorkspaceId(legacyWorkspace.id)
+            setExpandedWorkspaceIds(new Set([legacyWorkspace.id]))
+          }),
       bridge.onSettingsSync((s) => {
         setSettings(s)
         form.setFieldsValue(s)
       }),
       bridge.onSessionsSync((list) => {
         setSessions(list)
+        const workspaceId = useUiStore.getState().activeWorkspaceId
+        if (workspaceId) {
+          setSessionsByWorkspace((prev) => ({ ...prev, [workspaceId]: list }))
+        }
         const validIds = new Set(list.map((x) => x.id))
         for (const id of hydratedMessageSessions.current) {
           if (!validIds.has(id)) hydratedMessageSessions.current.delete(id)
@@ -338,7 +449,19 @@ export function App() {
       bridge.onStream(handleStream)
     ]
     return () => unSub.forEach((f) => f())
-  }, [bridge, form, handleStream, hydrateUiStore, load, msgApi, preloadOk, setActiveId])
+  }, [
+    bridge,
+    form,
+    handleStream,
+    hydrateUiStore,
+    load,
+    msgApi,
+    preloadOk,
+    setActiveId,
+    setActiveWorkspaceId,
+    supportsMultiWorkspaceApi,
+    bridgeCompat
+  ])
 
   useEffect(() => {
     if (!preloadOk || !activeId) return
@@ -348,7 +471,6 @@ export function App() {
   const pickWorkspace = async () => {
     const r = await bridge.selectWorkspace()
     if (r.path) {
-      setWorkspace(r.path)
       msgApi.success('已选择工作区')
     }
   }
@@ -358,8 +480,9 @@ export function App() {
     if (!activeId) return
     const t = input.trim()
     if (!t) return
-    if (!workspace) {
-      msgApi.warning('请先选择工作区')
+    const activeWorkspace = workspaces.find((x) => x.id === activeWorkspaceId)
+    if (!activeWorkspace?.path) {
+      msgApi.warning('请先为当前工作区绑定路径')
       return
     }
     setInput('')
@@ -496,6 +619,48 @@ export function App() {
     return () => window.cancelAnimationFrame(rafId)
   }, [currentMessages, currentTimeline, scrollMessagesToBottom])
 
+  useEffect(() => {
+    if (!activeWorkspaceId) return
+    setExpandedWorkspaceIds((prev) => {
+      const next = new Set(prev)
+      next.add(activeWorkspaceId)
+      return next
+    })
+  }, [activeWorkspaceId])
+
+  const handleWorkspaceClick = useCallback(
+    async (workspaceId: string) => {
+      setExpandedWorkspaceIds((prev) => {
+        const next = new Set(prev)
+        if (next.has(workspaceId)) next.delete(workspaceId)
+        else next.add(workspaceId)
+        return next
+      })
+      if (workspaceId === activeWorkspaceId) return
+      if (!supportsMultiWorkspaceApi) {
+        setActiveWorkspaceId(workspaceId)
+        return
+      }
+      const workspace = await bridgeCompat.activateWorkspace!(workspaceId)
+      if (!workspace) msgApi.error('切换工作区失败')
+    },
+    [activeWorkspaceId, bridgeCompat, msgApi, setActiveWorkspaceId, supportsMultiWorkspaceApi]
+  )
+
+  const handleSessionClick = useCallback(
+    async (workspaceId: string, sessionId: string) => {
+      if (workspaceId !== activeWorkspaceId && supportsMultiWorkspaceApi) {
+        const workspace = await bridgeCompat.activateWorkspace!(workspaceId)
+        if (!workspace) {
+          msgApi.error('切换工作区失败')
+          return
+        }
+      }
+      setActiveId(sessionId)
+    },
+    [activeWorkspaceId, bridgeCompat, msgApi, setActiveId, supportsMultiWorkspaceApi]
+  )
+
   return (
     <div className="app-shell">
       <div className="app-sidebar">
@@ -519,64 +684,100 @@ export function App() {
               className="app-new-session-btn"
               onClick={async () => {
                 const s = await bridge.createSession()
+                if (!s) {
+                  msgApi.warning('请先创建或选择工作区')
+                  return
+                }
                 setActiveId(s.id)
               }}
             >
               新会话
             </Button>
           </div>
-          <List
-            className="app-session-list"
-            dataSource={sessions}
-            renderItem={(s) => (
-              <Dropdown
-                menu={{
-                  items: [
-                    {
-                      key: 'rename',
-                      label: '重命名',
-                      onClick: () => {
-                        setRenameId(s.id)
-                        setRenameName(s.name)
-                      }
-                    },
-                    {
-                      key: 'del',
-                      danger: true,
-                      label: '删除',
-                      onClick: () => {
-                        modalApi.confirm({
-                          title: '删除此会话？',
-                          onOk: () => {
-                            void bridge.deleteSession(s.id).then(() => msgApi.success('已删除'))
-                          }
-                        })
-                      }
-                    }
-                  ]
-                }}
-                trigger={['contextMenu']}
-              >
-                <List.Item
-                  className={`app-session-item ${s.id === activeId ? 'is-active' : ''}`}
-                  onClick={() => setActiveId(s.id)}
+          <div className="app-workspace-tree">
+            {workspaces.map((workspace) => {
+              const isActiveWorkspace = workspace.id === activeWorkspaceId
+              const isExpanded = expandedWorkspaceIds.has(workspace.id)
+              const workspaceSessions = sessionsByWorkspace[workspace.id] || []
+              return (
+                <div
+                  key={workspace.id}
+                  className={`app-workspace-node ${isActiveWorkspace ? 'is-active' : ''}`}
                 >
-                  <List.Item.Meta
-                    title={<Text className="app-session-title">{s.name}</Text>}
-                    description={
-                      <Text className="app-session-time">
-                        {new Date(s.updatedAt).toLocaleString('zh-CN')}
-                      </Text>
-                    }
-                  />
-                </List.Item>
-              </Dropdown>
-            )}
-          />
-          <div className="app-workspace-info">工作区: {workspace || '未选'}</div>
+                  <button
+                    type="button"
+                    className="app-workspace-node-header"
+                    onClick={() => void handleWorkspaceClick(workspace.id)}
+                  >
+                    <Text className="app-workspace-name">{workspace.name}</Text>
+                    <div className="app-workspace-header-actions">
+                      {workspaceSessions.length > 0 && (
+                        <span className="app-workspace-session-count">
+                          {workspaceSessions.length}
+                        </span>
+                      )}
+                      <span
+                        className={`app-workspace-chevron ${isExpanded ? 'is-open' : ''}`}
+                        aria-hidden="true"
+                      >
+                        {'>'}
+                      </span>
+                    </div>
+                  </button>
+                  {isExpanded && (
+                    <div className="app-session-sublist">
+                      {workspaceSessions.map((s) => (
+                        <Dropdown
+                          key={s.id}
+                          menu={{
+                            items: [
+                              {
+                                key: 'rename',
+                                label: '重命名',
+                                onClick: () => {
+                                  setRenameId(s.id)
+                                  setRenameName(s.name)
+                                }
+                              },
+                              {
+                                key: 'del',
+                                danger: true,
+                                label: '删除',
+                                onClick: () => {
+                                  modalApi.confirm({
+                                    title: '删除此会话？',
+                                    onOk: () => {
+                                      void bridge
+                                        .deleteSession(s.id)
+                                        .then(() => msgApi.success('已删除'))
+                                    }
+                                  })
+                                }
+                              }
+                            ]
+                          }}
+                          trigger={['contextMenu']}
+                        >
+                          <div
+                            className={`app-session-item app-session-item-sub ${s.id === activeId ? 'is-active' : ''}`}
+                            onClick={() => void handleSessionClick(workspace.id, s.id)}
+                          >
+                            <div className="app-session-title">{s.name}</div>
+                          </div>
+                        </Dropdown>
+                      ))}
+                      {workspaceSessions.length === 0 && (
+                        <div className="app-session-placeholder">当前工作区暂无会话</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
           <div className="app-workspace-btn-wrap">
             <Button block icon={<FolderOpenOutlined />} onClick={pickWorkspace}>
-              选择工作区
+              添加并切换工作区
             </Button>
           </div>
         </div>

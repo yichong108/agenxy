@@ -3,11 +3,17 @@
 export const IPC = {
   WORKSPACE_SELECT: 'workspace:select',
   WORKSPACE_GET: 'workspace:get',
+  WORKSPACE_LIST: 'workspace:list',
+  WORKSPACE_ADD: 'workspace:add',
+  WORKSPACE_ACTIVATE: 'workspace:activate',
+  WORKSPACE_RENAME: 'workspace:rename',
+  WORKSPACE_REMOVE: 'workspace:remove',
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',
   UI_STATE_GET: 'ui-state:get',
   UI_STATE_SET: 'ui-state:set',
   SESSIONS_LIST: 'sessions:list',
+  SESSIONS_LIST_BY_WORKSPACE: 'sessions:list-by-workspace',
   SESSIONS_GET_MESSAGES: 'sessions:get-messages',
   SESSIONS_CREATE: 'sessions:create',
   SESSIONS_RENAME: 'sessions:rename',
@@ -22,6 +28,7 @@ export const IPC = {
 export const EVENTS = {
   AGENT_STREAM: 'agent:stream',
   WORKSPACE_CHANGED: 'workspace:changed',
+  WORKSPACES_SYNC: 'workspaces:sync',
   SESSIONS_SYNC: 'sessions:sync',
   SETTINGS_SYNC: 'settings:sync'
 } as const
@@ -54,13 +61,37 @@ export const defaultSettings: AppSettings = {
 }
 
 export type RendererUiState = {
+  activeWorkspaceId: string | null
+  byWorkspace: Record<string, WorkspaceUiState>
+}
+
+export const defaultRendererUiState: RendererUiState = {
+  activeWorkspaceId: null,
+  byWorkspace: {}
+}
+
+export type WorkspaceUiState = {
   activeSessionId: string | null
   inputDraft: string
 }
 
-export const defaultRendererUiState: RendererUiState = {
+export const defaultWorkspaceUiState: WorkspaceUiState = {
   activeSessionId: null,
   inputDraft: ''
+}
+
+export type WorkspaceInfo = {
+  id: string
+  name: string
+  path: string | null
+  createdAt: number
+  updatedAt: number
+  isDefault?: boolean
+}
+
+export type WorkspacesPayload = {
+  list: WorkspaceInfo[]
+  activeWorkspaceId: string | null
 }
 
 export type SessionInfo = {

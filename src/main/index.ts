@@ -19,16 +19,25 @@ import {
   createSession,
   renameSession,
   deleteSession,
+  getSessionWorkspaceId,
+  removeWorkspaceSessions,
   touchSession
 } from './sessions.js'
 import {
+  getActiveWorkspace,
+  getActiveWorkspaceId,
+  getDefaultWorkspaceId,
   getSettings,
   getSessionMessages,
   getUiState,
   getWorkspace,
+  listWorkspaces,
+  removeWorkspace,
+  renameWorkspace,
   setSettings,
   setUiState,
-  setWorkspace
+  setActiveWorkspace,
+  upsertWorkspaceByPath
 } from './store.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -162,17 +171,36 @@ function createWindow(): void {
   bindAgentIpc(mainWindow.webContents)
   mainWindow.webContents.on('did-finish-load', () => {
     console.log(`[renderer] did-finish-load: ${mainWindow?.webContents.getURL() || '(unknown)'}`)
-    mainWindow?.webContents.send(EVENTS.SESSIONS_SYNC, getSessions())
-    mainWindow?.webContents.send(EVENTS.WORKSPACE_CHANGED, { path: getWorkspace() })
+    broadcastWorkspaces()
+    broadcastSessions()
   })
   mainWindow.on('closed', () => {
     mainWindow = null
   })
 }
 
+function getActiveWorkspacePath(): string {
+  return getActiveWorkspace()?.path || ''
+}
+
+function getSessionsInActiveWorkspace() {
+  const activeWorkspaceId = getActiveWorkspaceId()
+  if (!activeWorkspaceId) return []
+  return getSessions(activeWorkspaceId)
+}
+
+function broadcastWorkspaces(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.webContents.send(EVENTS.WORKSPACES_SYNC, {
+    list: listWorkspaces(),
+    activeWorkspaceId: getActiveWorkspaceId()
+  })
+  mainWindow.webContents.send(EVENTS.WORKSPACE_CHANGED, { path: getActiveWorkspacePath() })
+}
+
 function broadcastSessions(): void {
   if (!mainWindow || mainWindow.isDestroyed()) return
-  mainWindow.webContents.send(EVENTS.SESSIONS_SYNC, getSessions())
+  mainWindow.webContents.send(EVENTS.SESSIONS_SYNC, getSessionsInActiveWorkspace())
 }
 
 function registerIpc(): void {
@@ -182,11 +210,50 @@ function registerIpc(): void {
       properties: ['openDirectory', 'createDirectory']
     })
     if (r.canceled || !r.filePaths[0]) return { path: '' as const }
-    setWorkspace(r.filePaths[0])
-    mainWindow?.webContents.send(EVENTS.WORKSPACE_CHANGED, { path: r.filePaths[0] })
-    return { path: r.filePaths[0] }
+    const workspace = upsertWorkspaceByPath(r.filePaths[0])
+    setActiveWorkspace(workspace.id)
+    broadcastWorkspaces()
+    broadcastSessions()
+    return { path: workspace.path || '' }
   })
   ipcMain.handle(IPC.WORKSPACE_GET, () => getWorkspace())
+  ipcMain.handle(IPC.WORKSPACE_LIST, () => ({
+    list: listWorkspaces(),
+    activeWorkspaceId: getActiveWorkspaceId()
+  }))
+  ipcMain.handle(IPC.WORKSPACE_ADD, (_e, dir: string) => {
+    if (!dir?.trim()) return null
+    const workspace = upsertWorkspaceByPath(dir)
+    setActiveWorkspace(workspace.id)
+    broadcastWorkspaces()
+    broadcastSessions()
+    return workspace
+  })
+  ipcMain.handle(IPC.WORKSPACE_ACTIVATE, (_e, workspaceId: string) => {
+    const next = setActiveWorkspace(workspaceId)
+    if (!next) return null
+    broadcastWorkspaces()
+    broadcastSessions()
+    return next
+  })
+  ipcMain.handle(IPC.WORKSPACE_RENAME, (_e, workspaceId: string, name: string) => {
+    const next = renameWorkspace(workspaceId, name)
+    if (!next) return null
+    broadcastWorkspaces()
+    return next
+  })
+  ipcMain.handle(IPC.WORKSPACE_REMOVE, (_e, workspaceId: string) => {
+    const defaultWorkspaceId = getDefaultWorkspaceId()
+    if (workspaceId !== defaultWorkspaceId) {
+      removeWorkspaceSessions(workspaceId, defaultWorkspaceId)
+    }
+    const ok = removeWorkspace(workspaceId)
+    if (ok) {
+      broadcastWorkspaces()
+      broadcastSessions()
+    }
+    return { ok }
+  })
   ipcMain.handle(IPC.SETTINGS_GET, () => getSettings())
   ipcMain.handle(IPC.SETTINGS_SET, (_e, patch: Partial<AppSettings>) => {
     if (typeof patch.maxConcurrentStreams === 'number') {
@@ -198,22 +265,34 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.UI_STATE_GET, () => getUiState())
   ipcMain.handle(IPC.UI_STATE_SET, (_e, patch: Partial<RendererUiState>) => setUiState(patch))
-  ipcMain.handle(IPC.SESSIONS_LIST, () => getSessions())
-  ipcMain.handle(IPC.SESSIONS_GET_MESSAGES, (_e, sessionId: string) =>
-    getSessionMessages(sessionId)
-  )
+  ipcMain.handle(IPC.SESSIONS_LIST, () => getSessionsInActiveWorkspace())
+  ipcMain.handle(IPC.SESSIONS_LIST_BY_WORKSPACE, (_e, workspaceId: string) => {
+    if (!workspaceId) return []
+    return getSessions(workspaceId)
+  })
+  ipcMain.handle(IPC.SESSIONS_GET_MESSAGES, (_e, sessionId: string) => {
+    const workspaceId = getSessionWorkspaceId(sessionId) || getActiveWorkspaceId()
+    if (!workspaceId) return []
+    return getSessionMessages(workspaceId, sessionId)
+  })
   ipcMain.handle(IPC.SESSIONS_CREATE, (_e, name?: string) => {
-    const s = createSession(name)
+    const workspaceId = getActiveWorkspaceId()
+    if (!workspaceId) return null
+    const s = createSession(workspaceId, name)
     broadcastSessions()
     return s
   })
   ipcMain.handle(IPC.SESSIONS_RENAME, (_e, id: string, name: string) => {
-    const s = renameSession(id, name)
+    const workspaceId = getSessionWorkspaceId(id) || getActiveWorkspaceId()
+    if (!workspaceId) return null
+    const s = renameSession(workspaceId, id, name)
     broadcastSessions()
     return s
   })
   ipcMain.handle(IPC.SESSIONS_DELETE, (_e, id: string) => {
-    deleteSession(id)
+    const workspaceId = getSessionWorkspaceId(id) || getActiveWorkspaceId()
+    if (!workspaceId) return { ok: false as const }
+    deleteSession(workspaceId, id)
     broadcastSessions()
     return { ok: true as const }
   })
@@ -239,7 +318,10 @@ function registerIpc(): void {
       // 发送消息到 Agent
       await runUserMessage(sessionId, text.trim(), onQueued)
       // 更新会话时间
-      touchSession(sessionId)
+      const workspaceId = getSessionWorkspaceId(sessionId)
+      if (workspaceId) {
+        touchSession(workspaceId, sessionId)
+      }
       // 广播会话列表
       broadcastSessions()
       // 返回发送结果

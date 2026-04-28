@@ -3,45 +3,96 @@ import { randomUUID } from 'node:crypto'
 import type { SessionInfo } from '../shared/ipc.js'
 
 import { clearSessionState, initSessionState } from './agent/agent-service.js'
-import { deleteSessionMessages, getSessionsMeta, setSessionsMeta } from './store.js'
+import {
+  getActiveWorkspaceId,
+  deleteSessionMessages,
+  getAllSessionsMetaByWorkspace,
+  getSessionsMeta,
+  listWorkspaces,
+  moveWorkspaceSessionData,
+  setSessionsMeta
+} from './store.js'
 
-let list: SessionInfo[] = []
-let nameCounter = 1
+const listByWorkspace = new Map<string, SessionInfo[]>()
+const nameCounterByWorkspace = new Map<string, number>()
+const sessionWorkspaceMap = new Map<string, string>()
 
-function persist(): void {
-  setSessionsMeta([...list])
+function persist(workspaceId: string): void {
+  const list = listByWorkspace.get(workspaceId) || []
+  setSessionsMeta(workspaceId, [...list])
 }
 
-export function loadSessionList(): SessionInfo[] {
-  list = getSessionsMeta()
-  if (list.length === 0) {
-    createSession('新会话 1', false)
-    persist()
+function touchWorkspaceCounter(workspaceId: string): void {
+  if (!nameCounterByWorkspace.has(workspaceId)) {
+    const base = (listByWorkspace.get(workspaceId)?.length || 0) + 1
+    nameCounterByWorkspace.set(workspaceId, base)
   }
-  for (const s of list) {
-    initSessionState(s.id)
+}
+
+function ensureWorkspaceBucket(workspaceId: string): SessionInfo[] {
+  let list = listByWorkspace.get(workspaceId)
+  if (!list) {
+    list = getSessionsMeta(workspaceId)
+    listByWorkspace.set(workspaceId, list)
   }
+  touchWorkspaceCounter(workspaceId)
   return list
 }
 
-export function getSessions(): SessionInfo[] {
-  return [...list]
+function registerSessionWorkspace(workspaceId: string, list: SessionInfo[]): void {
+  for (const session of list) {
+    sessionWorkspaceMap.set(session.id, workspaceId)
+    initSessionState(workspaceId, session.id)
+  }
+}
+
+export function loadSessionList(): SessionInfo[] {
+  listByWorkspace.clear()
+  nameCounterByWorkspace.clear()
+  sessionWorkspaceMap.clear()
+  const allMeta = getAllSessionsMetaByWorkspace()
+  for (const workspace of listWorkspaces()) {
+    const list = allMeta[workspace.id] || []
+    listByWorkspace.set(workspace.id, list)
+    registerSessionWorkspace(workspace.id, list)
+  }
+  return getSessionsForActiveWorkspace()
+}
+
+export function getSessions(workspaceId: string): SessionInfo[] {
+  return [...ensureWorkspaceBucket(workspaceId)]
+}
+
+export function getSessionsForActiveWorkspace(): SessionInfo[] {
+  const activeWorkspaceId = getActiveWorkspaceId()
+  if (!activeWorkspaceId) return []
+  return getSessions(activeWorkspaceId)
 }
 
 export function getSessionById(id: string): SessionInfo | undefined {
-  return list.find((s) => s.id === id)
+  const workspaceId = sessionWorkspaceMap.get(id)
+  if (!workspaceId) return undefined
+  return (listByWorkspace.get(workspaceId) || []).find((s) => s.id === id)
 }
 
-export function touchSession(id: string): void {
+export function getSessionWorkspaceId(sessionId: string): string | null {
+  return sessionWorkspaceMap.get(sessionId) || null
+}
+
+export function touchSession(workspaceId: string, id: string): void {
+  const list = ensureWorkspaceBucket(workspaceId)
   const s = list.find((x) => x.id === id)
   if (!s) return
   s.updatedAt = Date.now()
-  persist()
+  persist(workspaceId)
 }
 
-export function createSession(name?: string, persistMeta = true): SessionInfo {
+export function createSession(workspaceId: string, name?: string, persistMeta = true): SessionInfo {
+  const list = ensureWorkspaceBucket(workspaceId)
   if (!name) {
-    name = `新会话 ${nameCounter++}`
+    const count = nameCounterByWorkspace.get(workspaceId) || 1
+    name = `新会话 ${count}`
+    nameCounterByWorkspace.set(workspaceId, count + 1)
   }
   const s: SessionInfo = {
     id: randomUUID(),
@@ -50,29 +101,46 @@ export function createSession(name?: string, persistMeta = true): SessionInfo {
     updatedAt: Date.now()
   }
   list.push(s)
-  initSessionState(s.id)
-  if (persistMeta) persist()
+  sessionWorkspaceMap.set(s.id, workspaceId)
+  initSessionState(workspaceId, s.id)
+  if (persistMeta) persist(workspaceId)
   return s
 }
 
-export function renameSession(id: string, name: string): SessionInfo | null {
+export function renameSession(workspaceId: string, id: string, name: string): SessionInfo | null {
+  const list = ensureWorkspaceBucket(workspaceId)
   const s = list.find((x) => x.id === id)
   if (!s) return null
   s.name = name
   s.updatedAt = Date.now()
-  persist()
+  persist(workspaceId)
   return s
 }
 
-export function deleteSession(id: string): boolean {
+export function deleteSession(workspaceId: string, id: string): boolean {
+  const list = ensureWorkspaceBucket(workspaceId)
   const i = list.findIndex((x) => x.id === id)
   if (i < 0) return false
   list.splice(i, 1)
+  sessionWorkspaceMap.delete(id)
   clearSessionState(id)
-  deleteSessionMessages(id)
-  if (list.length === 0) {
-    createSession(undefined, false)
-  }
-  persist()
+  deleteSessionMessages(workspaceId, id)
+  persist(workspaceId)
   return true
+}
+
+export function removeWorkspaceSessions(fromWorkspaceId: string, toWorkspaceId: string): void {
+  if (fromWorkspaceId === toWorkspaceId) return
+  const fromList = ensureWorkspaceBucket(fromWorkspaceId)
+  const toList = ensureWorkspaceBucket(toWorkspaceId)
+  for (const session of fromList) {
+    sessionWorkspaceMap.set(session.id, toWorkspaceId)
+    initSessionState(toWorkspaceId, session.id)
+  }
+  const merged = [...toList, ...fromList]
+  listByWorkspace.set(toWorkspaceId, merged)
+  listByWorkspace.set(fromWorkspaceId, [])
+  moveWorkspaceSessionData(fromWorkspaceId, toWorkspaceId)
+  setSessionsMeta(toWorkspaceId, merged)
+  setSessionsMeta(fromWorkspaceId, [])
 }

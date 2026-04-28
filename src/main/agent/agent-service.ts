@@ -17,7 +17,7 @@ import {
   type StreamEvent,
   type ToolTimelineEvent
 } from '../../shared/ipc.js'
-import { getSessionMessages, getSettings, getWorkspace, setSessionMessages } from '../store.js'
+import { getSessionMessages, getSettings, getWorkspaceById, setSessionMessages } from '../store.js'
 import { listDirTool, readFileTool, searchWorkspace, writeFileTool } from '../tools/fs-tools.js'
 import { runCommand, killCommand } from '../tools/terminal.js'
 
@@ -25,6 +25,7 @@ import { StreamBatcher } from './batcher.js'
 import { ConcurrencyQueue } from './queue.js'
 
 type SessionRuntime = {
+  workspaceId: string
   /** 不含 system；system 在每次请求时拼入 */
   messages: BaseMessage[]
   controller: AbortController | null
@@ -121,8 +122,12 @@ function fromPersistedMessages(messages: ChatMessage[]): BaseMessage[] {
   return list
 }
 
-function persistSessionMessages(sessionId: string, coreMessages: BaseMessage[]): void {
-  setSessionMessages(sessionId, toPersistedMessages(coreMessages))
+function persistSessionMessages(
+  workspaceId: string,
+  sessionId: string,
+  coreMessages: BaseMessage[]
+): void {
+  setSessionMessages(workspaceId, sessionId, toPersistedMessages(coreMessages))
 }
 
 function createLanguageModel(settings: AppSettings) {
@@ -395,10 +400,11 @@ export function bindAgentIpc(wc: WebContents): void {
   webContents = wc
 }
 
-export function initSessionState(sessionId: string): void {
+export function initSessionState(workspaceId: string, sessionId: string): void {
   if (!sessions.has(sessionId)) {
-    const persisted = getSessionMessages(sessionId)
+    const persisted = getSessionMessages(workspaceId, sessionId)
     sessions.set(sessionId, {
+      workspaceId,
       messages: fromPersistedMessages(persisted),
       controller: null,
       terminalKey: `term:${sessionId}`
@@ -433,9 +439,15 @@ export async function runUserMessage(
   onQueued: (pos: number) => void
 ): Promise<void> {
   const settings = getSettings()
-  const root = getWorkspace()
+  const existingSession = sessions.get(sessionId)
+  if (!existingSession) {
+    emit({ type: 'error', sessionId, message: '会话不存在或已失效' })
+    return
+  }
+  const workspace = getWorkspaceById(existingSession.workspaceId)
+  const root = workspace?.path?.trim() || ''
   if (!root) {
-    emit({ type: 'error', sessionId, message: '未选择工作区' })
+    emit({ type: 'error', sessionId, message: '当前会话所属工作区未绑定目录，请先绑定路径' })
     return
   }
   const queue = getQueue(settings)
@@ -444,12 +456,11 @@ export async function runUserMessage(
   }
   await queue.run(async () => {
     onQueued(0) // 0 = 已获执行权（不展示排队条）
-    const session = sessions.get(sessionId) ?? {
-      messages: [],
-      controller: null,
-      terminalKey: `term:${sessionId}`
+    const session = sessions.get(sessionId)
+    if (!session) {
+      emit({ type: 'error', sessionId, message: '会话不存在或已失效' })
+      return
     }
-    sessions.set(sessionId, session)
     const ac = new AbortController()
     const runId = makeRunId()
     const traceId = makeTraceId(sessionId, runId)
@@ -481,7 +492,7 @@ export async function runUserMessage(
     const { tools, byName } = makeTools(sessionId, root, settings, { runId, traceId }, onTool)
     const model = createLanguageModel(settings).bindTools(tools)
     session.messages.push(new HumanMessage(userText))
-    persistSessionMessages(sessionId, session.messages)
+    persistSessionMessages(session.workspaceId, sessionId, session.messages)
     const system = buildSystemPrompt(root)
 
     // ReAct 流程
@@ -614,7 +625,7 @@ export async function runUserMessage(
         }
       }
       batcher.flush()
-      persistSessionMessages(sessionId, session.messages)
+      persistSessionMessages(session.workspaceId, sessionId, session.messages)
       emit({
         type: 'done',
         sessionId,
@@ -643,7 +654,7 @@ export async function runUserMessage(
         timestampMs: Date.now(),
         durationMs: Date.now() - runStartedAt
       })
-      persistSessionMessages(sessionId, session.messages)
+      persistSessionMessages(session.workspaceId, sessionId, session.messages)
     } finally {
       session.controller = null
       batcher.flush()
