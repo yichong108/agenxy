@@ -67,6 +67,26 @@ export async function writeFileTool(
   return `已写入: ${path.relative(root, file)}`
 }
 
+export async function deleteFileTool(workspace: string, relPath: string): Promise<string> {
+  const root = ensureWorkspaceExists(workspace)
+  const file = resolveSafePath(relPath, root)
+  let st
+  try {
+    st = await fs.stat(file)
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException)?.code
+    if (code === 'ENOENT') {
+      return `文件不存在: ${relPath}`
+    }
+    throw e
+  }
+  if (!st.isFile()) {
+    return `不是文件（未删除目录）: ${relPath}`
+  }
+  await fs.unlink(file)
+  return `已删除: ${path.relative(root, file)}`
+}
+
 export async function listDirTool(
   workspace: string,
   relPath: string,
