@@ -9,8 +9,10 @@ import {
   EVENTS,
   type AppSettings,
   type ChatMessage,
+  type ModelProviderId,
   type StreamEvent,
-  type ToolTimelineEvent
+  type ToolTimelineEvent,
+  getActiveProviderProfile
 } from '../../shared/ipc.js'
 import { getSessionMessages, getSettings, getWorkspaceById, setSessionMessages } from '../store.js'
 import { listDirTool, readFileTool, searchWorkspace, writeFileTool } from '../tools/fs-tools.js'
@@ -126,17 +128,34 @@ function persistSessionMessages(
   setSessionMessages(workspaceId, sessionId, toPersistedMessages(coreMessages))
 }
 
+function ensureOpenAiV1BaseUrl(baseUrl: string, fallback: string): string {
+  const u = baseUrl.trim() || fallback
+  if (!u) return fallback
+  if (/\/v1\/?$/i.test(u)) return u.replace(/\/+$/, '')
+  return `${u.replace(/\/+$/, '')}/v1`
+}
+
+function openAiBaseUrlForProvider(provider: ModelProviderId, rawBaseUrl: string): string {
+  const deepseekDefault = 'https://api.deepseek.com/v1'
+  if (provider === 'ollama') {
+    const host = rawBaseUrl.trim() || 'http://127.0.0.1:11434'
+    return ensureOpenAiV1BaseUrl(host, 'http://127.0.0.1:11434/v1')
+  }
+  return ensureOpenAiV1BaseUrl(rawBaseUrl, deepseekDefault)
+}
+
 function createLanguageModel(settings: AppSettings) {
-  if (!settings.apiKey?.trim()) {
+  const profile = getActiveProviderProfile(settings)
+  const isOllama = settings.provider === 'ollama'
+  if (!isOllama && !profile.apiKey?.trim()) {
     throw new Error('请先在「设置」中配置 API Key')
   }
-  const defaultBaseURL = 'https://api.deepseek.com/v1'
+  const apiKey = profile.apiKey?.trim() || 'ollama'
+  const baseURL = openAiBaseUrlForProvider(settings.provider, profile.baseUrl)
   return new ChatOpenAI({
-    apiKey: settings.apiKey,
-    model: settings.model,
-    configuration: {
-      baseURL: settings.baseUrl?.trim() || defaultBaseURL
-    },
+    apiKey,
+    model: profile.model,
+    configuration: { baseURL },
     streaming: true,
     temperature: 0
   })

@@ -5,10 +5,13 @@ import { app } from 'electron'
 import Store from 'electron-store'
 
 import {
+  defaultProviderProfiles,
   defaultRendererUiState,
   defaultWorkspaceUiState,
   defaultSettings,
   type AppSettings,
+  type ModelProviderId,
+  type ProviderProfile,
   type ChatMessage,
   type RendererUiState,
   type SessionInfo,
@@ -151,8 +154,64 @@ function migrateFromLegacyIfNeeded(): void {
 
 migrateFromLegacyIfNeeded()
 
-function normalizeSettings(input: Partial<AppSettings>): AppSettings {
-  const merged = { ...defaultSettings, ...input }
+type LegacyFlatSettings = {
+  apiKey?: string
+  baseUrl?: string
+  model?: string
+}
+
+function normalizeSettings(input: Partial<AppSettings> & LegacyFlatSettings): AppSettings {
+  const defaults = defaultSettings
+  const baseProfiles = defaultProviderProfiles()
+  const { baseUrl: legacyBaseUrl, model: legacyModel, apiKey: legacyApiKey, ...inputRest } = input
+  const legacy: LegacyFlatSettings = {
+    baseUrl: legacyBaseUrl,
+    model: legacyModel,
+    apiKey: legacyApiKey
+  }
+  const fromProfiles = inputRest.providerProfiles
+
+  let providerProfiles: Record<ModelProviderId, ProviderProfile> = {
+    deepseek: { ...baseProfiles.deepseek, ...fromProfiles?.deepseek },
+    ollama: { ...baseProfiles.ollama, ...fromProfiles?.ollama }
+  }
+
+  const hadLegacyTopLevel =
+    typeof legacy.baseUrl === 'string' ||
+    typeof legacy.model === 'string' ||
+    typeof legacy.apiKey === 'string'
+
+  const looksNewProfileShape =
+    fromProfiles != null &&
+    typeof fromProfiles === 'object' &&
+    (fromProfiles.deepseek != null || fromProfiles.ollama != null)
+
+  if (hadLegacyTopLevel && !looksNewProfileShape) {
+    providerProfiles = {
+      ...providerProfiles,
+      deepseek: {
+        baseUrl: legacy.baseUrl?.trim() || providerProfiles.deepseek.baseUrl,
+        model: legacy.model?.trim() || providerProfiles.deepseek.model,
+        apiKey: typeof legacy.apiKey === 'string' ? legacy.apiKey : providerProfiles.deepseek.apiKey
+      }
+    }
+  }
+
+  const provider: ModelProviderId = inputRest.provider === 'ollama' ? 'ollama' : 'deepseek'
+
+  const merged: AppSettings = {
+    ...defaults,
+    ...inputRest,
+    provider,
+    providerProfiles,
+    maxConcurrentStreams: inputRest.maxConcurrentStreams ?? defaults.maxConcurrentStreams,
+    streamFlushMs: inputRest.streamFlushMs ?? defaults.streamFlushMs,
+    streamFlushChars: inputRest.streamFlushChars ?? defaults.streamFlushChars,
+    maxTerminalOutputChars: inputRest.maxTerminalOutputChars ?? defaults.maxTerminalOutputChars,
+    maxAgentLoopSteps: inputRest.maxAgentLoopSteps ?? defaults.maxAgentLoopSteps,
+    agentRunTimeoutMs: inputRest.agentRunTimeoutMs ?? defaults.agentRunTimeoutMs
+  }
+
   return {
     ...merged,
     maxTerminalOutputChars: Math.min(1000, Math.max(1, merged.maxTerminalOutputChars)),

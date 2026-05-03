@@ -33,12 +33,20 @@ export const EVENTS = {
   SETTINGS_SYNC: 'settings:sync'
 } as const
 
-export type AppSettings = {
-  /** 当前仅支持 DeepSeek */
-  provider: 'deepseek'
-  apiKey: string
+export type ModelProviderId = 'deepseek' | 'ollama'
+
+/** 单个模型提供方的连接信息（分提供方持久化） */
+export type ProviderProfile = {
   baseUrl: string
   model: string
+  /** 本地 Ollama 等可为空字符串 */
+  apiKey: string
+}
+
+export type AppSettings = {
+  provider: ModelProviderId
+  /** 各提供方独立配置；切换提供方时从对应项回显 */
+  providerProfiles: Record<ModelProviderId, ProviderProfile>
   /** 最大并行 Agent 流 */
   maxConcurrentStreams: number
   /** 流式 IPC 合并：毫秒 */
@@ -53,17 +61,100 @@ export type AppSettings = {
   agentRunTimeoutMs: number
 }
 
+export const defaultProviderProfiles = (): Record<ModelProviderId, ProviderProfile> => ({
+  deepseek: {
+    baseUrl: 'https://api.deepseek.com',
+    model: 'deepseek-chat',
+    apiKey: ''
+  },
+  ollama: {
+    baseUrl: 'http://127.0.0.1:11434',
+    model: 'deepseek-r1:7b',
+    apiKey: ''
+  }
+})
+
 export const defaultSettings: AppSettings = {
   provider: 'deepseek',
-  apiKey: 'sk-0b08965fd66e4fd28ba42a449ea8b6ee',
-  baseUrl: 'https://api.deepseek.com',
-  model: 'deepseek-chat',
+  providerProfiles: defaultProviderProfiles(),
   maxConcurrentStreams: 2,
   streamFlushMs: 32,
   streamFlushChars: 320,
   maxTerminalOutputChars: 1_000,
   maxAgentLoopSteps: 24,
   agentRunTimeoutMs: 120_000
+}
+
+/** 当前选中提供方的连接配置 */
+export function getActiveProviderProfile(s: AppSettings): ProviderProfile {
+  return s.providerProfiles[s.provider]
+}
+
+/** 设置弹窗表单用的扁平字段（含当前提供方的 baseUrl/model/apiKey） */
+export type SettingsFormValues = Pick<
+  AppSettings,
+  | 'maxConcurrentStreams'
+  | 'streamFlushMs'
+  | 'streamFlushChars'
+  | 'maxTerminalOutputChars'
+  | 'maxAgentLoopSteps'
+  | 'agentRunTimeoutMs'
+> & {
+  provider: ModelProviderId
+  baseUrl: string
+  model: string
+  apiKey: string
+}
+
+export function settingsToFormValues(s: AppSettings): SettingsFormValues {
+  const p = getActiveProviderProfile(s)
+  return {
+    provider: s.provider,
+    baseUrl: p.baseUrl,
+    model: p.model,
+    apiKey: p.apiKey,
+    maxConcurrentStreams: s.maxConcurrentStreams,
+    streamFlushMs: s.streamFlushMs,
+    streamFlushChars: s.streamFlushChars,
+    maxTerminalOutputChars: s.maxTerminalOutputChars,
+    maxAgentLoopSteps: s.maxAgentLoopSteps,
+    agentRunTimeoutMs: s.agentRunTimeoutMs
+  }
+}
+
+/** 将弹窗当前表单写入对应提供方 profile，其余提供方保持 profiles 中已有值 */
+export function mergeFormIntoProviderProfiles(
+  profiles: Record<ModelProviderId, ProviderProfile>,
+  form: SettingsFormValues
+): Record<ModelProviderId, ProviderProfile> {
+  const next: Record<ModelProviderId, ProviderProfile> = {
+    deepseek: { ...profiles.deepseek },
+    ollama: { ...profiles.ollama }
+  }
+  next[form.provider] = {
+    baseUrl: form.baseUrl.trim(),
+    model: form.model.trim(),
+    apiKey: form.provider === 'ollama' ? '' : (form.apiKey ?? '').trim()
+  }
+  return next
+}
+
+export function applySettingsForm(
+  prev: AppSettings,
+  form: SettingsFormValues,
+  providerProfiles: Record<ModelProviderId, ProviderProfile>
+): AppSettings {
+  return {
+    ...prev,
+    provider: form.provider,
+    providerProfiles,
+    maxConcurrentStreams: form.maxConcurrentStreams,
+    streamFlushMs: form.streamFlushMs,
+    streamFlushChars: form.streamFlushChars,
+    maxTerminalOutputChars: form.maxTerminalOutputChars,
+    maxAgentLoopSteps: form.maxAgentLoopSteps,
+    agentRunTimeoutMs: form.agentRunTimeoutMs
+  }
 }
 
 export type RendererUiState = {

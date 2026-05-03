@@ -30,10 +30,17 @@ import remarkGfm from 'remark-gfm'
 import 'highlight.js/styles/github.css'
 
 import {
+  applySettingsForm,
+  defaultProviderProfiles,
   defaultSettings,
+  mergeFormIntoProviderProfiles,
+  settingsToFormValues,
   type AppSettings,
   type ChatMessage,
+  type ModelProviderId,
+  type ProviderProfile,
   type SessionInfo,
+  type SettingsFormValues,
   type StreamEvent,
   type ToolTimelineEvent,
   type WorkspaceInfo
@@ -48,6 +55,13 @@ const { TextArea } = Input
 const PRELOAD_MISSING_ERROR = '未检测到 preload 注入（window.bridge 不存在）'
 
 const DEFAULT_SETTINGS: AppSettings = JSON.parse(JSON.stringify(defaultSettings))
+const DEFAULT_FORM_VALUES: SettingsFormValues = settingsToFormValues(DEFAULT_SETTINGS)
+
+function cloneProviderProfiles(
+  p: Record<ModelProviderId, ProviderProfile>
+): Record<ModelProviderId, ProviderProfile> {
+  return JSON.parse(JSON.stringify(p)) as Record<ModelProviderId, ProviderProfile>
+}
 
 function randomId() {
   return `m-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -132,7 +146,10 @@ export function App() {
   const hydrateUiStore = useUiStore((s) => s.hydrateFromMain)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
-  const [form] = Form.useForm<AppSettings>()
+  const [form] = Form.useForm<SettingsFormValues>()
+  const profilesDraftRef =
+    useRef<Record<ModelProviderId, ProviderProfile>>(defaultProviderProfiles())
+  const settingsProviderRef = useRef<ModelProviderId>('deepseek')
   const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState<Set<string>>(new Set())
   const [renameId, setRenameId] = useState<string | null>(null)
   const [renameName, setRenameName] = useState('')
@@ -180,7 +197,9 @@ export function App() {
   const load = useCallback(async () => {
     const settingsResult = await bridge.getSettings()
     setSettings(settingsResult)
-    form.setFieldsValue(settingsResult)
+    profilesDraftRef.current = cloneProviderProfiles(settingsResult.providerProfiles)
+    settingsProviderRef.current = settingsResult.provider
+    form.setFieldsValue(settingsToFormValues(settingsResult))
 
     if (supportsMultiWorkspaceApi) {
       const workspacePayload = await bridgeCompat.listWorkspaces!()
@@ -430,7 +449,9 @@ export function App() {
           }),
       bridge.onSettingsSync((s) => {
         setSettings(s)
-        form.setFieldsValue(s)
+        profilesDraftRef.current = cloneProviderProfiles(s.providerProfiles)
+        settingsProviderRef.current = s.provider
+        form.setFieldsValue(settingsToFormValues(s))
       }),
       bridge.onSessionsSync((list) => {
         setSessions(list)
@@ -507,13 +528,39 @@ export function App() {
   }
 
   const openSettings = () => {
-    form.setFieldsValue(settings)
+    profilesDraftRef.current = cloneProviderProfiles(settings.providerProfiles)
+    settingsProviderRef.current = settings.provider
+    form.setFieldsValue(settingsToFormValues(settings))
     setSettingsOpen(true)
+  }
+
+  const onSettingsProviderChange = (next: ModelProviderId) => {
+    const prev = settingsProviderRef.current
+    if (prev === next) return
+    const cur = form.getFieldsValue(['baseUrl', 'model', 'apiKey']) as Pick<
+      ProviderProfile,
+      'baseUrl' | 'model' | 'apiKey'
+    >
+    profilesDraftRef.current[prev] = {
+      baseUrl: String(cur.baseUrl ?? ''),
+      model: String(cur.model ?? ''),
+      apiKey: String(cur.apiKey ?? '')
+    }
+    settingsProviderRef.current = next
+    form.setFieldsValue({
+      provider: next,
+      ...profilesDraftRef.current[next]
+    })
   }
 
   const saveSettings = async () => {
     const v = await form.validateFields()
-    await bridge.setSettings(v)
+    const nextProfiles = mergeFormIntoProviderProfiles(profilesDraftRef.current, v)
+    const next = applySettingsForm(settings, v, nextProfiles)
+    const saved = await bridge.setSettings(next)
+    profilesDraftRef.current = cloneProviderProfiles(saved.providerProfiles)
+    settingsProviderRef.current = saved.provider
+    setSettings(saved)
     setSettingsOpen(false)
     msgApi.success('已保存（Secret 仅保存在本机主进程）')
   }
@@ -928,18 +975,37 @@ export function App() {
         width={520}
         destroyOnHidden
       >
-        <Form form={form} layout="vertical" initialValues={DEFAULT_SETTINGS}>
+        <Form form={form} layout="vertical" initialValues={DEFAULT_FORM_VALUES}>
           <Form.Item name="provider" label="提供方" rules={[{ required: true }]}>
-            <Select options={[{ value: 'deepseek', label: 'DeepSeek' }]} />
+            <Select
+              options={[
+                { value: 'deepseek', label: 'DeepSeek' },
+                { value: 'ollama', label: 'Ollama' }
+              ]}
+              onChange={(v) => onSettingsProviderChange(v as ModelProviderId)}
+            />
           </Form.Item>
           <Form.Item name="baseUrl" label="Base URL" rules={[{ required: true }]}>
-            <Input placeholder="如 https://api.deepseek.com/v1" />
+            <Input placeholder="DeepSeek: https://api.deepseek.com；Ollama: http://127.0.0.1:11434" />
           </Form.Item>
           <Form.Item name="model" label="Model" rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="apiKey" label="API Key" rules={[{ required: true }]} hasFeedback>
-            <Input.Password autoComplete="off" placeholder="仅保存在本机" />
+          <Form.Item noStyle shouldUpdate={(prev, cur) => prev.provider !== cur.provider}>
+            {() => {
+              const p = form.getFieldValue('provider') as ModelProviderId
+              if (p === 'ollama') return null
+              return (
+                <Form.Item
+                  name="apiKey"
+                  label="API Key"
+                  rules={[{ required: true, message: '请先填写 API Key' }]}
+                  hasFeedback
+                >
+                  <Input.Password autoComplete="off" placeholder="仅保存在本机" />
+                </Form.Item>
+              )
+            }}
           </Form.Item>
           <Form.Item name="maxConcurrentStreams" label="最大并行流">
             <InputNumber min={1} max={8} className="app-settings-number" />
