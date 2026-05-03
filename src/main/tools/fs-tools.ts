@@ -181,3 +181,74 @@ export async function searchWorkspace(
     ? results.join('\n\n')
     : `未找到含 "${query}" 的文本文件（已扫描，最多 ${maxFiles} 个匹配文件）`
 }
+
+const GLOB_EXCLUDE = [
+  '**/node_modules/**',
+  '**/.git/**',
+  '**/dist/**',
+  '**/out/**',
+  '**/release/**',
+  '**/.next/**',
+  '**/coverage/**'
+] as const
+
+/**
+ * 在工作区根下按文件名 glob 查找**文件**（不含目录）。pattern 为相对工作区的 Node glob。
+ */
+export async function globFilesTool(
+  workspace: string,
+  pattern: string,
+  options?: { maxFiles?: number }
+): Promise<string> {
+  const root = ensureWorkspaceExists(workspace)
+  const pat = pattern.trim()
+  if (!pat) {
+    return 'pattern 为空'
+  }
+  const norm = pat.replace(/\\/g, '/')
+  if (path.isAbsolute(pat)) {
+    return '请使用相对工作区根的 glob 模式（不要用绝对路径）'
+  }
+  if (norm.split('/').some((seg) => seg === '..')) {
+    return 'pattern 中不得包含 .. 段'
+  }
+
+  const maxFiles = Math.min(Math.max(options?.maxFiles ?? 200, 1), 500)
+  const results: string[] = []
+
+  try {
+    const iter = fs.glob(pat, {
+      cwd: root,
+      exclude: [...GLOB_EXCLUDE]
+    })
+    for await (const entry of iter) {
+      if (results.length >= maxFiles) {
+        break
+      }
+      const abs = path.resolve(root, entry)
+      const relToRoot = path.relative(root, abs)
+      if (relToRoot.startsWith('..') || path.isAbsolute(relToRoot)) {
+        continue
+      }
+      try {
+        const st = await fs.stat(abs)
+        if (!st.isFile()) {
+          continue
+        }
+      } catch {
+        continue
+      }
+      results.push(relToRoot.split(path.sep).join('/'))
+    }
+  } catch (e) {
+    return `glob 失败: ${(e as Error).message}`
+  }
+
+  results.sort()
+  if (!results.length) {
+    return `未匹配到文件: ${pattern}`
+  }
+  const truncated = results.length >= maxFiles
+  const suffix = truncated ? `\n（最多返回 ${maxFiles} 条，已截断）` : ''
+  return results.join('\n') + suffix
+}
