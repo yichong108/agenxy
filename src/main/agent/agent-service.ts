@@ -207,6 +207,54 @@ function parseFileToolHint(text: string): FileToolHint | null {
   return null
 }
 
+/** 无原生 tool calling 时的纯对话流式（不调用 bindTools，避免 Ollama 返回 does not support tools） */
+async function invokeChatOnlyStream(
+  settings: AppSettings,
+  session: SessionRuntime,
+  root: string,
+  skillHint: string,
+  ac: AbortController,
+  batcher: StreamBatcher,
+  timeoutMs: number
+): Promise<number> {
+  const model = createLanguageModel(settings)
+  const chatNotice =
+    '【运行模式】当前未启用工作区工具（模型不支持 function calling 或未在设置中打开）：不得调用 read_file、write_file、list_dir、search_workspace、run_terminal 及任何 skill_*；请用纯文本协助用户（可做步骤说明、命令示例与代码片段）。'
+  const systemText = [buildSystemPrompt(root), skillHint, chatNotice].filter(Boolean).join('\n\n')
+  const llmMessages = [new SystemMessage(systemText), ...session.messages]
+  let streamedChars = 0
+  let full = ''
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      ac.abort()
+      reject(new Error(`对话生成超时（>${timeoutMs}ms），已中止`))
+    }, timeoutMs)
+  })
+  try {
+    await Promise.race([
+      (async () => {
+        const stream = await model.stream(llmMessages, { signal: ac.signal })
+        for await (const chunk of stream) {
+          const piece = contentToText((chunk as { content?: unknown }).content)
+          if (piece) {
+            full += piece
+            streamedChars += piece.length
+            batcher.push(piece)
+          }
+        }
+      })(),
+      timeoutPromise
+    ])
+    if (full.trim()) {
+      session.messages.push(new AIMessage(full))
+    }
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+  return streamedChars
+}
+
 async function invokeAgentWithGuard(
   agent: ReturnType<typeof createReactAgent>,
   messages: BaseMessage[],
@@ -557,58 +605,55 @@ export async function runUserMessage(
     const batcher = new StreamBatcher(settings.streamFlushMs, settings.streamFlushChars, (t) => {
       emit({ type: 'text-delta', sessionId, text: t, runId, traceId })
     })
-    const { tools, skillHint } = await makeTools(
-      sessionId,
-      root,
-      settings,
-      { runId, traceId },
-      onTool
-    )
-    const model = createLanguageModel(settings).bindTools(tools as never[])
+    const profile = getActiveProviderProfile(settings)
     session.messages.push(new HumanMessage(userText))
     persistSessionMessages(session.workspaceId, sessionId, session.messages)
-    const baseSystem = buildSystemPrompt(root)
-    const fileToolInstruction =
-      mustUseToolFirst && fileToolHint
-        ? fileToolHint.type === 'read'
-          ? `当前用户请求属于文件读取。你必须先调用 read_file 工具后再给最终回答。可参考路径: ${fileToolHint.pathHint}`
-          : `当前用户请求属于目录查看。你必须先调用 list_dir 工具后再给最终回答。可参考路径: ${fileToolHint.pathHint}，可参考 depth: ${fileToolHint.depthHint ?? 2}`
-        : ''
-    const runPrompt = [baseSystem, skillHint, fileToolInstruction].filter(Boolean).join('\n')
-    const agent = createReactAgent({
-      llm: model,
-      tools: tools as never[],
-      prompt: runPrompt
-    })
 
-    // ReAct 流程
-    // 先模型思考 <-> 调用工具 循环，直到模型思考结束或工具调用结束
-    // human in the loop, 人可能也是工具调用的其中一环
     try {
       let streamedChars = 0
-      const result = await invokeAgentWithGuard(
-        agent,
-        session.messages,
-        ac,
-        (token) => {
-          streamedChars += token.length
-          batcher.push(token)
-        },
-        { recursionLimit, timeoutMs: invokeTimeoutMs }
-      )
-      const maybeMessages = (result as { messages?: BaseMessage[] }).messages
-      if (Array.isArray(maybeMessages) && maybeMessages.length > 0) {
-        session.messages = maybeMessages
-      }
-      if (mustUseToolFirst && !hasToolCall) {
-        session.messages.push(
-          new HumanMessage(
-            fileToolHint?.type === 'read'
-              ? `请先调用 read_file 读取文件后再回答。参考路径: ${fileToolHint.pathHint}`
-              : `请先调用 list_dir 列出目录后再回答。参考路径: ${fileToolHint?.pathHint ?? '.'}`
-          )
+
+      if (!profile.enableTools) {
+        const noopTool: (e: ToolTimelineEvent) => void = () => {}
+        const skillBundle = await buildSkillBundle({
+          root,
+          termKey: session.terminalKey,
+          settings,
+          runCtx: { runId, traceId },
+          onTool: noopTool
+        })
+        streamedChars = await invokeChatOnlyStream(
+          settings,
+          session,
+          root,
+          skillBundle.hint,
+          ac,
+          batcher,
+          invokeTimeoutMs
         )
-        const retryResult = await invokeAgentWithGuard(
+      } else {
+        const { tools, skillHint } = await makeTools(
+          sessionId,
+          root,
+          settings,
+          { runId, traceId },
+          onTool
+        )
+        const model = createLanguageModel(settings).bindTools(tools as never[])
+        const baseSystem = buildSystemPrompt(root)
+        const fileToolInstruction =
+          mustUseToolFirst && fileToolHint
+            ? fileToolHint.type === 'read'
+              ? `当前用户请求属于文件读取。你必须先调用 read_file 工具后再给最终回答。可参考路径: ${fileToolHint.pathHint}`
+              : `当前用户请求属于目录查看。你必须先调用 list_dir 工具后再给最终回答。可参考路径: ${fileToolHint.pathHint}，可参考 depth: ${fileToolHint.depthHint ?? 2}`
+            : ''
+        const runPrompt = [baseSystem, skillHint, fileToolInstruction].filter(Boolean).join('\n')
+        const agent = createReactAgent({
+          llm: model,
+          tools: tools as never[],
+          prompt: runPrompt
+        })
+
+        const result = await invokeAgentWithGuard(
           agent,
           session.messages,
           ac,
@@ -618,11 +663,35 @@ export async function runUserMessage(
           },
           { recursionLimit, timeoutMs: invokeTimeoutMs }
         )
-        const retryMessages = (retryResult as { messages?: BaseMessage[] }).messages
-        if (Array.isArray(retryMessages) && retryMessages.length > 0) {
-          session.messages = retryMessages
+        const maybeMessages = (result as { messages?: BaseMessage[] }).messages
+        if (Array.isArray(maybeMessages) && maybeMessages.length > 0) {
+          session.messages = maybeMessages
+        }
+        if (mustUseToolFirst && !hasToolCall) {
+          session.messages.push(
+            new HumanMessage(
+              fileToolHint?.type === 'read'
+                ? `请先调用 read_file 读取文件后再回答。参考路径: ${fileToolHint.pathHint}`
+                : `请先调用 list_dir 列出目录后再回答。参考路径: ${fileToolHint?.pathHint ?? '.'}`
+            )
+          )
+          const retryResult = await invokeAgentWithGuard(
+            agent,
+            session.messages,
+            ac,
+            (token) => {
+              streamedChars += token.length
+              batcher.push(token)
+            },
+            { recursionLimit, timeoutMs: invokeTimeoutMs }
+          )
+          const retryMessages = (retryResult as { messages?: BaseMessage[] }).messages
+          if (Array.isArray(retryMessages) && retryMessages.length > 0) {
+            session.messages = retryMessages
+          }
         }
       }
+
       if (streamedChars === 0) {
         const lastAi = [...session.messages]
           .reverse()

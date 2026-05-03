@@ -190,11 +190,22 @@ function normalizeSettings(input: Partial<AppSettings> & LegacyFlatSettings): Ap
     providerProfiles = {
       ...providerProfiles,
       deepseek: {
+        ...providerProfiles.deepseek,
         baseUrl: legacy.baseUrl?.trim() || providerProfiles.deepseek.baseUrl,
         model: legacy.model?.trim() || providerProfiles.deepseek.model,
         apiKey: typeof legacy.apiKey === 'string' ? legacy.apiKey : providerProfiles.deepseek.apiKey
       }
     }
+  }
+
+  const finalizeProfile = (p: ProviderProfile, id: ModelProviderId): ProviderProfile => ({
+    ...p,
+    enableTools:
+      typeof p.enableTools === 'boolean' ? p.enableTools : id === 'ollama' ? false : true
+  })
+  providerProfiles = {
+    deepseek: finalizeProfile(providerProfiles.deepseek, 'deepseek'),
+    ollama: finalizeProfile(providerProfiles.ollama, 'ollama')
   }
 
   const provider: ModelProviderId = inputRest.provider === 'ollama' ? 'ollama' : 'deepseek'
