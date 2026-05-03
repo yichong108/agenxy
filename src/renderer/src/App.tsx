@@ -1040,6 +1040,13 @@ export function App() {
           <Form.Item name="maxTerminalOutputChars" label="终端输出最大字符">
             <InputNumber min={1} max={1000} className="app-settings-number" />
           </Form.Item>
+          <Form.Item
+            name="tavilyApiKey"
+            label="Tavily API Key（联网搜索）"
+            extra="选填。填写后模型可调用 web_search；注册 https://tavily.com 。也可通过环境变量 TAVILY_API_KEY 提供（不设此项时）。"
+          >
+            <Input.Password autoComplete="off" placeholder="留空则不启用联网搜索" />
+          </Form.Item>
         </Form>
       </Modal>
 

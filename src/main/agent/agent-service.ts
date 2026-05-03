@@ -24,6 +24,7 @@ import {
   writeFileTool
 } from '../tools/fs-tools.js'
 import { runCommand, killCommand } from '../tools/terminal.js'
+import { isTavilyConfigured, tavilyWebSearch } from '../tools/web-search.js'
 
 import { StreamBatcher } from './batcher.js'
 import { ConcurrencyQueue } from './queue.js'
@@ -168,14 +169,22 @@ function createLanguageModel(settings: AppSettings) {
   })
 }
 
-function buildSystemPrompt(root: string): string {
+function buildSystemPrompt(root: string, settings: AppSettings): string {
+  const web = isTavilyConfigured(settings.tavilyApiKey)
+  const toolLine = web
+    ? 'read_file, write_file, delete_file, list_dir, glob, search_workspace, shell, web_search（Tavily 联网）'
+    : 'read_file, write_file, delete_file, list_dir, glob, search_workspace, shell（未配置 Tavily API Key 时无 web_search）'
+  const webRule = web
+    ? '- 用户询问**天气、气温、降雨、实时新闻、股价、政策**等需要站外最新信息时，必须先调用 **web_search** 再作答；不得凭记忆编造当日天气或「搜索失败」类说辞。'
+    : '- 当前**未**配置 Tavily，没有 web_search：若用户要今日天气等实时信息，请明确告知在应用「设置」中填写「Tavily API Key」或配置环境变量 TAVILY_API_KEY，并可建议中国天气网、手机天气 App；不要谎称「搜索引擎坏了」或「网络搜索功能不可用」。'
   return `你是协助办公与软件开发的智能体。工作区根目录: ${root}。
 - 在工具中使用**相对工作区根**的路径（如 src/index.ts），不要使用 ../ 尝试逃出工作区。
-- 可调用工具: read_file, write_file, delete_file, list_dir, glob, search_workspace, shell，以及若干 skill_* 技能工具。
+- 可调用工具: ${toolLine}，以及若干 skill_* 技能工具。
 - shell 在沙盒目录（工作区根）下执行 shell 命令，等待进程结束后返回 stdout/stderr。Windows 为 cmd 风格。
 - 当用户要求“查看/读取工作区文件”或“列出目录”时，优先调用 read_file/list_dir 再回答。
 - 当用户明确要求删除工作区内的某个文件时，使用 delete_file（仅删普通文件，不删目录）。
 - 按文件名/路径模式找文件时用 glob（如 **/*.ts），按文件内容找子串时用 search_workspace。
+${webRule}
 - 回答简洁、可执行；修改代码前先 read/list。`
 }
 
@@ -227,9 +236,13 @@ async function invokeChatOnlyStream(
   timeoutMs: number
 ): Promise<number> {
   const model = createLanguageModel(settings)
+  const webHint =
+    ' 若用户要天气、新闻等实时信息：如实说明当前为「纯对话模式」无法调用工具；请其（1）在「设置」填写 Tavily API Key（或环境变量 TAVILY_API_KEY），（2）使用 DeepSeek 或对 Ollama 打开「启用工作区工具」。'
   const chatNotice =
-    '【运行模式】当前未启用工作区工具（模型不支持 function calling 或未在设置中打开）：不得调用 read_file、write_file、delete_file、list_dir、glob、search_workspace、shell 及任何 skill_*；请用纯文本协助用户（可做步骤说明、命令示例与代码片段）。'
-  const systemText = [buildSystemPrompt(root), skillHint, chatNotice].filter(Boolean).join('\n\n')
+    '【运行模式】当前未启用工作区工具（模型不支持 function calling 或未在设置中打开）：不得调用 read_file、write_file、delete_file、list_dir、glob、search_workspace、shell、web_search 及任何 skill_*；请用纯文本协助用户（可做步骤说明、命令示例与代码片段）。' +
+    ' 勿编造「网络搜索不可用」「搜索引擎故障」等理由；应如实说明是未开启工具或未配置 Tavily。' +
+    webHint
+  const systemText = [buildSystemPrompt(root, settings), skillHint, chatNotice].filter(Boolean).join('\n\n')
   const llmMessages = [new SystemMessage(systemText), ...session.messages]
   let streamedChars = 0
   let full = ''
@@ -561,6 +574,53 @@ async function makeTools(
       }
     )
   ]
+  const webSearchTools = isTavilyConfigured(settings.tavilyApiKey)
+    ? [
+        tool(
+          async ({ query, max_results }) => {
+            const id = `web-${Date.now()}`
+            const startedAt = Date.now()
+            const arg =
+              max_results != null && max_results !== 5 ? `${query} (max=${max_results})` : query
+            onTool({
+              kind: 'tool',
+              id,
+              name: 'web_search',
+              status: 'start',
+              args: arg,
+              runId: runCtx.runId,
+              traceId: runCtx.traceId,
+              timestampMs: startedAt
+            })
+            const r = await tavilyWebSearch(query, {
+              maxResults: max_results,
+              apiKey: settings.tavilyApiKey
+            })
+            onTool({
+              kind: 'tool',
+              id,
+              name: 'web_search',
+              status: 'end',
+              result: r.slice(0, 12_000),
+              runId: runCtx.runId,
+              traceId: runCtx.traceId,
+              timestampMs: Date.now(),
+              durationMs: Date.now() - startedAt
+            })
+            return r
+          },
+          {
+            name: 'web_search',
+            description:
+              '使用 Tavily 检索互联网公开网页（天气、新闻、文档等）。search_workspace 只搜工作区代码；需要站外最新信息时必须调用本工具。',
+            schema: z.object({
+              query: z.string(),
+              max_results: z.number().int().min(1).max(20).optional()
+            })
+          }
+        )
+      ]
+    : []
   const skillBundle = await buildSkillBundle({
     root,
     termKey,
@@ -568,7 +628,7 @@ async function makeTools(
     runCtx,
     onTool
   })
-  const tools = [...baseTools, ...skillBundle.tools] as unknown as NamedTool[]
+  const tools = [...baseTools, ...webSearchTools, ...skillBundle.tools] as unknown as NamedTool[]
   const byName = new Map<string, NamedTool>(tools.map((x) => [x.name, x as NamedTool]))
   return { tools, byName, skillHint: skillBundle.hint }
 }
@@ -722,7 +782,7 @@ export async function runUserMessage(
           onTool
         )
         const model = createLanguageModel(settings).bindTools(tools as never[])
-        const baseSystem = buildSystemPrompt(root)
+        const baseSystem = buildSystemPrompt(root, settings)
         const fileToolInstruction =
           mustUseToolFirst && fileToolHint
             ? fileToolHint.type === 'read'

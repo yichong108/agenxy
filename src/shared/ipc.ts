@@ -64,6 +64,8 @@ export type AppSettings = {
   maxAgentLoopSteps: number
   /** 单次 agent 运行超时（毫秒） */
   agentRunTimeoutMs: number
+  /** Tavily 联网搜索 API Key（https://tavily.com），空则禁用检索能力 */
+  tavilyApiKey: string
 }
 
 export const defaultProviderProfiles = (): Record<ModelProviderId, ProviderProfile> => ({
@@ -89,7 +91,8 @@ export const defaultSettings: AppSettings = {
   streamFlushChars: 320,
   maxTerminalOutputChars: 1_000,
   maxAgentLoopSteps: 24,
-  agentRunTimeoutMs: 120_000
+  agentRunTimeoutMs: 120_000,
+  tavilyApiKey: ''
 }
 
 /** 当前选中提供方的连接配置 */
@@ -106,6 +109,7 @@ export type SettingsFormValues = Pick<
   | 'maxTerminalOutputChars'
   | 'maxAgentLoopSteps'
   | 'agentRunTimeoutMs'
+  | 'tavilyApiKey'
 > & {
   provider: ModelProviderId
   baseUrl: string
@@ -128,7 +132,8 @@ export function settingsToFormValues(s: AppSettings): SettingsFormValues {
     streamFlushChars: s.streamFlushChars,
     maxTerminalOutputChars: s.maxTerminalOutputChars,
     maxAgentLoopSteps: s.maxAgentLoopSteps,
-    agentRunTimeoutMs: s.agentRunTimeoutMs
+    agentRunTimeoutMs: s.agentRunTimeoutMs,
+    tavilyApiKey: s.tavilyApiKey ?? ''
   }
 }
 
@@ -164,7 +169,8 @@ export function applySettingsForm(
     streamFlushChars: form.streamFlushChars,
     maxTerminalOutputChars: form.maxTerminalOutputChars,
     maxAgentLoopSteps: form.maxAgentLoopSteps,
-    agentRunTimeoutMs: form.agentRunTimeoutMs
+    agentRunTimeoutMs: form.agentRunTimeoutMs,
+    tavilyApiKey: (form.tavilyApiKey ?? '').trim()
   }
 }
 

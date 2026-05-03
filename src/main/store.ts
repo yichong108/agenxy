@@ -220,7 +220,9 @@ function normalizeSettings(input: Partial<AppSettings> & LegacyFlatSettings): Ap
     streamFlushChars: inputRest.streamFlushChars ?? defaults.streamFlushChars,
     maxTerminalOutputChars: inputRest.maxTerminalOutputChars ?? defaults.maxTerminalOutputChars,
     maxAgentLoopSteps: inputRest.maxAgentLoopSteps ?? defaults.maxAgentLoopSteps,
-    agentRunTimeoutMs: inputRest.agentRunTimeoutMs ?? defaults.agentRunTimeoutMs
+    agentRunTimeoutMs: inputRest.agentRunTimeoutMs ?? defaults.agentRunTimeoutMs,
+    tavilyApiKey:
+      typeof inputRest.tavilyApiKey === 'string' ? inputRest.tavilyApiKey : defaults.tavilyApiKey
   }
 
   return {
