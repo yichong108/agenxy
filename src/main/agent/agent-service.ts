@@ -164,8 +164,8 @@ function createLanguageModel(settings: AppSettings) {
 function buildSystemPrompt(root: string): string {
   return `你是协助办公与软件开发的智能体。工作区根目录: ${root}。
 - 在工具中使用**相对工作区根**的路径（如 src/index.ts），不要使用 ../ 尝试逃出工作区。
-- 可调用工具: read_file, write_file, list_dir, search_workspace, run_terminal，以及若干 skill_* 技能工具。
-- run_terminal 在沙盒目录（工作区根）下执行 shell 命令。Windows 为 cmd 风格。
+- 可调用工具: read_file, write_file, list_dir, search_workspace, shell，以及若干 skill_* 技能工具。
+- shell 在沙盒目录（工作区根）下执行 shell 命令，等待进程结束后返回 stdout/stderr。Windows 为 cmd 风格。
 - 当用户要求“查看/读取工作区文件”或“列出目录”时，优先调用 read_file/list_dir 再回答。
 - 回答简洁、可执行；修改代码前先 read/list。`
 }
@@ -219,7 +219,7 @@ async function invokeChatOnlyStream(
 ): Promise<number> {
   const model = createLanguageModel(settings)
   const chatNotice =
-    '【运行模式】当前未启用工作区工具（模型不支持 function calling 或未在设置中打开）：不得调用 read_file、write_file、list_dir、search_workspace、run_terminal 及任何 skill_*；请用纯文本协助用户（可做步骤说明、命令示例与代码片段）。'
+    '【运行模式】当前未启用工作区工具（模型不支持 function calling 或未在设置中打开）：不得调用 read_file、write_file、list_dir、search_workspace、shell 及任何 skill_*；请用纯文本协助用户（可做步骤说明、命令示例与代码片段）。'
   const systemText = [buildSystemPrompt(root), skillHint, chatNotice].filter(Boolean).join('\n\n')
   const llmMessages = [new SystemMessage(systemText), ...session.messages]
   let streamedChars = 0
@@ -450,7 +450,7 @@ async function makeTools(
         onTool({
           kind: 'tool',
           id,
-          name: 'run_terminal',
+          name: 'shell',
           status: 'start',
           args: command,
           runId: runCtx.runId,
@@ -461,7 +461,7 @@ async function makeTools(
         onTool({
           kind: 'tool',
           id,
-          name: 'run_terminal',
+          name: 'shell',
           status: 'end',
           result: r.slice(0, 4_000),
           runId: runCtx.runId,
@@ -472,8 +472,9 @@ async function makeTools(
         return r
       },
       {
-        name: 'run_terminal',
-        description: '在工作区根目录执行一条 shell 命令',
+        name: 'shell',
+        description:
+          '在工作区根目录执行一条 shell 命令并等待完成，返回合并的 stdout/stderr（长输出会被截断）。用于安装依赖、构建、测试、git 等。',
         schema: z.object({ command: z.string() })
       }
     )
