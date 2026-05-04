@@ -361,7 +361,7 @@ function makeSkillHint(defs: SkillDefinition[]): string {
   if (!defs.length) return ''
   const top = defs.slice(0, 20)
   const lines = top.map((item) => `- ${item.name}: ${item.description} (source: ${item.source})`)
-  return `可用技能工具（自动调用）:\n${lines.join('\n')}\n当用户意图匹配技能描述时，优先调用对应 skill 工具。`
+  return `可用技能工具（自动调用）:\n${lines.join('\n')}\n当用户意图与上述任一描述相关时，必须先调用对应 skill_* 工具（可传 question 概括用户诉求），再按需使用其它工具；不要在未调用匹配 skill 的情况下用通用工具替代。`
 }
 
 function toTool(def: SkillDefinition, ctx: SkillToolContext): SkillTool {

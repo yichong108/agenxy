@@ -190,6 +190,7 @@ function buildSystemPrompt(root: string, settings: AppSettings): string {
   return `你是协助办公与软件开发的智能体。工作区根目录: ${root}。
 - 在工具中使用**相对工作区根**的路径（如 src/index.ts），不要使用 ../ 尝试逃出工作区。
 - 可调用工具: ${toolLine}，以及若干 skill_* 技能工具。${mcpNote}
+- **优先使用 skill_***：当用户意图与某个 skill 工具的描述明显相关时，必须先调用该 skill 获取流程、约束或产出，再按需组合 read_file、list_dir、search_workspace、shell、mcp_* 等；不要跳过匹配的 skill 直接用通用工具猜测。
 - shell 在沙盒目录（工作区根）下执行 shell 命令，等待进程结束后返回 stdout/stderr。Windows 为 cmd 风格。
 - 当用户要求“查看/读取工作区文件”或“列出目录”时，优先调用 read_file/list_dir 再回答。
 - 当用户明确要求删除工作区内的某个文件时，使用 delete_file（仅删普通文件，不删目录）。
@@ -650,9 +651,9 @@ async function makeTools(
     onTool
   )
   const tools = [
+    ...skillBundle.tools,
     ...baseTools,
     ...webSearchTools,
-    ...skillBundle.tools,
     ...mcpTools
   ] as unknown as NamedTool[]
   const byName = new Map<string, NamedTool>(tools.map((x) => [x.name, x as NamedTool]))
@@ -811,7 +812,7 @@ export async function runUserMessage(
           { runId, traceId },
           onTool
         )
-        
+
         const model = createLanguageModel(settings).bindTools(tools as never[])
         const baseSystem = buildSystemPrompt(root, settings)
         const fileToolInstruction =
@@ -823,6 +824,8 @@ export async function runUserMessage(
         const runPrompt = [baseSystem, skillHint, mcpContextHints, fileToolInstruction]
           .filter(Boolean)
           .join('\n\n')
+
+        console.log('runPrompt', runPrompt)
 
         // 创建Agent
         const agent = createReactAgent({
