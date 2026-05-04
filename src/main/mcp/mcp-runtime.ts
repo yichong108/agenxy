@@ -107,6 +107,62 @@ export async function probeMcpServer(entry: McpServerEntry): Promise<McpProbeRes
 
 type RunCtx = { runId: string; traceId: string }
 
+const MAX_MCP_INSTRUCTIONS_CHARS = 12_000
+const MAX_MCP_PROMPTS_LIST = 40
+
+/** 单次连接内收集 MCP 在 initialize 中给出的 instructions，以及 prompts 列表（名称与说明），供拼入系统提示 */
+async function gatherMcpClientHints(client: Client, srv: McpServerEntry): Promise<string> {
+  const sections: string[] = []
+  const instr = client.getInstructions()?.trim()
+  if (instr) {
+    sections.push(
+      `**服务端指令（instructions）**\n${instr.slice(0, MAX_MCP_INSTRUCTIONS_CHARS)}${instr.length > MAX_MCP_INSTRUCTIONS_CHARS ? '\n…(已截断)' : ''}`
+    )
+  }
+  try {
+    const { prompts } = await client.listPrompts()
+    if (prompts?.length) {
+      const lines = prompts.slice(0, MAX_MCP_PROMPTS_LIST).map((p) => {
+        const desc = p.description?.trim()
+        return `- \`${p.name}\`${desc ? ` — ${desc}` : ''}`
+      })
+      const more =
+        prompts.length > MAX_MCP_PROMPTS_LIST
+          ? `\n… 另有 ${prompts.length - MAX_MCP_PROMPTS_LIST} 个未列出`
+          : ''
+      sections.push(
+        [
+          '**服务端注册的提示模板（仅索引；展开内容需宿主调用 getPrompt）**',
+          `${lines.join('\n')}${more}`
+        ].join('\n')
+      )
+    }
+  } catch {
+    // 未实现 prompts 能力的服务器会失败，忽略即可
+  }
+  if (!sections.length) return ''
+  return `### ${srv.name}（id: ${srv.id}）\n${sections.join('\n\n')}`
+}
+
+/** 在未构建工具时单独拉取各 MCP 的 instructions / prompts 索引，供纯对话模式注入上下文 */
+export async function collectMcpServerContextHints(settings: AppSettings): Promise<string> {
+  const servers = (settings.mcpServers ?? []).filter((s) => s.enabled && s.command.trim())
+  const blocks: string[] = []
+  for (const srv of servers) {
+    try {
+      await withMcpClient(srv, async (client) => {
+        const block = await gatherMcpClientHints(client, srv)
+        if (block) blocks.push(block)
+      })
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      console.warn(`[mcp] 收集服务端提示失败 ${srv.name} (${srv.id}): ${message}`)
+    }
+  }
+  if (!blocks.length) return ''
+  return `## MCP 服务端上下文（initialize instructions / prompts 索引）\n\n${blocks.join('\n\n---\n\n')}`
+}
+
 function truncateSchema(schema: unknown, max = 1800): string {
   try {
     const s = JSON.stringify(schema)
@@ -117,17 +173,20 @@ function truncateSchema(schema: unknown, max = 1800): string {
   }
 }
 
-/** 为已启用的 MCP 服务器生成 LangChain 工具（每次调用会拉起子进程连接） */
+/** 为已启用的 MCP 服务器生成 LangChain 工具（每次调用会拉起子进程连接）；同一次连接内附带服务端 instructions / prompts 索引文本 */
 export async function buildMcpLangChainTools(
   settings: AppSettings,
   runCtx: RunCtx,
   onTool: (e: ToolTimelineEvent) => void
-): Promise<ReturnType<typeof tool>[]> {
+): Promise<{ tools: ReturnType<typeof tool>[]; contextHints: string }> {
   const servers = (settings.mcpServers ?? []).filter((s) => s.enabled && s.command.trim())
   const out: ReturnType<typeof tool>[] = [] as ReturnType<typeof tool>[]
+  const hintBlocks: string[] = []
   for (const srv of servers) {
     try {
       await withMcpClient(srv, async (client) => {
+        const hint = await gatherMcpClientHints(client, srv)
+        if (hint) hintBlocks.push(hint)
         const { tools: listed } = await client.listTools()
         let idx = 0
         for (const t of listed ?? []) {
@@ -207,5 +266,8 @@ export async function buildMcpLangChainTools(
       console.warn(`[mcp] 跳过服务器 ${srv.name} (${srv.id}): ${message}`)
     }
   }
-  return out
+  const contextHints = hintBlocks.length
+    ? `## MCP 服务端上下文（initialize instructions / prompts 索引）\n\n${hintBlocks.join('\n\n---\n\n')}`
+    : ''
+  return { tools: out, contextHints }
 }

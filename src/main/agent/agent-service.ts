@@ -14,7 +14,7 @@ import {
   type ToolTimelineEvent,
   getActiveProviderProfile
 } from '../../shared/ipc.js'
-import { buildMcpLangChainTools } from '../mcp/mcp-runtime.js'
+import { buildMcpLangChainTools, collectMcpServerContextHints } from '../mcp/mcp-runtime.js'
 import { getSessionMessages, getSettings, getWorkspaceById, setSessionMessages } from '../store.js'
 import {
   deleteFileTool,
@@ -24,7 +24,6 @@ import {
   searchWorkspace,
   writeFileTool
 } from '../tools/fs-tools.js'
-import { buildMcpAdminTools } from '../tools/mcp-admin-tools.js'
 import { runCommand, killCommand } from '../tools/terminal.js'
 import { isTavilyConfigured, tavilyWebSearch } from '../tools/web-search.js'
 
@@ -242,6 +241,7 @@ async function invokeChatOnlyStream(
   session: SessionRuntime,
   root: string,
   skillHint: string,
+  mcpContextHints: string,
   ac: AbortController,
   batcher: StreamBatcher,
   timeoutMs: number
@@ -250,10 +250,10 @@ async function invokeChatOnlyStream(
   const webHint =
     ' 若用户要天气、新闻等实时信息：如实说明当前为「纯对话模式」无法调用工具；请其（1）在「设置」填写 Tavily API Key（或环境变量 TAVILY_API_KEY），（2）使用 DeepSeek 或对 Ollama 打开「启用工作区工具」。'
   const chatNotice =
-    '【运行模式】当前未启用工作区工具（模型不支持 function calling 或未在设置中打开）：不得调用 read_file、write_file、delete_file、list_dir、glob、search_workspace、shell、web_search 及任何 skill_*；请用纯文本协助用户（可做步骤说明、命令示例与代码片段）。' +
+    '【运行模式】当前未启用工作区工具（模型不支持 function calling 或未在设置中打开）：不得调用 read_file、write_file、delete_file、list_dir、glob、search_workspace、shell、web_search、任何 skill_* 及任何 mcp_* 工具；请用纯文本协助用户（可做步骤说明、命令示例与代码片段）。' +
     ' 勿编造「网络搜索不可用」「搜索引擎故障」等理由；应如实说明是未开启工具或未配置 Tavily。' +
     webHint
-  const systemText = [buildSystemPrompt(root, settings), skillHint, chatNotice]
+  const systemText = [buildSystemPrompt(root, settings), skillHint, mcpContextHints, chatNotice]
     .filter(Boolean)
     .join('\n\n')
   const llmMessages = [new SystemMessage(systemText), ...session.messages]
@@ -330,6 +330,9 @@ async function invokeAgentWithGuard(
   }
 }
 
+/**
+ * 创建工具
+ */
 async function makeTools(
   sessionId: string,
   root: string,
@@ -641,17 +644,19 @@ async function makeTools(
     runCtx,
     onTool
   })
-  const mcpAdminTools = buildMcpAdminTools(settings, runCtx, onTool)
-  const mcpTools = await buildMcpLangChainTools(settings, runCtx, onTool)
+  const { tools: mcpTools, contextHints: mcpContextHints } = await buildMcpLangChainTools(
+    settings,
+    runCtx,
+    onTool
+  )
   const tools = [
     ...baseTools,
     ...webSearchTools,
     ...skillBundle.tools,
-    ...mcpAdminTools,
     ...mcpTools
   ] as unknown as NamedTool[]
   const byName = new Map<string, NamedTool>(tools.map((x) => [x.name, x as NamedTool]))
-  return { tools, byName, skillHint: skillBundle.hint }
+  return { tools, byName, skillHint: skillBundle.hint, mcpContextHints }
 }
 
 function contentToText(content: unknown): string {
@@ -778,24 +783,28 @@ export async function runUserMessage(
 
       if (!profile.enableTools) {
         const noopTool: (e: ToolTimelineEvent) => void = () => {}
-        const skillBundle = await buildSkillBundle({
-          root,
-          termKey: session.terminalKey,
-          settings,
-          runCtx: { runId, traceId },
-          onTool: noopTool
-        })
+        const [skillBundle, mcpContextHints] = await Promise.all([
+          buildSkillBundle({
+            root,
+            termKey: session.terminalKey,
+            settings,
+            runCtx: { runId, traceId },
+            onTool: noopTool
+          }),
+          collectMcpServerContextHints(settings)
+        ])
         streamedChars = await invokeChatOnlyStream(
           settings,
           session,
           root,
           skillBundle.hint,
+          mcpContextHints,
           ac,
           batcher,
           invokeTimeoutMs
         )
       } else {
-        const { tools, skillHint } = await makeTools(
+        const { tools, skillHint, mcpContextHints } = await makeTools(
           sessionId,
           root,
           settings,
@@ -810,7 +819,9 @@ export async function runUserMessage(
               ? `当前用户请求属于文件读取。你必须先调用 read_file 工具后再给最终回答。可参考路径: ${fileToolHint.pathHint}`
               : `当前用户请求属于目录查看。你必须先调用 list_dir 工具后再给最终回答。可参考路径: ${fileToolHint.pathHint}，可参考 depth: ${fileToolHint.depthHint ?? 2}`
             : ''
-        const runPrompt = [baseSystem, skillHint, fileToolInstruction].filter(Boolean).join('\n')
+        const runPrompt = [baseSystem, skillHint, mcpContextHints, fileToolInstruction]
+          .filter(Boolean)
+          .join('\n\n')
 
         // 创建Agent
         const agent = createReactAgent({
