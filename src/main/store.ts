@@ -9,7 +9,9 @@ import {
   defaultRendererUiState,
   defaultWorkspaceUiState,
   defaultSettings,
+  parseMcpServersFromUnknown,
   type AppSettings,
+  type McpServerEntry,
   type ModelProviderId,
   type ProviderProfile,
   type ChatMessage,
@@ -160,6 +162,10 @@ type LegacyFlatSettings = {
   model?: string
 }
 
+function normalizeMcpServers(raw: unknown): McpServerEntry[] {
+  return parseMcpServersFromUnknown(raw)
+}
+
 function normalizeSettings(input: Partial<AppSettings> & LegacyFlatSettings): AppSettings {
   const defaults = defaultSettings
   const baseProfiles = defaultProviderProfiles()
@@ -200,8 +206,7 @@ function normalizeSettings(input: Partial<AppSettings> & LegacyFlatSettings): Ap
 
   const finalizeProfile = (p: ProviderProfile, id: ModelProviderId): ProviderProfile => ({
     ...p,
-    enableTools:
-      typeof p.enableTools === 'boolean' ? p.enableTools : id === 'ollama' ? false : true
+    enableTools: typeof p.enableTools === 'boolean' ? p.enableTools : id === 'ollama' ? false : true
   })
   providerProfiles = {
     deepseek: finalizeProfile(providerProfiles.deepseek, 'deepseek'),
@@ -222,7 +227,10 @@ function normalizeSettings(input: Partial<AppSettings> & LegacyFlatSettings): Ap
     maxAgentLoopSteps: inputRest.maxAgentLoopSteps ?? defaults.maxAgentLoopSteps,
     agentRunTimeoutMs: inputRest.agentRunTimeoutMs ?? defaults.agentRunTimeoutMs,
     tavilyApiKey:
-      typeof inputRest.tavilyApiKey === 'string' ? inputRest.tavilyApiKey : defaults.tavilyApiKey
+      typeof inputRest.tavilyApiKey === 'string' ? inputRest.tavilyApiKey : defaults.tavilyApiKey,
+    mcpServers: normalizeMcpServers(
+      inputRest.mcpServers !== undefined ? inputRest.mcpServers : defaults.mcpServers
+    )
   }
 
   return {

@@ -22,7 +22,9 @@ export const IPC = {
   AGENT_CANCEL: 'agent:cancel',
   AGENT_STATUS: 'agent:status',
   DEVTOOLS_TOGGLE: 'devtools:toggle',
-  EXTERNAL_OPEN: 'external:open'
+  EXTERNAL_OPEN: 'external:open',
+  /** 探测 stdio MCP 子进程并列出工具（不落盘） */
+  MCP_PROBE: 'mcp:probe'
 } as const
 
 export const EVENTS = {
@@ -34,6 +36,127 @@ export const EVENTS = {
 } as const
 
 export type ModelProviderId = 'deepseek' | 'ollama'
+
+/** 用户配置的 stdio MCP 服务器（与 Cursor MCP 配置形态相近） */
+export type McpServerEntry = {
+  id: string
+  /** 展示名 */
+  name: string
+  enabled: boolean
+  /** 可执行文件，如 npx、node、uvx */
+  command: string
+  args: string[]
+  /** 子进程工作目录，可选 */
+  cwd?: string
+  /**
+   * 追加环境变量（持久化可为任意 JSON 结构）。
+   * 启动子进程时非字符串值会经 JSON.stringify 转为字符串再传入 OS 环境（与 Node spawn 要求一致）。
+   */
+  env?: Record<string, unknown>
+}
+
+/** 与设置持久化、单次导入共用上限 */
+export const MAX_MCP_SERVERS = 24
+
+function newMcpEntryId(): string {
+  const c = globalThis.crypto
+  if (c && typeof c.randomUUID === 'function') return c.randomUUID()
+  return `mcp-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
+}
+
+function parseMcpEnvFromUnknown(envRaw: unknown): Record<string, unknown> | undefined {
+  let v = envRaw
+  if (typeof v === 'string' && v.trim()) {
+    try {
+      v = JSON.parse(v.trim()) as unknown
+    } catch {
+      return undefined
+    }
+  }
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined
+  const envObj: Record<string, unknown> = {}
+  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+    if (val === undefined) continue
+    envObj[k] = val
+  }
+  return Object.keys(envObj).length > 0 ? envObj : undefined
+}
+
+function parseOneMcpServer(
+  o: Record<string, unknown>,
+  keyName?: string,
+  /** Cursor 风格对象常省略 enabled，默认 true；本应用数组项历史行为为省略则 false */
+  defaultEnabledWhenOmitted = false
+): McpServerEntry | null {
+  const command = typeof o.command === 'string' ? o.command.trim() : ''
+  if (!command) return null
+  const id = typeof o.id === 'string' && o.id.trim() ? o.id.trim() : newMcpEntryId()
+  const nameFromField = typeof o.name === 'string' && o.name.trim() ? o.name.trim() : ''
+  const name = nameFromField || (keyName?.trim() ? keyName.trim() : id)
+  const args = Array.isArray(o.args)
+    ? (o.args as unknown[]).filter((a): a is string => typeof a === 'string')
+    : []
+  const enabled = typeof o.enabled === 'boolean' ? o.enabled : defaultEnabledWhenOmitted
+  const env = parseMcpEnvFromUnknown(o.env)
+  const cwd = typeof o.cwd === 'string' && o.cwd.trim() ? o.cwd.trim() : undefined
+  const entry: McpServerEntry = { id, name, enabled, command, args }
+  if (env) entry.env = env
+  if (cwd) entry.cwd = cwd
+  return entry
+}
+
+/**
+ * 解析 MCP 配置 JSON，支持：
+ * - Cursor 形态：`{ "mcpServers": { "mysql": { "command", "args", "env?", ... } } }`（对象键为展示名）
+ * - 数组形态：`McpServerEntry[]`（与本应用列表一致）
+ * - `{ "mcpServers": [ ... ] }`
+ */
+export function parseMcpServersFromUnknown(raw: unknown): McpServerEntry[] {
+  const out: McpServerEntry[] = []
+  const push = (e: McpServerEntry) => {
+    if (out.length >= MAX_MCP_SERVERS) return
+    out.push(e)
+  }
+
+  if (raw == null) return []
+
+  if (Array.isArray(raw)) {
+    for (const x of raw) {
+      if (!x || typeof x !== 'object') continue
+      const e = parseOneMcpServer(x as Record<string, unknown>, undefined, false)
+      if (e) push(e)
+    }
+    return out
+  }
+
+  if (typeof raw === 'object' && !Array.isArray(raw)) {
+    const root = raw as Record<string, unknown>
+    const ms = root.mcpServers
+    if (ms === undefined) return []
+
+    if (Array.isArray(ms)) {
+      return parseMcpServersFromUnknown(ms)
+    }
+
+    if (typeof ms === 'object' && ms !== null && !Array.isArray(ms)) {
+      for (const [key, val] of Object.entries(ms as Record<string, unknown>)) {
+        if (!val || typeof val !== 'object' || Array.isArray(val)) continue
+        const e = parseOneMcpServer(val as Record<string, unknown>, key, true)
+        if (e) push(e)
+      }
+      return out
+    }
+  }
+
+  return []
+}
+
+export type McpProbeToolInfo = {
+  name: string
+  description?: string
+}
+
+export type McpProbeResult = { ok: true; tools: McpProbeToolInfo[] } | { ok: false; error: string }
 
 /** 单个模型提供方的连接信息（分提供方持久化） */
 export type ProviderProfile = {
@@ -66,6 +189,8 @@ export type AppSettings = {
   agentRunTimeoutMs: number
   /** Tavily 联网搜索 API Key（https://tavily.com），空则禁用检索能力 */
   tavilyApiKey: string
+  /** 已保存的 MCP（stdio）服务器列表；启用项会在 Agent 工具流中挂载 */
+  mcpServers: McpServerEntry[]
 }
 
 export const defaultProviderProfiles = (): Record<ModelProviderId, ProviderProfile> => ({
@@ -92,7 +217,8 @@ export const defaultSettings: AppSettings = {
   maxTerminalOutputChars: 1_000,
   maxAgentLoopSteps: 24,
   agentRunTimeoutMs: 120_000,
-  tavilyApiKey: ''
+  tavilyApiKey: '',
+  mcpServers: []
 }
 
 /** 当前选中提供方的连接配置 */

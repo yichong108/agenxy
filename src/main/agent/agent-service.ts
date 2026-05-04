@@ -14,6 +14,7 @@ import {
   type ToolTimelineEvent,
   getActiveProviderProfile
 } from '../../shared/ipc.js'
+import { buildMcpLangChainTools } from '../mcp/mcp-runtime.js'
 import { getSessionMessages, getSettings, getWorkspaceById, setSessionMessages } from '../store.js'
 import {
   deleteFileTool,
@@ -23,6 +24,7 @@ import {
   searchWorkspace,
   writeFileTool
 } from '../tools/fs-tools.js'
+import { buildMcpAdminTools } from '../tools/mcp-admin-tools.js'
 import { runCommand, killCommand } from '../tools/terminal.js'
 import { isTavilyConfigured, tavilyWebSearch } from '../tools/web-search.js'
 
@@ -171,15 +173,24 @@ function createLanguageModel(settings: AppSettings) {
 
 function buildSystemPrompt(root: string, settings: AppSettings): string {
   const web = isTavilyConfigured(settings.tavilyApiKey)
+  const mcpEnabled = (settings.mcpServers ?? []).filter((s) => s.enabled && s.command.trim())
+  const mcpMeta =
+    '\n- **MCP 管理（元工具）**: `mcp_list_servers` 列出已配置 MCP 及脱敏后的 env；`mcp_inspect_server` 探测某台 MCP 暴露的工具列表。需要连接信息或工具名时优先调用二者，勿向用户索要已在应用中保存的密码。'
+  const mcpNote =
+    mcpEnabled.length > 0
+      ? `${mcpMeta}\n- 已启用 MCP（stdio）服务器: ${mcpEnabled.map((s) => s.name || s.id).join('、')}。以 mcp_ 开头的工具名来自各 MCP；调用时传入 JSON 对象，键名与对应工具的 inputSchema 一致。`
+      : (settings.mcpServers?.length ?? 0) > 0
+        ? `${mcpMeta}\n- 当前 MCP 条目均未启用或 command 为空；用户启用后会出现 mcp_* 工具。`
+        : mcpMeta
   const toolLine = web
-    ? 'read_file, write_file, delete_file, list_dir, glob, search_workspace, shell, web_search（Tavily 联网）'
-    : 'read_file, write_file, delete_file, list_dir, glob, search_workspace, shell（未配置 Tavily API Key 时无 web_search）'
+    ? 'read_file, write_file, delete_file, list_dir, glob, search_workspace, shell, web_search（Tavily 联网）, mcp_list_servers, mcp_inspect_server'
+    : 'read_file, write_file, delete_file, list_dir, glob, search_workspace, shell, mcp_list_servers, mcp_inspect_server（未配置 Tavily API Key 时无 web_search）'
   const webRule = web
     ? '- 用户询问**天气、气温、降雨、实时新闻、股价、政策**等需要站外最新信息时，必须先调用 **web_search** 再作答；不得凭记忆编造当日天气或「搜索失败」类说辞。'
     : '- 当前**未**配置 Tavily，没有 web_search：若用户要今日天气等实时信息，请明确告知在应用「设置」中填写「Tavily API Key」或配置环境变量 TAVILY_API_KEY，并可建议中国天气网、手机天气 App；不要谎称「搜索引擎坏了」或「网络搜索功能不可用」。'
   return `你是协助办公与软件开发的智能体。工作区根目录: ${root}。
 - 在工具中使用**相对工作区根**的路径（如 src/index.ts），不要使用 ../ 尝试逃出工作区。
-- 可调用工具: ${toolLine}，以及若干 skill_* 技能工具。
+- 可调用工具: ${toolLine}，以及若干 skill_* 技能工具。${mcpNote}
 - shell 在沙盒目录（工作区根）下执行 shell 命令，等待进程结束后返回 stdout/stderr。Windows 为 cmd 风格。
 - 当用户要求“查看/读取工作区文件”或“列出目录”时，优先调用 read_file/list_dir 再回答。
 - 当用户明确要求删除工作区内的某个文件时，使用 delete_file（仅删普通文件，不删目录）。
@@ -242,7 +253,9 @@ async function invokeChatOnlyStream(
     '【运行模式】当前未启用工作区工具（模型不支持 function calling 或未在设置中打开）：不得调用 read_file、write_file、delete_file、list_dir、glob、search_workspace、shell、web_search 及任何 skill_*；请用纯文本协助用户（可做步骤说明、命令示例与代码片段）。' +
     ' 勿编造「网络搜索不可用」「搜索引擎故障」等理由；应如实说明是未开启工具或未配置 Tavily。' +
     webHint
-  const systemText = [buildSystemPrompt(root, settings), skillHint, chatNotice].filter(Boolean).join('\n\n')
+  const systemText = [buildSystemPrompt(root, settings), skillHint, chatNotice]
+    .filter(Boolean)
+    .join('\n\n')
   const llmMessages = [new SystemMessage(systemText), ...session.messages]
   let streamedChars = 0
   let full = ''
@@ -628,7 +641,15 @@ async function makeTools(
     runCtx,
     onTool
   })
-  const tools = [...baseTools, ...webSearchTools, ...skillBundle.tools] as unknown as NamedTool[]
+  const mcpAdminTools = buildMcpAdminTools(settings, runCtx, onTool)
+  const mcpTools = await buildMcpLangChainTools(settings, runCtx, onTool)
+  const tools = [
+    ...baseTools,
+    ...webSearchTools,
+    ...skillBundle.tools,
+    ...mcpAdminTools,
+    ...mcpTools
+  ] as unknown as NamedTool[]
   const byName = new Map<string, NamedTool>(tools.map((x) => [x.name, x as NamedTool]))
   return { tools, byName, skillHint: skillBundle.hint }
 }

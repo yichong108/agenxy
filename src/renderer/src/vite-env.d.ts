@@ -3,6 +3,8 @@
 import type {
   AppSettings,
   ChatMessage,
+  McpProbeResult,
+  McpServerEntry,
   RendererUiState,
   SessionInfo,
   StreamEvent,
@@ -35,6 +37,7 @@ type Api = {
   cancelAgent: (sessionId: string) => Promise<{ ok: true }>
   toggleDevtools: () => Promise<{ open: boolean }>
   openExternal: (url: string) => Promise<{ ok: boolean }>
+  mcpProbeServer: (entry: McpServerEntry) => Promise<McpProbeResult>
   onStream: (cb: (e: StreamEvent) => void) => () => void
   onSessionsSync: (cb: (s: SessionInfo[]) => void) => () => void
   onWorkspaceChange: (cb: (p: { path: string }) => void) => () => void

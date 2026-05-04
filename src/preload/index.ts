@@ -5,6 +5,8 @@ import {
   IPC,
   type AppSettings,
   type ChatMessage,
+  type McpProbeResult,
+  type McpServerEntry,
   type RendererUiState,
   type SessionInfo,
   type StreamEvent,
@@ -50,6 +52,8 @@ const api = {
   toggleDevtools: () => ipcRenderer.invoke(IPC.DEVTOOLS_TOGGLE) as Promise<{ open: boolean }>,
   openExternal: (url: string) =>
     ipcRenderer.invoke(IPC.EXTERNAL_OPEN, url) as Promise<{ ok: boolean }>,
+  mcpProbeServer: (entry: McpServerEntry) =>
+    ipcRenderer.invoke(IPC.MCP_PROBE, entry) as Promise<McpProbeResult>,
   onStream: (cb: (e: StreamEvent) => void) => {
     const h = (_: Electron.IpcRendererEvent, p: StreamEvent) => cb(p)
     ipcRenderer.on(EVENTS.AGENT_STREAM, h)

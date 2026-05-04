@@ -8,11 +8,13 @@ import {
   IPC,
   EVENTS,
   type AppSettings,
+  type McpServerEntry,
   type RendererUiState,
   type StreamEvent
 } from '../shared/ipc.js'
 
 import { bindAgentIpc, cancelRun, runUserMessage, resetQueue } from './agent/agent-service.js'
+import { probeMcpServer } from './mcp/mcp-runtime.js'
 import {
   loadSessionList,
   getSessions,
@@ -367,6 +369,12 @@ function registerIpc(): void {
     } catch {
       return { ok: false as const }
     }
+  })
+  ipcMain.handle(IPC.MCP_PROBE, async (_e, entry: McpServerEntry) => {
+    if (!entry || typeof entry !== 'object') {
+      return { ok: false as const, error: '无效配置' }
+    }
+    return await probeMcpServer(entry)
   })
 }
 
