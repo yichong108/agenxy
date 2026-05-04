@@ -5,6 +5,8 @@ import type {
   ChatMessage,
   McpProbeResult,
   McpServerEntry,
+  McpWarmupReport,
+  McpWarmupStatus,
   RendererUiState,
   SessionInfo,
   StreamEvent,
@@ -38,6 +40,9 @@ type Api = {
   toggleDevtools: () => Promise<{ open: boolean }>
   openExternal: (url: string) => Promise<{ ok: boolean }>
   mcpProbeServer: (entry: McpServerEntry) => Promise<McpProbeResult>
+  getMcpWarmupStatus: () => Promise<McpWarmupStatus>
+  mcpRunWarmup: () => Promise<McpWarmupReport>
+  onMcpWarmup: (cb: (r: McpWarmupReport) => void) => () => void
   onStream: (cb: (e: StreamEvent) => void) => () => void
   onSessionsSync: (cb: (s: SessionInfo[]) => void) => () => void
   onWorkspaceChange: (cb: (p: { path: string }) => void) => () => void

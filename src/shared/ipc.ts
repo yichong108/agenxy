@@ -24,7 +24,11 @@ export const IPC = {
   DEVTOOLS_TOGGLE: 'devtools:toggle',
   EXTERNAL_OPEN: 'external:open',
   /** 探测 stdio MCP 子进程并列出工具（不落盘） */
-  MCP_PROBE: 'mcp:probe'
+  MCP_PROBE: 'mcp:probe',
+  /** 读取最近一次 MCP 池化预热结果（应用启动或保存 MCP 后） */
+  MCP_WARMUP_GET: 'mcp:warmup:get',
+  /** 立即重新执行池化预热并复用/更新连接 */
+  MCP_WARMUP_RUN: 'mcp:warmup:run'
 } as const
 
 export const EVENTS = {
@@ -32,7 +36,9 @@ export const EVENTS = {
   WORKSPACE_CHANGED: 'workspace:changed',
   WORKSPACES_SYNC: 'workspaces:sync',
   SESSIONS_SYNC: 'sessions:sync',
-  SETTINGS_SYNC: 'settings:sync'
+  SETTINGS_SYNC: 'settings:sync',
+  /** 池化预热完成（启动、保存 MCP 或手动触发后） */
+  MCP_WARMUP: 'mcp:warmup'
 } as const
 
 export type ModelProviderId = 'deepseek' | 'ollama'
@@ -157,6 +163,21 @@ export type McpProbeToolInfo = {
 }
 
 export type McpProbeResult = { ok: true; tools: McpProbeToolInfo[] } | { ok: false; error: string }
+
+/** 单台 MCP 池化预热结果（与探测不同：成功时会保留池内连接） */
+export type McpWarmupServerOk = { id: string; name: string; ok: true; toolCount: number }
+export type McpWarmupServerErr = { id: string; name: string; ok: false; error: string }
+export type McpWarmupServerResult = McpWarmupServerOk | McpWarmupServerErr
+
+export type McpWarmupReport = {
+  atMs: number
+  servers: McpWarmupServerResult[]
+}
+
+export type McpWarmupStatus = {
+  report: McpWarmupReport | null
+  inFlight: boolean
+}
 
 /** 单个模型提供方的连接信息（分提供方持久化） */
 export type ProviderProfile = {

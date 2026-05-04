@@ -9,12 +9,14 @@ import {
   EVENTS,
   type AppSettings,
   type McpServerEntry,
+  type McpWarmupReport,
+  type McpWarmupStatus,
   type RendererUiState,
   type StreamEvent
 } from '../shared/ipc.js'
 
 import { bindAgentIpc, cancelRun, runUserMessage, resetQueue } from './agent/agent-service.js'
-import { probeMcpServer } from './mcp/mcp-runtime.js'
+import { disposeMcpConnectionPool, probeMcpServer, warmupMcpServers } from './mcp/mcp-runtime.js'
 import {
   loadSessionList,
   getSessions,
@@ -46,6 +48,39 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const isDev = !app.isPackaged
 const enableReactDevtoolsExt = process.env['ENABLE_REACT_DEVTOOLS_EXT'] === '1'
 let mainWindow: BrowserWindow | null = null
+
+let lastMcpWarmupReport: McpWarmupReport | null = null
+/** 递增以作废进行中的预热结果（例如保存 MCP 后） */
+let mcpWarmupGen = 0
+let mcpWarmupPromise: Promise<McpWarmupReport> | null = null
+
+function getMcpWarmupStatus(): McpWarmupStatus {
+  return { report: lastMcpWarmupReport, inFlight: mcpWarmupPromise !== null }
+}
+
+async function executeMcpWarmupCycle(): Promise<McpWarmupReport> {
+  const gen = ++mcpWarmupGen
+  const servers = await warmupMcpServers(getSettings())
+  if (gen !== mcpWarmupGen) {
+    return lastMcpWarmupReport ?? { atMs: Date.now(), servers: [] }
+  }
+  const report: McpWarmupReport = { atMs: Date.now(), servers }
+  lastMcpWarmupReport = report
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(EVENTS.MCP_WARMUP, report)
+  }
+  return report
+}
+
+function startMcpWarmup(): Promise<McpWarmupReport> {
+  if (mcpWarmupPromise) return mcpWarmupPromise
+  let tracked: Promise<McpWarmupReport>
+  tracked = executeMcpWarmupCycle().finally(() => {
+    if (mcpWarmupPromise === tracked) mcpWarmupPromise = null
+  })
+  mcpWarmupPromise = tracked
+  return tracked
+}
 
 function setupConsoleUtf8(): void {
   if (process.platform !== 'win32') return
@@ -261,10 +296,20 @@ function registerIpc(): void {
     if (typeof patch.maxConcurrentStreams === 'number') {
       resetQueue()
     }
+    if (patch.mcpServers !== undefined) {
+      mcpWarmupGen++
+      mcpWarmupPromise = null
+      void disposeMcpConnectionPool()
+    }
     const next = setSettings(patch)
     mainWindow?.webContents.send(EVENTS.SETTINGS_SYNC, next)
+    if (patch.mcpServers !== undefined) {
+      void startMcpWarmup()
+    }
     return next
   })
+  ipcMain.handle(IPC.MCP_WARMUP_GET, () => getMcpWarmupStatus())
+  ipcMain.handle(IPC.MCP_WARMUP_RUN, () => startMcpWarmup())
   ipcMain.handle(IPC.UI_STATE_GET, () => getUiState())
   ipcMain.handle(IPC.UI_STATE_SET, (_e, patch: Partial<RendererUiState>) => setUiState(patch))
   ipcMain.handle(IPC.SESSIONS_LIST, () => getSessionsInActiveWorkspace())
@@ -385,10 +430,15 @@ app.whenReady().then(() => {
     loadSessionList()
     registerIpc()
     createWindow()
+    void startMcpWarmup()
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
     })
   })()
+})
+
+app.on('before-quit', () => {
+  void disposeMcpConnectionPool()
 })
 
 app.on('window-all-closed', () => {

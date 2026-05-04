@@ -7,6 +7,8 @@ import {
   type ChatMessage,
   type McpProbeResult,
   type McpServerEntry,
+  type McpWarmupReport,
+  type McpWarmupStatus,
   type RendererUiState,
   type SessionInfo,
   type StreamEvent,
@@ -54,6 +56,15 @@ const api = {
     ipcRenderer.invoke(IPC.EXTERNAL_OPEN, url) as Promise<{ ok: boolean }>,
   mcpProbeServer: (entry: McpServerEntry) =>
     ipcRenderer.invoke(IPC.MCP_PROBE, entry) as Promise<McpProbeResult>,
+  getMcpWarmupStatus: () => ipcRenderer.invoke(IPC.MCP_WARMUP_GET) as Promise<McpWarmupStatus>,
+  mcpRunWarmup: () => ipcRenderer.invoke(IPC.MCP_WARMUP_RUN) as Promise<McpWarmupReport>,
+  onMcpWarmup: (cb: (r: McpWarmupReport) => void) => {
+    const h = (_: Electron.IpcRendererEvent, r: McpWarmupReport) => cb(r)
+    ipcRenderer.on(EVENTS.MCP_WARMUP, h)
+    return () => {
+      ipcRenderer.removeListener(EVENTS.MCP_WARMUP, h)
+    }
+  },
   onStream: (cb: (e: StreamEvent) => void) => {
     const h = (_: Electron.IpcRendererEvent, p: StreamEvent) => cb(p)
     ipcRenderer.on(EVENTS.AGENT_STREAM, h)

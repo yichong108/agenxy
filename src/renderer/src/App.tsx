@@ -45,6 +45,7 @@ import {
   type AppSettings,
   type ChatMessage,
   type McpServerEntry,
+  type McpWarmupReport,
   type ModelProviderId,
   type ProviderProfile,
   type SessionInfo,
@@ -197,6 +198,9 @@ export function App() {
   /** 环境变量 JSON 不用 Form 托管，避免 TextArea 与共享 form 实例不同步导致无法回显 */
   const [mcpEnvTextLocal, setMcpEnvTextLocal] = useState('')
   const [mcpProbingId, setMcpProbingId] = useState<string | null>(null)
+  /** 主进程池化预热结果（启动 / 保存 MCP / 手动重检） */
+  const [mcpWarmup, setMcpWarmup] = useState<McpWarmupReport | null>(null)
+  const [mcpWarmupBusy, setMcpWarmupBusy] = useState(false)
   /** Cursor 风格 `{ "mcpServers": { ... } }` 或本应用数组 JSON 粘贴导入 */
   const [mcpJsonImportText, setMcpJsonImportText] = useState('')
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
@@ -221,6 +225,16 @@ export function App() {
   const [running, setRunning] = useState<Record<string, boolean>>({})
   const [queued, setQueued] = useState<Record<string, number | undefined>>({})
   const [runStats, setRunStats] = useState<Record<string, RunStats | undefined>>({})
+
+  const mcpWarmupSummary = useMemo(() => {
+    if (!mcpWarmup) return null
+    if (!mcpWarmup.servers.length) {
+      return '当前没有已启用且 command 非空的 MCP 参与预检。'
+    }
+    const ok = mcpWarmup.servers.filter((x) => x.ok).length
+    const bad = mcpWarmup.servers.length - ok
+    return `已检查 ${mcpWarmup.servers.length} 台：成功 ${ok}，失败 ${bad}。成功项的连接会留在主进程池中，Agent 调用工具时复用，空闲一段时间后自动断开。`
+  }, [mcpWarmup])
 
   const streamBuf = useRef<Record<string, string>>({})
   const assistantMsgId = useRef<Record<string, string | null>>({})
@@ -472,6 +486,9 @@ export function App() {
     void (async () => {
       await hydrateUiStore()
       await load()
+      const w = await bridge.getMcpWarmupStatus()
+      if (w.report) setMcpWarmup(w.report)
+      setMcpWarmupBusy(w.inFlight)
     })()
     const unSub = [
       supportsMultiWorkspaceApi
@@ -528,7 +545,11 @@ export function App() {
         if (currentActiveId && list.some((x) => x.id === currentActiveId)) return
         setActiveId(list[0]?.id ?? null)
       }),
-      bridge.onStream(handleStream)
+      bridge.onStream(handleStream),
+      bridge.onMcpWarmup((r) => {
+        setMcpWarmup(r)
+        setMcpWarmupBusy(false)
+      })
     ]
     return () => unSub.forEach((f) => f())
   }, [
@@ -814,6 +835,18 @@ export function App() {
     },
     [bridge, modalApi, msgApi]
   )
+
+  const rerunMcpWarmup = useCallback(async () => {
+    setMcpWarmupBusy(true)
+    try {
+      const r = await bridge.mcpRunWarmup()
+      setMcpWarmup(r)
+    } catch {
+      msgApi.error('MCP 预检失败')
+    } finally {
+      setMcpWarmupBusy(false)
+    }
+  }, [bridge, msgApi])
 
   // 检查 React DevTools 是否已加载完成
   const checkDevToolsReady = (): boolean => {
@@ -1263,8 +1296,43 @@ export function App() {
                     showIcon
                     style={{ marginBottom: 12 }}
                     message="stdio 方式连接 MCP 子进程"
-                    description="与 Cursor 类似：填写启动命令与参数。启用后，Agent 在「已开启工具」模式下会把各服务器的工具挂到对话中（工具名以 mcp_ 开头）。每次调用会拉起子进程，请注意性能与安全。"
+                    description={
+                      <div>
+                        <div>
+                          与 Cursor 类似：填写启动命令与参数。启用后，Agent
+                          在「已开启工具」模式下会把各服务器的工具挂到对话中（工具名以 mcp_
+                          开头）。应用启动时会<strong>预检</strong>已启用的服务器并
+                          <strong>池化复用</strong>
+                          连接，减少反复拉起子进程；长时间无调用会自动断开。
+                        </div>
+                        {mcpWarmupSummary ? (
+                          <div style={{ marginTop: 8 }}>
+                            <Text strong>预检摘要：</Text>
+                            {mcpWarmupSummary}
+                            {mcpWarmup ? (
+                              <Text type="secondary" style={{ marginLeft: 8 }}>
+                                （{new Date(mcpWarmup.atMs).toLocaleString()}）
+                              </Text>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {mcpWarmupBusy ? (
+                          <div style={{ marginTop: 8 }}>
+                            <Text type="secondary">正在预检已启用的 MCP…</Text>
+                          </div>
+                        ) : null}
+                      </div>
+                    }
                   />
+                  <Space style={{ marginBottom: 12 }}>
+                    <Button
+                      size="small"
+                      loading={mcpWarmupBusy}
+                      onClick={() => void rerunMcpWarmup()}
+                    >
+                      重新预检全部 MCP
+                    </Button>
+                  </Space>
                   <div style={{ marginBottom: 12 }}>
                     <Text strong>从 JSON 导入</Text>
                     <div style={{ marginTop: 6, marginBottom: 8 }}>
@@ -1332,6 +1400,37 @@ export function App() {
                             }
                           />
                         )
+                      },
+                      {
+                        title: '启动预检',
+                        key: 'warmup',
+                        width: 108,
+                        render: (_, row) => {
+                          if (!row.enabled || !row.command?.trim()) {
+                            return <Text type="secondary">—</Text>
+                          }
+                          const r = mcpWarmup?.servers.find((x) => x.id === row.id)
+                          if (!r && mcpWarmupBusy) {
+                            return (
+                              <Tag color="processing" style={{ margin: 0 }}>
+                                检测中
+                              </Tag>
+                            )
+                          }
+                          if (!r) return <Text type="secondary">—</Text>
+                          if (r.ok) {
+                            return (
+                              <Tag color="success" style={{ margin: 0 }}>
+                                {r.toolCount} 工具
+                              </Tag>
+                            )
+                          }
+                          return (
+                            <Tag color="error" style={{ margin: 0 }} title={r.error}>
+                              失败
+                            </Tag>
+                          )
+                        }
                       },
                       {
                         title: '操作',

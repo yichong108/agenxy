@@ -811,6 +811,7 @@ export async function runUserMessage(
           { runId, traceId },
           onTool
         )
+        
         const model = createLanguageModel(settings).bindTools(tools as never[])
         const baseSystem = buildSystemPrompt(root, settings)
         const fileToolInstruction =
