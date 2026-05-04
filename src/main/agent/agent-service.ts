@@ -811,21 +811,26 @@ export async function runUserMessage(
               : `当前用户请求属于目录查看。你必须先调用 list_dir 工具后再给最终回答。可参考路径: ${fileToolHint.pathHint}，可参考 depth: ${fileToolHint.depthHint ?? 2}`
             : ''
         const runPrompt = [baseSystem, skillHint, fileToolInstruction].filter(Boolean).join('\n')
+
+        // 创建Agent
         const agent = createReactAgent({
           llm: model,
           tools: tools as never[],
           prompt: runPrompt
         })
 
+        const onStreamToken = (token: string) => {
+          streamedChars += token.length
+          batcher.push(token)
+        }
+        const agentInvokeOpts = { recursionLimit, timeoutMs: invokeTimeoutMs }
+
         const result = await invokeAgentWithGuard(
           agent,
           session.messages,
           ac,
-          (token) => {
-            streamedChars += token.length
-            batcher.push(token)
-          },
-          { recursionLimit, timeoutMs: invokeTimeoutMs }
+          onStreamToken,
+          agentInvokeOpts
         )
         const maybeMessages = (result as { messages?: BaseMessage[] }).messages
         if (Array.isArray(maybeMessages) && maybeMessages.length > 0) {
@@ -843,11 +848,8 @@ export async function runUserMessage(
             agent,
             session.messages,
             ac,
-            (token) => {
-              streamedChars += token.length
-              batcher.push(token)
-            },
-            { recursionLimit, timeoutMs: invokeTimeoutMs }
+            onStreamToken,
+            agentInvokeOpts
           )
           const retryMessages = (retryResult as { messages?: BaseMessage[] }).messages
           if (Array.isArray(retryMessages) && retryMessages.length > 0) {
