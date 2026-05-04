@@ -197,13 +197,6 @@ function createWindow(): void {
       )
     }
   )
-  if (isDev) {
-    mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
-      const levels = ['debug', 'info', 'warn', 'error']
-      const label = levels[level] ?? String(level)
-      mainLog.debug(`[renderer:${label}] ${message} (${sourceId}:${line})`)
-    })
-  }
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     mainLog.error(`[renderer] process gone: reason=${details.reason}, exitCode=${details.exitCode}`)
   })

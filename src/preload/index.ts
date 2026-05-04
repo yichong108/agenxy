@@ -1,6 +1,3 @@
-/** 暴露 `window.__electronLog`，供 `electron-log/renderer` 经 IPC 写入主进程日志文件 */
-import 'electron-log/preload.js'
-
 import { contextBridge, ipcRenderer } from 'electron'
 
 import {
@@ -18,6 +15,10 @@ import {
   type WorkspaceInfo,
   type WorkspacesPayload
 } from '../shared/ipc.js'
+
+import { installElectronLogBridge } from './electron-log-bridge.js'
+
+installElectronLogBridge()
 
 const api = {
   selectWorkspace: () => ipcRenderer.invoke(IPC.WORKSPACE_SELECT) as Promise<{ path: string }>,
