@@ -15,6 +15,9 @@ import type {
   McpWarmupServerResult,
   ToolTimelineEvent
 } from '../../shared/ipc.js'
+import { logScope } from '../logger.js'
+
+const mcpLog = logScope('mcp')
 
 function safeMcpSegment(s: string): string {
   const t = s.trim().replace(/[^a-zA-Z0-9_-]/g, '_')
@@ -134,7 +137,7 @@ async function closeSlot(serverId: string, slot: PooledSlot): Promise<void> {
   try {
     await slot.client.close()
   } catch (e) {
-    console.warn(`[mcp-pool] 关闭连接失败 ${serverId}:`, e instanceof Error ? e.message : e)
+    mcpLog.warn(`[mcp-pool] 关闭连接失败 ${serverId}:`, e instanceof Error ? e.message : e)
   }
 }
 
@@ -383,7 +386,7 @@ export async function collectMcpServerContextHints(settings: AppSettings): Promi
       })
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
-      console.warn(`[mcp] 收集服务端提示失败 ${srv.name} (${srv.id}): ${message}`)
+      mcpLog.warn(`[mcp] 收集服务端提示失败 ${srv.name} (${srv.id}): ${message}`)
     }
   }
   if (!blocks.length) return ''
@@ -490,7 +493,7 @@ export async function buildMcpLangChainTools(
       })
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
-      console.warn(`[mcp] 跳过服务器 ${srv.name} (${srv.id}): ${message}`)
+      mcpLog.warn(`[mcp] 跳过服务器 ${srv.name} (${srv.id}): ${message}`)
     }
   }
   const contextHints = hintBlocks.length

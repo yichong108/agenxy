@@ -8,6 +8,7 @@ import './assets/reset.scss'
 
 import 'dayjs/locale/zh-cn'
 import { App } from './App'
+import { renderLog } from './logger.js' // 初始化渲染端 electron-log（IPC → 主进程落盘）
 
 dayjs.locale('zh-cn')
 
@@ -23,7 +24,7 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, AppError
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo): void {
-    console.error('[renderer] React 渲染异常:', error, info.componentStack)
+    renderLog.error('[renderer] React 渲染异常:', error, info.componentStack)
   }
 
   render() {
