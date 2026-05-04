@@ -16,6 +16,7 @@ import {
 } from '../shared/ipc.js'
 
 import { bindAgentIpc, cancelRun, runUserMessage, resetQueue } from './agent/agent-service.js'
+import { mainLog } from './logger.js'
 import { disposeMcpConnectionPool, probeMcpServer, warmupMcpServers } from './mcp/mcp-runtime.js'
 import {
   loadSessionList,
@@ -43,6 +44,8 @@ import {
   setActiveWorkspace,
   upsertWorkspaceByPath
 } from './store.js'
+
+mainLog.info('Electron 主进程启动')
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const isDev = !app.isPackaged
@@ -74,8 +77,7 @@ async function executeMcpWarmupCycle(): Promise<McpWarmupReport> {
 
 function startMcpWarmup(): Promise<McpWarmupReport> {
   if (mcpWarmupPromise) return mcpWarmupPromise
-  let tracked: Promise<McpWarmupReport>
-  tracked = executeMcpWarmupCycle().finally(() => {
+  const tracked = executeMcpWarmupCycle().finally(() => {
     if (mcpWarmupPromise === tracked) mcpWarmupPromise = null
   })
   mcpWarmupPromise = tracked
@@ -94,7 +96,7 @@ setupConsoleUtf8()
 async function loadReactDevtoolsExtension(): Promise<void> {
   if (!isDev) return
   if (!enableReactDevtoolsExt) {
-    console.log('[react-devtools] 扩展自动注入已关闭（设置 ENABLE_REACT_DEVTOOLS_EXT=1 可开启）')
+    mainLog.info('[react-devtools] 扩展自动注入已关闭（设置 ENABLE_REACT_DEVTOOLS_EXT=1 可开启）')
     return
   }
 
@@ -106,12 +108,12 @@ async function loadReactDevtoolsExtension(): Promise<void> {
       for (const ext of all) {
         if (ext.name.toLowerCase().includes('react developer tools')) {
           session.defaultSession.removeExtension(ext.id)
-          console.log(`[react-devtools] 已移除旧扩展: ${ext.name} (${ext.id})`)
+          mainLog.info(`[react-devtools] 已移除旧扩展: ${ext.name} (${ext.id})`)
         }
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
-      console.warn('[react-devtools] 移除旧扩展失败:', msg)
+      mainLog.warn('[react-devtools] 移除旧扩展失败:', msg)
     }
   }
 
@@ -120,25 +122,25 @@ async function loadReactDevtoolsExtension(): Promise<void> {
   if (existsSync(extensionPath)) {
     try {
       await session.defaultSession.loadExtension(extensionPath, { allowFileAccess: true })
-      console.log('[react-devtools] 本地离线扩展加载成功')
+      mainLog.info('[react-devtools] 本地离线扩展加载成功')
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
-      console.error('[react-devtools] 本地扩展加载失败:', msg)
+      mainLog.error('[react-devtools] 本地扩展加载失败:', msg)
     }
   } else {
-    console.warn(`[react-devtools] 本地扩展目录不存在: ${extensionPath}`)
+    mainLog.warn(`[react-devtools] 本地扩展目录不存在: ${extensionPath}`)
   }
 
   try {
     const exts = session.defaultSession.getAllExtensions()
     const extNames = exts.map((ext) => ext.name).join(', ')
-    console.log(`[react-devtools] 当前已加载扩展: ${extNames || '(无)'}`)
+    mainLog.info(`[react-devtools] 当前已加载扩展: ${extNames || '(无)'}`)
     for (const ext of exts) {
-      console.log(`[react-devtools] 扩展详情: name=${ext.name}, id=${ext.id}, path=${ext.path}`)
+      mainLog.info(`[react-devtools] 扩展详情: name=${ext.name}, id=${ext.id}, path=${ext.path}`)
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
-    console.error('[react-devtools] 读取扩展列表失败:', msg)
+    mainLog.error('[react-devtools] 读取扩展列表失败:', msg)
   }
 }
 
@@ -190,7 +192,7 @@ function createWindow(): void {
     'did-fail-load',
     (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
       if (!isMainFrame) return
-      console.error(
+      mainLog.error(
         `[renderer] load failed code=${errorCode} desc=${errorDescription} url=${validatedURL}`
       )
     }
@@ -199,15 +201,15 @@ function createWindow(): void {
     mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
       const levels = ['debug', 'info', 'warn', 'error']
       const label = levels[level] ?? String(level)
-      console.log(`[renderer:${label}] ${message} (${sourceId}:${line})`)
+      mainLog.debug(`[renderer:${label}] ${message} (${sourceId}:${line})`)
     })
   }
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
-    console.error(`[renderer] process gone: reason=${details.reason}, exitCode=${details.exitCode}`)
+    mainLog.error(`[renderer] process gone: reason=${details.reason}, exitCode=${details.exitCode}`)
   })
   bindAgentIpc(mainWindow.webContents)
   mainWindow.webContents.on('did-finish-load', () => {
-    console.log(`[renderer] did-finish-load: ${mainWindow?.webContents.getURL() || '(unknown)'}`)
+    mainLog.info(`[renderer] did-finish-load: ${mainWindow?.webContents.getURL() || '(unknown)'}`)
     broadcastWorkspaces()
     broadcastSessions()
   })

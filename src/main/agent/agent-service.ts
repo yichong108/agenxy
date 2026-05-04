@@ -14,6 +14,7 @@ import {
   type ToolTimelineEvent,
   getActiveProviderProfile
 } from '../../shared/ipc.js'
+import { logScope } from '../logger.js'
 import { buildMcpLangChainTools, collectMcpServerContextHints } from '../mcp/mcp-runtime.js'
 import { getSessionMessages, getSettings, getWorkspaceById, setSessionMessages } from '../store.js'
 import {
@@ -30,6 +31,8 @@ import { isTavilyConfigured, tavilyWebSearch } from '../tools/web-search.js'
 import { StreamBatcher } from './batcher.js'
 import { ConcurrencyQueue } from './queue.js'
 import { buildSkillBundle } from './skills/index.js'
+
+const agentLog = logScope('agent')
 
 type SessionRuntime = {
   workspaceId: string
@@ -825,7 +828,7 @@ export async function runUserMessage(
           .filter(Boolean)
           .join('\n\n')
 
-        console.log('runPrompt', runPrompt)
+        agentLog.debug('runPrompt', runPrompt)
 
         // 创建Agent
         const agent = createReactAgent({

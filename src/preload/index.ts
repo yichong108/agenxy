@@ -1,3 +1,6 @@
+/** 暴露 `window.__electronLog`，供 `electron-log/renderer` 经 IPC 写入主进程日志文件 */
+import 'electron-log/preload.js'
+
 import { contextBridge, ipcRenderer } from 'electron'
 
 import {
