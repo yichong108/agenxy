@@ -31,8 +31,6 @@ export const IPC = {
   MCP_WARMUP_RUN: 'mcp:warmup:run',
   /** 聚合当前技能清单（内置 / 市场 / 兼容） */
   SKILLS_STATE: 'skills:state',
-  /** 从 ClawHub 实时拉取 skills 列表 */
-  SKILLS_CATALOG_FETCH: 'skills:catalog:fetch',
   /** 从市场 zip 安装技能包 */
   SKILLS_INSTALL: 'skills:install',
   /** 卸载市场或兼容目录技能包 */
@@ -235,10 +233,6 @@ export type SkillsMarketCatalogItem = {
 export type SkillsMarketCatalog = {
   items: SkillsMarketCatalogItem[]
 }
-
-export type SkillsCatalogFetchResult =
-  | { ok: true; catalog: SkillsMarketCatalog }
-  | { ok: false; error: string }
 
 export type SkillInstallKind = 'builtin_code' | 'builtin_packaged' | 'market' | 'legacy'
 

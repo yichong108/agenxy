@@ -36,6 +36,7 @@ import rehypeHighlight from 'rehype-highlight'
 import remarkGfm from 'remark-gfm'
 import 'highlight.js/styles/github.css'
 
+import { SkillsMarketPanel } from '@/renderer/src/skills-market/SkillsMarketPanel'
 import { useUiStore } from '@/renderer/src/store/ui-store'
 import {
   applySettingsForm,
@@ -54,7 +55,6 @@ import {
   type SessionInfo,
   type SettingsFormValues,
   type SkillUiEntry,
-  type SkillsCatalogFetchResult,
   type SkillsMarketCatalogItem,
   type SkillsRuntimeState,
   type StreamEvent,
@@ -227,8 +227,6 @@ export function App() {
   const [skillsOpen, setSkillsOpen] = useState(false)
   const [skillsState, setSkillsState] = useState<SkillsRuntimeState | null>(null)
   const [skillsStateLoading, setSkillsStateLoading] = useState(false)
-  const [skillsCatalog, setSkillsCatalog] = useState<SkillsCatalogFetchResult | null>(null)
-  const [skillsCatalogLoading, setSkillsCatalogLoading] = useState(false)
   const [skillsMarketInstallingId, setSkillsMarketInstallingId] = useState<string | null>(null)
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
   const [form] = Form.useForm<SettingsFormValues>()
@@ -715,24 +713,10 @@ export function App() {
     }
   }, [bridge])
 
-  const reloadSkillsCatalog = useCallback(async () => {
-    setSkillsCatalogLoading(true)
-    try {
-      const r = await bridge.fetchSkillsCatalog()
-      setSkillsCatalog(r)
-      if (!r.ok) {
-        msgApi.error(r.error)
-      }
-    } finally {
-      setSkillsCatalogLoading(false)
-    }
-  }, [bridge, msgApi])
-
   const openSkillsHub = useCallback(() => {
     setSkillsOpen(true)
     void reloadSkillsState()
-    void reloadSkillsCatalog()
-  }, [reloadSkillsCatalog, reloadSkillsState])
+  }, [reloadSkillsState])
 
   const installMarketSkill = useCallback(
     async (item: SkillsMarketCatalogItem) => {
@@ -742,7 +726,6 @@ export function App() {
         if (r.ok) {
           msgApi.success(`已安装「${item.name}」`)
           await reloadSkillsState()
-          await reloadSkillsCatalog()
         } else {
           msgApi.error(r.error)
         }
@@ -750,7 +733,7 @@ export function App() {
         setSkillsMarketInstallingId(null)
       }
     },
-    [bridge, msgApi, reloadSkillsCatalog, reloadSkillsState]
+    [bridge, msgApi, reloadSkillsState]
   )
 
   const uninstallSkillRow = useCallback(
@@ -1931,76 +1914,11 @@ export function App() {
               key: 'market',
               label: '技能市场',
               children: (
-                <div>
-                  <Space style={{ marginBottom: 12 }} wrap>
-                    <Button
-                      type="primary"
-                      loading={skillsCatalogLoading}
-                      onClick={() => void reloadSkillsCatalog()}
-                    >
-                      刷新列表
-                    </Button>
-                  </Space>
-                  {!skillsCatalog?.ok ? (
-                    <Alert
-                      type="error"
-                      showIcon
-                      message={skillsCatalog?.error ?? '尚未加载 catalog'}
-                    />
-                  ) : (
-                    <Table<SkillsMarketCatalogItem>
-                      size="small"
-                      rowKey="id"
-                      pagination={false}
-                      loading={skillsCatalogLoading}
-                      dataSource={skillsCatalog.catalog.items}
-                      locale={{ emptyText: 'catalog 中没有条目' }}
-                      columns={[
-                        { title: '名称', dataIndex: 'name', width: 160, ellipsis: true },
-                        {
-                          title: '描述',
-                          dataIndex: 'description',
-                          ellipsis: true,
-                          render: (t: string) => (
-                            <Tooltip title={t}>
-                              <span>{t}</span>
-                            </Tooltip>
-                          )
-                        },
-                        { title: '版本', dataIndex: 'version', width: 88 },
-                        {
-                          title: '包地址',
-                          dataIndex: 'packageUrl',
-                          ellipsis: true,
-                          render: (u: string) => (
-                            <Typography.Link href={u} onClick={(e) => e.preventDefault()}>
-                              <span title={u}>{u}</span>
-                            </Typography.Link>
-                          )
-                        },
-                        {
-                          title: '操作',
-                          key: 'actions',
-                          width: 140,
-                          render: (_, item) => {
-                            const installed = installedMarketFolderIds.has(item.id)
-                            return (
-                              <Button
-                                type="primary"
-                                size="small"
-                                disabled={installed}
-                                loading={skillsMarketInstallingId === item.id}
-                                onClick={() => void installMarketSkill(item)}
-                              >
-                                {installed ? '已安装' : '安装'}
-                              </Button>
-                            )
-                          }
-                        }
-                      ]}
-                    />
-                  )}
-                </div>
+                <SkillsMarketPanel
+                  installedMarketFolderIds={installedMarketFolderIds}
+                  installingId={skillsMarketInstallingId}
+                  onInstall={installMarketSkill}
+                />
               )
             }
           ]}

@@ -31,7 +31,10 @@ export const clawhubSkillListItemSchema = z.object({
   displayName: z.string(),
   summary: z.string(),
   tags: z.record(z.string(), z.string()).optional(),
-  latestVersion: z.object({ version: z.string().min(1) }).nullable().optional()
+  latestVersion: z
+    .object({ version: z.string().min(1) })
+    .nullable()
+    .optional()
 })
 
 export const clawhubSkillsPageSchema = z.object({

@@ -12,7 +12,6 @@ import {
   type McpWarmupStatus,
   type RendererUiState,
   type SessionInfo,
-  type SkillsCatalogFetchResult,
   type SkillsInstallResult,
   type SkillsMarketCatalogItem,
   type SkillsRuntimeState,
@@ -110,8 +109,6 @@ const api = {
     }
   },
   getSkillsState: () => ipcRenderer.invoke(IPC.SKILLS_STATE) as Promise<SkillsRuntimeState>,
-  fetchSkillsCatalog: () =>
-    ipcRenderer.invoke(IPC.SKILLS_CATALOG_FETCH) as Promise<SkillsCatalogFetchResult>,
   installSkillFromMarket: (item: SkillsMarketCatalogItem) =>
     ipcRenderer.invoke(IPC.SKILLS_INSTALL, item) as Promise<SkillsInstallResult>,
   uninstallSkill: (payload: SkillsUninstallPayload) =>

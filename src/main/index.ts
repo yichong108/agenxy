@@ -23,7 +23,6 @@ import {
   removeWorkspaceSessions,
   touchSession
 } from '@/main/sessions'
-import { fetchSkillsCatalog } from '@/main/skills-market/catalog'
 import { installSkillFromMarketItem } from '@/main/skills-market/install'
 import {
   getActiveWorkspace,
@@ -426,7 +425,6 @@ function registerIpc(): void {
     return await probeMcpServer(entry)
   })
   ipcMain.handle(IPC.SKILLS_STATE, async () => gatherSkillsRuntimeState())
-  ipcMain.handle(IPC.SKILLS_CATALOG_FETCH, async () => fetchSkillsCatalog())
   ipcMain.handle(IPC.SKILLS_INSTALL, async (_e, item: SkillsMarketCatalogItem) => {
     if (!item || typeof item !== 'object') {
       return { ok: false as const, error: '无效技能条目' }
