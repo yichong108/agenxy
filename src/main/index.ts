@@ -5,7 +5,12 @@ import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron'
 
 import { bindAgentIpc, cancelRun, runUserMessage, resetQueue } from '@/main/agent/agent-service'
-import { ensureUserSkillsSeeded } from '@/main/agent/skills'
+import {
+  ensureUserSkillsLayout,
+  gatherSkillsRuntimeState,
+  uninstallLegacySkillFolder,
+  uninstallMarketSkillFolder
+} from '@/main/agent/skills'
 import { mainLog } from '@/main/logger'
 import { disposeMcpConnectionPool, probeMcpServer, warmupMcpServers } from '@/main/mcp/mcp-runtime'
 import {
@@ -18,6 +23,7 @@ import {
   removeWorkspaceSessions,
   touchSession
 } from '@/main/sessions'
+import { installSkillFromMarketItem } from '@/main/skills-market/install'
 import {
   getActiveWorkspace,
   getActiveWorkspaceId,
@@ -42,6 +48,8 @@ import {
   type McpWarmupReport,
   type McpWarmupStatus,
   type RendererUiState,
+  type SkillsMarketCatalogItem,
+  type SkillsUninstallPayload,
   type StreamEvent
 } from '@/shared/ipc'
 
@@ -416,13 +424,32 @@ function registerIpc(): void {
     }
     return await probeMcpServer(entry)
   })
+  ipcMain.handle(IPC.SKILLS_STATE, async () => gatherSkillsRuntimeState())
+  ipcMain.handle(IPC.SKILLS_INSTALL, async (_e, item: SkillsMarketCatalogItem) => {
+    if (!item || typeof item !== 'object') {
+      return { ok: false as const, error: '无效技能条目' }
+    }
+    return await installSkillFromMarketItem(item)
+  })
+  ipcMain.handle(IPC.SKILLS_UNINSTALL, async (_e, payload: SkillsUninstallPayload) => {
+    if (!payload || typeof payload !== 'object') {
+      return { ok: false as const, error: '无效参数' }
+    }
+    if (payload.kind === 'market') {
+      return await uninstallMarketSkillFolder(payload.folderId)
+    }
+    if (payload.kind === 'legacy') {
+      return await uninstallLegacySkillFolder(payload.legacyFolderRelative)
+    }
+    return { ok: false as const, error: '无效参数' }
+  })
 }
 
 app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return
   void (async () => {
     await loadReactDevtoolsExtension()
-    await ensureUserSkillsSeeded()
+    await ensureUserSkillsLayout()
     loadSessionList()
     registerIpc()
     createWindow()

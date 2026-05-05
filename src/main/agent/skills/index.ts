@@ -1,104 +1,51 @@
-﻿import { existsSync } from 'node:fs'
-import type { Dirent } from 'node:fs'
+﻿import type { Dirent } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 
 import { tool } from '@langchain/core/tools'
-import { app } from 'electron'
 import { z } from 'zod'
 
+import {
+  getBundledSkillsSourceDir,
+  marketSkillsInstallRoot,
+  userSkillsAbsRoot
+} from '@/main/agent/skills/paths'
 import { mainLog } from '@/main/logger'
-import { userDataPath } from '@/main/store'
 import { listDirTool, readFileTool, searchWorkspace, writeFileTool } from '@/main/tools/fs-tools'
 import { runCommand } from '@/main/tools/terminal'
-import type { AppSettings, ToolCallEvent, ToolTimelineEvent } from '@/shared/ipc'
+import type {
+  AppSettings,
+  SkillUiEntry,
+  SkillsRuntimeState,
+  ToolCallEvent,
+  ToolTimelineEvent
+} from '@/shared/ipc'
+import { defaultSettings } from '@/shared/ipc'
+
+export {
+  ensureUserSkillsLayout,
+  getBundledSkillsSourceDir,
+  marketSkillsInstallRoot,
+  skillsCacheRoot,
+  userSkillsAbsRoot
+} from '@/main/agent/skills/paths'
 
 /** 单次加载上限 */
 const MAX_LOADED_SKILLS = 96
 
-/** 用户技能目录绝对路径：`Electron userData/skills` */
-export function userSkillsAbsRoot(): string {
-  return path.join(userDataPath(), 'skills')
-}
+export const MAX_SKILL_MD_SIZE_BYTES = 10 * 1024 * 1024
 
-/**
- * 用于首次填充用户目录的内置 skills 源路径。
- * 打包：`resources/skills`。
- * 开发：主进程多为单文件 bundle（`out/main/index.js`），`import.meta.url` 位于 `out/main`，向上两级即到项目根下的 `src/skills`；
- * 另尝试 `app.getAppPath()/src/skills`（通常即 package.json 所在目录）。
- */
-function bundledSkillsSourceDir(): string | null {
-  if (app.isPackaged) {
-    const absRoot = path.join(process.resourcesPath, 'skills')
-    return existsSync(absRoot) ? absRoot : null
-  }
-  const appPathSkills = path.join(app.getAppPath(), 'src', 'skills')
-  if (existsSync(appPathSkills)) return appPathSkills
-  const fromBundle = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    '..',
-    '..',
-    'src',
-    'skills'
-  )
-  if (existsSync(fromBundle)) return fromBundle
-  mainLog.warn('[skills] 开发模式下未找到内置种子，已尝试:', appPathSkills, fromBundle)
-  return null
+type MarkdownCollectOpts = {
+  /** 仅在 `current === rootAbs` 时跳过这些一级子目录 */
+  rootAbs: string
+  skipDirNamesAtRoot: Set<string>
 }
-
-async function directoryIsEmpty(absDir: string): Promise<boolean> {
-  try {
-    const entries = await fs.readdir(absDir)
-    return entries.length === 0
-  } catch {
-    return true
-  }
-}
-
-/**
- * 保证用户技能目录存在；若为空则从内置目录复制一份（仅首次或用户清空后）。
- * 之后运行时只从用户数据目录读取 skills，便于用户自行增删改。
- */
-export async function ensureUserSkillsSeeded(): Promise<void> {
-  const userRoot = userSkillsAbsRoot()
-  await fs.mkdir(userRoot, { recursive: true })
-  if (!app.isPackaged) {
-    mainLog.info('[skills] 用户技能目录（位于 userData/skills）:', userRoot)
-  }
-  if (!(await directoryIsEmpty(userRoot))) return
-  const bundled = bundledSkillsSourceDir()
-  if (!bundled) {
-    mainLog.info('[skills] 用户技能目录为空且无内置种子，跳过复制')
-    return
-  }
-  try {
-    await fs.cp(bundled, userRoot, { recursive: true })
-    mainLog.info('[skills] 已将内置技能种子复制到用户目录:', userRoot)
-  } catch (e) {
-    mainLog.error('[skills] 复制内置技能到用户目录失败', e)
-  }
-}
-
-function userInstalledSkillsRoot(): { absRoot: string; sourcePrefix: string } {
-  return {
-    absRoot: userSkillsAbsRoot(),
-    sourcePrefix: 'skills'
-  }
-}
-
-/** 仅从用户数据目录扫描技能 */
-function allSkillScanRoots(): { absRoot: string; sourcePrefix: string }[] {
-  return [userInstalledSkillsRoot()]
-}
-const MAX_SKILL_MD_SIZE_BYTES = 10 * 1024 * 1024
 
 type RunContext = {
   runId: string
   traceId: string
 }
 
-// 技能工具上下文
 type SkillToolContext = {
   root: string
   termKey: string
@@ -120,7 +67,6 @@ type SkillTool = {
 type SkillDefinition = {
   name: string
   description: string
-  // 技能来源: 文档路径
   source: string
   schema: z.AnyZodObject
   execute: (args: Record<string, unknown>) => Promise<string>
@@ -142,7 +88,13 @@ type SkillMdMeta = {
   description?: string
 }
 
-function sanitizeToolName(input: string): string {
+type ScanRoot = {
+  absRoot: string
+  sourcePrefix: string
+  markdownCollect?: MarkdownCollectOpts
+}
+
+export function sanitizeToolName(input: string): string {
   const normalized = input
     .toLowerCase()
     .replace(/[^a-z0-9_]+/g, '_')
@@ -155,7 +107,9 @@ function applyTemplate(raw: string, question: string): string {
   return raw.replaceAll('{{question}}', question)
 }
 
-function parseSkillFrontmatter(markdown: string): { meta: SkillMdMeta; body: string } | null {
+export function parseSkillFrontmatter(
+  markdown: string
+): { meta: SkillMdMeta; body: string } | null {
   const normalized = markdown.replace(/\r\n/g, '\n')
   if (!normalized.startsWith('---\n')) return null
   const end = normalized.indexOf('\n---\n', 4)
@@ -177,10 +131,10 @@ function parseSkillFrontmatter(markdown: string): { meta: SkillMdMeta; body: str
   return { meta, body }
 }
 
-/**
- * 收集工作区技能文档绝对路径
- */
-async function collectSkillMarkdownFiles(absDir: string): Promise<string[]> {
+async function collectSkillMarkdownFiles(
+  absDir: string,
+  markdownCollect?: MarkdownCollectOpts
+): Promise<string[]> {
   const queue: string[] = [absDir]
   const out: string[] = []
   while (queue.length) {
@@ -195,6 +149,13 @@ async function collectSkillMarkdownFiles(absDir: string): Promise<string[]> {
     for (const entry of entries) {
       const abs = path.join(current, entry.name)
       if (entry.isDirectory()) {
+        if (
+          markdownCollect &&
+          current === markdownCollect.rootAbs &&
+          markdownCollect.skipDirNamesAtRoot.has(entry.name)
+        ) {
+          continue
+        }
         queue.push(abs)
         continue
       }
@@ -220,7 +181,7 @@ function makeToolEventStart(name: string, args: unknown, runCtx: RunContext): To
   }
 }
 
-function makeBuiltinSkillDefinitions(ctx: SkillToolContext): SkillDefinition[] {
+export function makeBuiltinSkillDefinitions(ctx: SkillToolContext): SkillDefinition[] {
   const inspectSchema = z.object({
     path: z.string().optional(),
     depth: z.number().int().min(1).max(3).optional(),
@@ -294,99 +255,138 @@ function makeBuiltinSkillDefinitions(ctx: SkillToolContext): SkillDefinition[] {
   ]
 }
 
-/**
- * 从用户数据目录加载技能定义（不读取当前工作区目录）
- */
-async function loadBundledAndUserSkillDefs(): Promise<SkillDefinition[]> {
-  const defs: SkillDefinition[] = []
-  const scanRoots = allSkillScanRoots()
+async function buildSkillScanRoots(excludeMarketFolderId?: string): Promise<ScanRoot[]> {
+  const roots: ScanRoot[] = []
+  const bundled = getBundledSkillsSourceDir()
+  if (bundled) {
+    roots.push({ absRoot: bundled, sourcePrefix: 'skills/bundled' })
+  }
 
-  for (const { absRoot: absDir, sourcePrefix } of scanRoots) {
-    /*
-    markdown格式技能定义加载
-    */
-    const mdFiles = await collectSkillMarkdownFiles(absDir)
-    for (const absPath of mdFiles) {
-      if (defs.length >= MAX_LOADED_SKILLS) return defs
-      try {
-        const st = await fs.stat(absPath)
-        if (st.size > MAX_SKILL_MD_SIZE_BYTES) {
-          continue
-        }
-        const rawMd = await fs.readFile(absPath, 'utf8')
-        const parsed = parseSkillFrontmatter(rawMd)
-        if (!parsed) {
-          continue
-        }
-        const rel = path.join(sourcePrefix, path.relative(absDir, absPath)).replaceAll('\\', '/')
-        const folderName = path.basename(path.dirname(absPath))
-        const skillName = sanitizeToolName(parsed.meta.name || folderName)
-        const description =
-          parsed.meta.description ||
-          `技能文档：${rel}。按技能说明执行对应步骤，并在必要时调用工具。`
-        defs.push({
-          name: skillName,
-          description,
-          source: rel,
-          schema: z.object({ question: z.string().optional() }),
-          execute: async (args) => {
-            const question = typeof args.question === 'string' ? args.question.trim() : ''
-            if (!question) return parsed.body
-            return `用户问题: ${question}\n\n以下是技能文档内容：\n${parsed.body}`
-          }
-        })
-      } catch {
+  const marketRoot = marketSkillsInstallRoot()
+  let marketDirs: Dirent[] = []
+  try {
+    marketDirs = await fs.readdir(marketRoot, { withFileTypes: true })
+  } catch {
+    marketDirs = []
+  }
+  const sorted = marketDirs
+    .filter((d) => d.isDirectory() && !d.name.startsWith('.'))
+    .sort((a, b) => a.name.localeCompare(b.name))
+  for (const d of sorted) {
+    if (excludeMarketFolderId && d.name === excludeMarketFolderId) continue
+    roots.push({
+      absRoot: path.join(marketRoot, d.name),
+      sourcePrefix: `skills/market/${d.name}`
+    })
+  }
+
+  const userRoot = userSkillsAbsRoot()
+  roots.push({
+    absRoot: userRoot,
+    sourcePrefix: 'skills/legacy',
+    markdownCollect: {
+      rootAbs: userRoot,
+      skipDirNamesAtRoot: new Set(['market', '.cache'])
+    }
+  })
+
+  return roots
+}
+
+async function appendSkillDefsFromScanRoot(scan: ScanRoot, defs: SkillDefinition[]): Promise<void> {
+  const { absRoot: absDir, sourcePrefix, markdownCollect } = scan
+
+  const mdFiles = await collectSkillMarkdownFiles(absDir, markdownCollect)
+  for (const absPath of mdFiles) {
+    if (defs.length >= MAX_LOADED_SKILLS) return
+    try {
+      const st = await fs.stat(absPath)
+      if (st.size > MAX_SKILL_MD_SIZE_BYTES) {
         continue
       }
-    }
-
-    /*
-    json格式技能定义加载
-    */
-    let entries: Dirent[] = []
-    try {
-      entries = await fs.readdir(absDir, { withFileTypes: true })
+      const rawMd = await fs.readFile(absPath, 'utf8')
+      const parsed = parseSkillFrontmatter(rawMd)
+      if (!parsed) {
+        continue
+      }
+      const rel = path.join(sourcePrefix, path.relative(absDir, absPath)).replaceAll('\\', '/')
+      const folderName = path.basename(path.dirname(absPath))
+      const skillName = sanitizeToolName(parsed.meta.name || folderName)
+      const description =
+        parsed.meta.description || `技能文档：${rel}。按技能说明执行对应步骤，并在必要时调用工具。`
+      defs.push({
+        name: skillName,
+        description,
+        source: rel,
+        schema: z.object({ question: z.string().optional() }),
+        execute: async (args) => {
+          const question = typeof args.question === 'string' ? args.question.trim() : ''
+          if (!question) return parsed.body
+          return `用户问题: ${question}\n\n以下是技能文档内容：\n${parsed.body}`
+        }
+      })
     } catch {
       continue
     }
-    const jsonFiles = entries
-      .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.json'))
-      .map((entry) => entry.name)
-      .sort((a, b) => a.localeCompare(b))
-    for (const fileName of jsonFiles) {
-      if (defs.length >= MAX_LOADED_SKILLS) return defs
-      const absPath = path.join(absDir, fileName)
-      try {
-        const raw = await fs.readFile(absPath, 'utf8')
-        const parsed = JSON.parse(raw) as WorkspaceSkillJson
-        const skillName = sanitizeToolName(
-          parsed.name || parsed.id || path.basename(fileName, '.json')
-        )
-        // TODO: type解析
-        defs.push({
-          name: skillName,
-          description: parsed.description || `说明技能：${sourcePrefix}/${fileName}`,
-          source: `${sourcePrefix}/${fileName}`,
-          schema: z.object({ question: z.string().optional() }),
-          execute: async (args) => {
-            const question = typeof args.question === 'string' ? args.question : ''
-            const prompt = parsed.prompt || ''
-            if (!question) return prompt
-            return applyTemplate(prompt, question)
-          }
-        })
-      } catch {
-        continue
-      }
+  }
+
+  let entries: Dirent[] = []
+  try {
+    entries = await fs.readdir(absDir, { withFileTypes: true })
+  } catch {
+    return
+  }
+  const jsonFiles = entries
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.json'))
+    .map((entry) => entry.name)
+    .sort((a, b) => a.localeCompare(b))
+  for (const fileName of jsonFiles) {
+    if (defs.length >= MAX_LOADED_SKILLS) return
+    const absPath = path.join(absDir, fileName)
+    try {
+      const raw = await fs.readFile(absPath, 'utf8')
+      const parsed = JSON.parse(raw) as WorkspaceSkillJson
+      const skillName = sanitizeToolName(
+        parsed.name || parsed.id || path.basename(fileName, '.json')
+      )
+      defs.push({
+        name: skillName,
+        description: parsed.description || `说明技能：${sourcePrefix}/${fileName}`,
+        source: `${sourcePrefix}/${fileName}`,
+        schema: z.object({ question: z.string().optional() }),
+        execute: async (args) => {
+          const question = typeof args.question === 'string' ? args.question : ''
+          const prompt = parsed.prompt || ''
+          if (!question) return prompt
+          return applyTemplate(prompt, question)
+        }
+      })
+    } catch {
+      continue
     }
   }
-  return defs
 }
 
-function dedupeSkillDefinitions(defs: SkillDefinition[]): SkillDefinition[] {
+/**
+ * 文件类技能加载顺序：随包内置目录 → 市场安装目录（字母序）→ 用户 legacy 根（跳过 market/.cache）。
+ * dedupe 策略：**先到先得**（前者优先），保证内置随包优先于市场与 legacy 同名覆盖。
+ */
+async function loadFileSkillDefinitions(
+  excludeMarketFolderId?: string
+): Promise<SkillDefinition[]> {
+  const defs: SkillDefinition[] = []
+  const roots = await buildSkillScanRoots(excludeMarketFolderId)
+  for (const root of roots) {
+    await appendSkillDefsFromScanRoot(root, defs)
+    if (defs.length >= MAX_LOADED_SKILLS) break
+  }
+  return dedupeSkillDefinitionsFirstWins(defs)
+}
+
+function dedupeSkillDefinitionsFirstWins(defs: SkillDefinition[]): SkillDefinition[] {
   const byName = new Map<string, SkillDefinition>()
   for (const item of defs) {
-    byName.set(item.name, item)
+    if (!byName.has(item.name)) byName.set(item.name, item)
   }
   return [...byName.values()]
 }
@@ -457,11 +457,262 @@ function toTool(def: SkillDefinition, ctx: SkillToolContext): SkillTool {
 
 export async function buildSkillBundle(ctx: SkillToolContext): Promise<SkillBundle> {
   const builtin = makeBuiltinSkillDefinitions(ctx)
-  const fileSkills = await loadBundledAndUserSkillDefs()
-  const merged = dedupeSkillDefinitions([...builtin, ...fileSkills])
+  const fileSkills = await loadFileSkillDefinitions()
+  const mergedDefs = [...builtin, ...fileSkills]
+  const merged = dedupeSkillDefinitionsFirstWins(mergedDefs)
   const tools = merged.map((item) => toTool(item, ctx))
   return {
     tools,
     hint: makeSkillHint(merged)
+  }
+}
+
+export async function validateSkillPackageLayout(
+  absDir: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const mdFiles = await collectSkillMarkdownFiles(absDir)
+  for (const f of mdFiles) {
+    try {
+      const st = await fs.stat(f)
+      if (st.size > MAX_SKILL_MD_SIZE_BYTES) continue
+      const rawMd = await fs.readFile(f, 'utf8')
+      if (parseSkillFrontmatter(rawMd)) return { ok: true }
+    } catch {
+      continue
+    }
+  }
+  let entries: Dirent[] = []
+  try {
+    entries = await fs.readdir(absDir, { withFileTypes: true })
+  } catch {
+    return { ok: false, error: '无法读取技能包目录' }
+  }
+  const hasJson = entries.some((e) => e.isFile() && e.name.toLowerCase().endsWith('.json'))
+  if (hasJson) return { ok: true }
+  return {
+    ok: false,
+    error: '包内未找到可用的 skill.md（含 YAML frontmatter）或根目录 JSON 技能文件'
+  }
+}
+
+async function extractToolNamesFromScanRoot(scan: ScanRoot): Promise<string[]> {
+  const names: string[] = []
+  const defs: SkillDefinition[] = []
+  await appendSkillDefsFromScanRoot(scan, defs)
+  for (const d of defs) names.push(d.name)
+  return names
+}
+
+/** 预览目录将会注册的 skill 工具名（安装前冲突检测） */
+export async function previewPackageSkillToolNames(packageAbsDir: string): Promise<string[]> {
+  const scan: ScanRoot = { absRoot: packageAbsDir, sourcePrefix: 'preview' }
+  return extractToolNamesFromScanRoot(scan)
+}
+
+/** 返回当前已被文件类技能占用的工具名 + 代码内置名（可选排除某一市场目录以便覆盖安装） */
+export async function collectOccupiedSkillToolNames(params: {
+  excludeMarketFolderId?: string
+}): Promise<Set<string>> {
+  const set = new Set<string>()
+  for (const d of makeBuiltinSkillDefinitions(dummySkillToolContext())) {
+    set.add(d.name)
+  }
+  const files = await loadFileSkillDefinitions(params.excludeMarketFolderId)
+  for (const d of files) set.add(d.name)
+  return set
+}
+
+function dummySkillToolContext(): SkillToolContext {
+  return {
+    root: '',
+    termKey: '',
+    settings: defaultSettings,
+    runCtx: { runId: '', traceId: '' },
+    onTool: () => {}
+  }
+}
+
+async function mdEntriesForUi(scan: ScanRoot): Promise<SkillUiEntry[]> {
+  const out: SkillUiEntry[] = []
+  const mdFiles = await collectSkillMarkdownFiles(scan.absRoot, scan.markdownCollect)
+  for (const absPath of mdFiles) {
+    try {
+      const st = await fs.stat(absPath)
+      if (st.size > MAX_SKILL_MD_SIZE_BYTES) continue
+      const rawMd = await fs.readFile(absPath, 'utf8')
+      const parsed = parseSkillFrontmatter(rawMd)
+      if (!parsed) continue
+      const folderName = path.basename(path.dirname(absPath))
+      const toolName = sanitizeToolName(parsed.meta.name || folderName)
+      const relFile = path
+        .join(scan.sourcePrefix, path.relative(scan.absRoot, absPath))
+        .replaceAll('\\', '/')
+      out.push({
+        key: `${scan.sourcePrefix}:${relFile}`,
+        kind: scan.sourcePrefix.startsWith('skills/market/')
+          ? 'market'
+          : scan.sourcePrefix === 'skills/bundled'
+            ? 'builtin_packaged'
+            : 'legacy',
+        toolName,
+        title: parsed.meta.name || folderName,
+        description:
+          parsed.meta.description ||
+          `技能文档：${relFile}。按技能说明执行对应步骤，并在必要时调用工具。`,
+        sourceLabel: relFile,
+        marketFolderId: scan.sourcePrefix.startsWith('skills/market/')
+          ? scan.sourcePrefix.replace(/^skills\/market\//, '')
+          : undefined,
+        legacyFolderRelative:
+          scan.sourcePrefix === 'skills/legacy'
+            ? (() => {
+                const relDir = path
+                  .relative(userSkillsAbsRoot(), path.dirname(absPath))
+                  .replaceAll('\\', '/')
+                return relDir && relDir !== '.' ? relDir : undefined
+              })()
+            : undefined
+      })
+    } catch {
+      continue
+    }
+  }
+
+  let entries: Dirent[] = []
+  try {
+    entries = await fs.readdir(scan.absRoot, { withFileTypes: true })
+  } catch {
+    entries = []
+  }
+  const jsonFiles = entries
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.json'))
+    .map((entry) => entry.name)
+    .sort((a, b) => a.localeCompare(b))
+  for (const fileName of jsonFiles) {
+    const absPath = path.join(scan.absRoot, fileName)
+    try {
+      const raw = await fs.readFile(absPath, 'utf8')
+      const parsed = JSON.parse(raw) as WorkspaceSkillJson
+      const toolName = sanitizeToolName(
+        parsed.name || parsed.id || path.basename(fileName, '.json')
+      )
+      const relFile = `${scan.sourcePrefix}/${fileName}`
+      let legacyRelJson: string | undefined
+      if (scan.sourcePrefix === 'skills/legacy') {
+        const parentDir = path.dirname(absPath)
+        const relDir = path.relative(userSkillsAbsRoot(), parentDir).replaceAll('\\', '/')
+        legacyRelJson = relDir && relDir !== '.' ? relDir : undefined
+      }
+      out.push({
+        key: `${scan.sourcePrefix}:json:${fileName}`,
+        kind: scan.sourcePrefix.startsWith('skills/market/')
+          ? 'market'
+          : scan.sourcePrefix === 'skills/bundled'
+            ? 'builtin_packaged'
+            : 'legacy',
+        toolName,
+        title: parsed.name || parsed.id || fileName,
+        description: parsed.description || `JSON 技能：${relFile}`,
+        sourceLabel: relFile,
+        marketFolderId: scan.sourcePrefix.startsWith('skills/market/')
+          ? scan.sourcePrefix.replace(/^skills\/market\//, '')
+          : undefined,
+        legacyFolderRelative: legacyRelJson
+      })
+    } catch {
+      continue
+    }
+  }
+
+  return out
+}
+
+export async function gatherSkillsRuntimeState(): Promise<SkillsRuntimeState> {
+  const builtinCode = makeBuiltinSkillDefinitions(dummySkillToolContext()).map((d) => ({
+    key: `builtin-code:${d.name}`,
+    kind: 'builtin_code' as const,
+    toolName: d.name,
+    title: d.name,
+    description: d.description,
+    sourceLabel: '内置（代码）'
+  }))
+
+  const builtinPackaged: SkillUiEntry[] = []
+  const installedMarket: SkillUiEntry[] = []
+  const legacyUser: SkillUiEntry[] = []
+
+  const roots = await buildSkillScanRoots()
+  for (const root of roots) {
+    const rows = await mdEntriesForUi(root)
+    for (const row of rows) {
+      if (row.kind === 'builtin_packaged') builtinPackaged.push(row)
+      else if (row.kind === 'market') installedMarket.push(row)
+      else if (row.kind === 'legacy') legacyUser.push(row)
+    }
+  }
+
+  return { builtinCode, builtinPackaged, installedMarket, legacyUser }
+}
+
+export async function uninstallMarketSkillFolder(
+  folderId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const id = folderId.trim()
+  if (!id || id.includes('/') || id.includes('\\') || id === '.' || id === '..') {
+    return { ok: false, error: '无效的卸载目标' }
+  }
+  if (id.startsWith('.')) {
+    return { ok: false, error: '无效的卸载目标' }
+  }
+  const abs = path.join(marketSkillsInstallRoot(), id)
+  const resolved = path.resolve(abs)
+  const rootResolved = path.resolve(marketSkillsInstallRoot())
+  if (!resolved.startsWith(rootResolved + path.sep) && resolved !== rootResolved) {
+    return { ok: false, error: '路径逃逸被拒绝' }
+  }
+  try {
+    await fs.rm(resolved, { recursive: true, force: true })
+    mainLog.info('[skills-market] 已卸载市场技能:', id)
+    return { ok: true }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    return { ok: false, error: message }
+  }
+}
+
+export async function uninstallLegacySkillFolder(
+  legacyFolderRelative: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const userRoot = path.resolve(userSkillsAbsRoot())
+  const normalized = legacyFolderRelative.replace(/\\/g, '/').trim()
+  if (!normalized || normalized.includes('..')) {
+    return { ok: false, error: '无效的兼容技能路径' }
+  }
+  const segments = normalized.split('/').filter(Boolean)
+  if (segments.some((s) => s === '.' || s === '..')) {
+    return { ok: false, error: '无效的兼容技能路径' }
+  }
+  if (segments[0] === 'market' || segments[0] === '.cache') {
+    return { ok: false, error: '禁止卸载保留目录下的路径' }
+  }
+  const abs = path.resolve(path.join(userRoot, ...segments))
+  const rel = path.relative(userRoot, abs)
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    return { ok: false, error: '路径逃逸被拒绝' }
+  }
+  if (
+    rel.split(path.sep)[0] === 'market' ||
+    rel.startsWith(`.cache${path.sep}`) ||
+    rel === '.cache'
+  ) {
+    return { ok: false, error: '禁止卸载 market/.cache 下的内容（请使用市场卸载）' }
+  }
+  try {
+    await fs.rm(abs, { recursive: true, force: true })
+    mainLog.info('[skills] 已卸载兼容技能目录:', rel)
+    return { ok: true }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    return { ok: false, error: message }
   }
 }

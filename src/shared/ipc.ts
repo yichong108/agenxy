@@ -28,7 +28,13 @@ export const IPC = {
   /** 读取最近一次 MCP 池化预热结果（应用启动或保存 MCP 后） */
   MCP_WARMUP_GET: 'mcp:warmup:get',
   /** 立即重新执行池化预热并复用/更新连接 */
-  MCP_WARMUP_RUN: 'mcp:warmup:run'
+  MCP_WARMUP_RUN: 'mcp:warmup:run',
+  /** 聚合当前技能清单（内置 / 市场 / 兼容） */
+  SKILLS_STATE: 'skills:state',
+  /** 从市场 zip 安装技能包 */
+  SKILLS_INSTALL: 'skills:install',
+  /** 卸载市场或兼容目录技能包 */
+  SKILLS_UNINSTALL: 'skills:uninstall'
 } as const
 
 export const EVENTS = {
@@ -213,6 +219,53 @@ export type AppSettings = {
   /** 已保存的 MCP（stdio）服务器列表；启用项会在 Agent 工具流中挂载 */
   mcpServers: McpServerEntry[]
 }
+
+/** 市场 catalog 单项（列表来自 ClawHub，安装包 URL 为官方 download 接口） */
+export type SkillsMarketCatalogItem = {
+  id: string
+  name: string
+  description: string
+  version: string
+  packageUrl: string
+  sha256?: string
+}
+
+export type SkillsMarketCatalog = {
+  items: SkillsMarketCatalogItem[]
+}
+
+export type SkillInstallKind = 'builtin_code' | 'builtin_packaged' | 'market' | 'legacy'
+
+/** 渲染层「已安装」表格行 */
+export type SkillUiEntry = {
+  /** 稳定键（表格 rowKey） */
+  key: string
+  kind: SkillInstallKind
+  /** LangChain 工具名（skill_*） */
+  toolName: string
+  title: string
+  description: string
+  sourceLabel: string
+  /** 市场安装目录名（`skills/market/<id>`） */
+  marketFolderId?: string
+  /** 兼容技能目录相对 `userData/skills`（不含 market/.cache） */
+  legacyFolderRelative?: string
+}
+
+export type SkillsRuntimeState = {
+  builtinCode: SkillUiEntry[]
+  builtinPackaged: SkillUiEntry[]
+  installedMarket: SkillUiEntry[]
+  legacyUser: SkillUiEntry[]
+}
+
+export type SkillsInstallResult = { ok: true } | { ok: false; error: string }
+
+export type SkillsUninstallResult = { ok: true } | { ok: false; error: string }
+
+export type SkillsUninstallPayload =
+  | { kind: 'market'; folderId: string }
+  | { kind: 'legacy'; legacyFolderRelative: string }
 
 export const defaultProviderProfiles = (): Record<ModelProviderId, ProviderProfile> => ({
   deepseek: {

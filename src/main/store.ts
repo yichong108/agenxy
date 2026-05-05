@@ -166,10 +166,25 @@ function normalizeMcpServers(raw: unknown): McpServerEntry[] {
   return parseMcpServersFromUnknown(raw)
 }
 
-function normalizeSettings(input: Partial<AppSettings> & LegacyFlatSettings): AppSettings {
+function normalizeSettings(
+  input: Partial<AppSettings> &
+    LegacyFlatSettings & {
+      skillsMarketCatalogUrl?: unknown
+      skillsMarketCatalogRefreshHours?: unknown
+    }
+): AppSettings {
   const defaults = defaultSettings
   const baseProfiles = defaultProviderProfiles()
-  const { baseUrl: legacyBaseUrl, model: legacyModel, apiKey: legacyApiKey, ...inputRest } = input
+  const {
+    baseUrl: legacyBaseUrl,
+    model: legacyModel,
+    apiKey: legacyApiKey,
+    skillsMarketCatalogUrl: legacySkillsMarketCatalogUrl,
+    skillsMarketCatalogRefreshHours: legacySkillsMarketCatalogRefreshHours,
+    ...inputRest
+  } = input
+  void legacySkillsMarketCatalogUrl
+  void legacySkillsMarketCatalogRefreshHours
   const legacy: LegacyFlatSettings = {
     baseUrl: legacyBaseUrl,
     model: legacyModel,
