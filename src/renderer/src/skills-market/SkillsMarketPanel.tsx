@@ -7,7 +7,7 @@ import { fetchSkillsCatalogPage } from './catalog-fetch'
 
 const { Link } = Typography
 
-const PAGE_SIZE = 50
+const PAGE_SIZE = 10
 
 type PageRow = {
   items: SkillsMarketCatalogItem[]
