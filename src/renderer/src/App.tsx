@@ -1167,24 +1167,14 @@ export function App() {
     })
   }, [activeWorkspaceId])
 
-  const handleWorkspaceClick = useCallback(
-    async (workspaceId: string) => {
-      setExpandedWorkspaceIds((prev) => {
-        const next = new Set(prev)
-        if (next.has(workspaceId)) next.delete(workspaceId)
-        else next.add(workspaceId)
-        return next
-      })
-      if (workspaceId === activeWorkspaceId) return
-      if (!supportsMultiWorkspaceApi) {
-        setActiveWorkspaceId(workspaceId)
-        return
-      }
-      const workspace = await bridgeCompat.activateWorkspace!(workspaceId)
-      if (!workspace) msgApi.error('切换工作区失败')
-    },
-    [activeWorkspaceId, bridgeCompat, msgApi, setActiveWorkspaceId, supportsMultiWorkspaceApi]
-  )
+  const handleWorkspaceToggle = useCallback((workspaceId: string) => {
+    setExpandedWorkspaceIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(workspaceId)) next.delete(workspaceId)
+      else next.add(workspaceId)
+      return next
+    })
+  }, [])
 
   const handleSessionClick = useCallback(
     async (workspaceId: string, sessionId: string) => {
@@ -1272,24 +1262,32 @@ export function App() {
                   key={workspace.id}
                   className={`app-workspace-node ${isActiveWorkspace ? 'is-active' : ''}`}
                 >
-                  <button
-                    type="button"
-                    className="app-workspace-node-header"
-                    onClick={() => void handleWorkspaceClick(workspace.id)}
-                  >
-                    <span
-                      className={`app-workspace-chevron ${isExpanded ? 'is-open' : ''}`}
-                      aria-hidden="true"
+                  <div className="app-workspace-node-header">
+                    <button
+                      type="button"
+                      className="app-workspace-chevron-btn"
+                      aria-label={isExpanded ? '收起工作区会话' : '展开工作区会话'}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        handleWorkspaceToggle(workspace.id)
+                      }}
                     >
-                      {'>'}
+                      <span
+                        className={`app-workspace-chevron ${isExpanded ? 'is-open' : ''}`}
+                        aria-hidden="true"
+                      >
+                        {'>'}
+                      </span>
+                    </button>
+                    <span className="app-workspace-name-btn">
+                      <Text className="app-workspace-name">{workspace.name}</Text>
                     </span>
-                    <Text className="app-workspace-name">{workspace.name}</Text>
                     {workspaceSessions.length > 0 && (
                       <span className="app-workspace-session-count">
                         {workspaceSessions.length}
                       </span>
                     )}
-                  </button>
+                  </div>
                   {isExpanded && (
                     <div className="app-session-sublist">
                       {workspaceSessions.map((s) => (

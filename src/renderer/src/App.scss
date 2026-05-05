@@ -127,19 +127,38 @@
 
 .app-workspace-node-header {
   width: 100%;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
   padding: 9px 10px;
   display: flex;
   align-items: center;
   gap: 8px;
-  text-align: left;
   transition: background-color 0.18s ease;
 }
 
 .app-workspace-node-header:hover {
   background: var(--aw-color-fill-tertiary);
+}
+
+.app-workspace-chevron-btn,
+.app-workspace-name-btn {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+}
+
+.app-workspace-chevron-btn {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-workspace-name-btn {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
 }
 
 .app-workspace-name {
