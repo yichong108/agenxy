@@ -1,13 +1,4 @@
-import {
-  ApiOutlined,
-  BugOutlined,
-  PlusOutlined,
-  SendOutlined,
-  SettingOutlined,
-  StopOutlined,
-  FolderOpenOutlined,
-  ShopOutlined
-} from '@ant-design/icons'
+import { BugOutlined, SendOutlined, StopOutlined } from '@ant-design/icons'
 import {
   App as AntdApp,
   Alert,
@@ -16,19 +7,12 @@ import {
   Form,
   FloatButton,
   Input,
-  InputNumber,
   Menu,
   Modal,
-  Select,
   Space,
   Switch,
-  Table,
-  Tabs,
   Tag,
   Typography,
-  Dropdown,
-  Divider,
-  Tooltip,
   MenuProps
 } from 'antd'
 import { findAndReplace } from 'mdast-util-find-and-replace'
@@ -38,8 +22,8 @@ import rehypeHighlight from 'rehype-highlight'
 import remarkGfm from 'remark-gfm'
 import 'highlight.js/styles/github.css'
 
+import { WorkspaceLeftPane } from '@/renderer/src/left-pane'
 import { WorkspaceRightPane } from '@/renderer/src/right-pane/WorkspaceRightPane'
-import { SkillsMarketPanel } from '@/renderer/src/skills-market/SkillsMarketPanel'
 import { useUiStore } from '@/renderer/src/store/ui-store'
 import {
   applySettingsForm,
@@ -67,50 +51,7 @@ import {
 
 import '@/renderer/src/App.scss'
 
-const { Text, Title } = Typography
-
-function skillKindLabel(kind: SkillUiEntry['kind']): string {
-  switch (kind) {
-    case 'builtin_code':
-      return '内置（代码）'
-    case 'builtin_packaged':
-      return '内置（随应用）'
-    case 'market':
-      return '市场'
-    case 'legacy':
-      return '兼容/本地'
-    default:
-      return kind
-  }
-}
-
-const MCP_MARKET_LINKS: { title: string; desc: string; url: string }[] = [
-  {
-    title: 'Cursor Directory',
-    desc: '社区收录的 MCP 与扩展，可按场景筛选',
-    url: 'https://cursor.directory/mcp'
-  },
-  {
-    title: 'Smithery',
-    desc: 'MCP 注册与托管，可浏览可安装的 stdio 包',
-    url: 'https://smithery.ai/'
-  },
-  {
-    title: 'Glama MCP',
-    desc: 'MCP 服务器目录与文档',
-    url: 'https://glama.ai/mcp/servers'
-  },
-  {
-    title: 'MCP 官方规范',
-    desc: '协议说明、能力模型与实现参考',
-    url: 'https://modelcontextprotocol.io/'
-  },
-  {
-    title: 'awesome-mcp-servers',
-    desc: 'GitHub 上的开源 MCP 服务器合集',
-    url: 'https://github.com/punkpeye/awesome-mcp-servers'
-  }
-]
+const { Text } = Typography
 const { TextArea } = Input
 
 const PRELOAD_MISSING_ERROR = '未检测到 preload 注入（window.bridge 不存在）'
@@ -1336,6 +1277,31 @@ export function App() {
     [activeWorkspaceId, bridge, bridgeCompat, msgApi, setActiveId, supportsMultiWorkspaceApi]
   )
 
+  const createSessionForActiveWorkspace = useCallback(() => {
+    if (!activeWorkspaceId) {
+      msgApi.warning('请先创建或选择工作区')
+      return
+    }
+    void createSessionInWorkspace(activeWorkspaceId)
+  }, [activeWorkspaceId, createSessionInWorkspace, msgApi])
+
+  const handleSessionRenameRequest = useCallback((session: SessionInfo) => {
+    setRenameId(session.id)
+    setRenameName(session.name)
+  }, [])
+
+  const handleSessionDeleteRequest = useCallback(
+    (session: SessionInfo) => {
+      modalApi.confirm({
+        title: '删除此会话？',
+        onOk: () => {
+          void bridge.deleteSession(session.id).then(() => msgApi.success('已删除'))
+        }
+      })
+    },
+    [bridge, modalApi, msgApi]
+  )
+
   const handleWorkspaceDragStart = useCallback(
     (event: React.DragEvent<HTMLDivElement>, workspaceId: string) => {
       setDraggingWorkspaceId(workspaceId)
@@ -1420,173 +1386,93 @@ export function App() {
       <div
         className={`app-body ${isSidebarResizing ? 'is-sidebar-resizing' : ''} ${isRightPaneResizing ? 'is-right-resizing' : ''}`}
       >
-        <div className="app-sidebar" style={{ width: `${sidebarWidth}px` }}>
-          <div className="app-sidebar-inner">
-            <div className="app-sidebar-header">
-              <Text strong className="app-brand-text">
-                AgentWeave
-              </Text>
-              <Space size={0}>
-                <Button
-                  type="text"
-                  icon={<ApiOutlined />}
-                  onClick={openMcpHub}
-                  className="app-settings-btn"
-                  title="MCP 与扩展"
-                />
-                <Button
-                  type="text"
-                  icon={<ShopOutlined />}
-                  onClick={openSkillsHub}
-                  className="app-settings-btn"
-                  title="技能与市场"
-                />
-                <Button
-                  type="text"
-                  icon={<SettingOutlined />}
-                  onClick={openSettings}
-                  className="app-settings-btn"
-                  title="设置"
-                />
-              </Space>
-            </div>
-            <div className="app-new-session-wrap">
-              <Button
-                block
-                type="primary"
-                icon={<PlusOutlined />}
-                className="app-new-session-btn"
-                onClick={async () => {
-                  if (!activeWorkspaceId) {
-                    msgApi.warning('请先创建或选择工作区')
-                    return
-                  }
-                  await createSessionInWorkspace(activeWorkspaceId)
-                }}
-              >
-                新会话
-              </Button>
-            </div>
-            <div className="app-workspace-tree">
-              {workspaces.map((workspace) => {
-                const isActiveWorkspace = workspace.id === activeWorkspaceId
-                const isExpanded = expandedWorkspaceIds.has(workspace.id)
-                const dropMarkerPlacement =
-                  !!draggingWorkspaceId &&
-                  draggingWorkspaceId !== workspace.id &&
-                  workspaceDropMarker?.workspaceId === workspace.id
-                    ? workspaceDropMarker.placement
-                    : null
-                const workspaceSessions = sessionsByWorkspace[workspace.id] || []
-                return (
-                  <div
-                    key={workspace.id}
-                    className={`app-workspace-node ${isActiveWorkspace ? 'is-active' : ''} ${dropMarkerPlacement === 'before' ? 'is-drop-before' : ''} ${dropMarkerPlacement === 'after' ? 'is-drop-after' : ''}`}
-                  >
-                    <div
-                      className="app-workspace-node-header is-draggable"
-                      draggable
-                      onDragStart={(event) => handleWorkspaceDragStart(event, workspace.id)}
-                      onDragOver={(event) => handleWorkspaceDragOver(event, workspace.id)}
-                      onDrop={(event) => void handleWorkspaceDrop(event, workspace.id)}
-                      onDragEnd={handleWorkspaceDragEnd}
-                    >
-                      <button
-                        type="button"
-                        className="app-workspace-chevron-btn"
-                        aria-label={isExpanded ? '收起工作区会话' : '展开工作区会话'}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          handleWorkspaceToggle(workspace.id)
-                        }}
-                      >
-                        <span
-                          className={`app-workspace-chevron ${isExpanded ? 'is-open' : ''}`}
-                          aria-hidden="true"
-                        >
-                          {'>'}
-                        </span>
-                      </button>
-                      <span className="app-workspace-name-btn">
-                        <Text className="app-workspace-name">{workspace.name}</Text>
-                      </span>
-                      <button
-                        type="button"
-                        className="app-workspace-add-session-btn"
-                        aria-label={`在${workspace.name}下添加会话`}
-                        title="添加会话"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          void createSessionInWorkspace(workspace.id)
-                        }}
-                      >
-                        <PlusOutlined />
-                      </button>
-                    </div>
-                    {isExpanded && (
-                      <div className="app-session-sublist">
-                        {workspaceSessions.map((s) => (
-                          <Dropdown
-                            key={s.id}
-                            menu={{
-                              items: [
-                                {
-                                  key: 'rename',
-                                  label: '重命名',
-                                  onClick: () => {
-                                    setRenameId(s.id)
-                                    setRenameName(s.name)
-                                  }
-                                },
-                                {
-                                  key: 'del',
-                                  danger: true,
-                                  label: '删除',
-                                  onClick: () => {
-                                    modalApi.confirm({
-                                      title: '删除此会话？',
-                                      onOk: () => {
-                                        void bridge
-                                          .deleteSession(s.id)
-                                          .then(() => msgApi.success('已删除'))
-                                      }
-                                    })
-                                  }
-                                }
-                              ]
-                            }}
-                            trigger={['contextMenu']}
-                          >
-                            <div
-                              className={`app-session-item app-session-item-sub ${s.id === activeId ? 'is-active' : ''}`}
-                              onClick={() => void handleSessionClick(workspace.id, s.id)}
-                            >
-                              <div className="app-session-title">{s.name}</div>
-                            </div>
-                          </Dropdown>
-                        ))}
-                        {workspaceSessions.length === 0 && (
-                          <div className="app-session-placeholder">当前工作区暂无会话</div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-            <div className="app-workspace-btn-wrap">
-              <Button block icon={<FolderOpenOutlined />} onClick={pickWorkspace}>
-                添加并切换工作区
-              </Button>
-            </div>
-          </div>
-        </div>
-        <div
-          className={`app-sidebar-resizer ${isSidebarResizing ? 'is-dragging' : ''}`}
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="调整侧边栏宽度"
-          onMouseDown={handleSidebarResizeStart}
+        <WorkspaceLeftPane
+          sidebarWidth={sidebarWidth}
+          isSidebarResizing={isSidebarResizing}
+          activeWorkspaceId={activeWorkspaceId}
+          activeSessionId={activeId}
+          workspaces={workspaces}
+          sessionsByWorkspace={sessionsByWorkspace}
+          expandedWorkspaceIds={expandedWorkspaceIds}
+          draggingWorkspaceId={draggingWorkspaceId}
+          workspaceDropMarker={workspaceDropMarker}
+          onOpenMcpHub={openMcpHub}
+          onOpenSkillsHub={openSkillsHub}
+          onOpenSettings={openSettings}
+          onCreateSessionForActiveWorkspace={createSessionForActiveWorkspace}
+          onToggleWorkspace={handleWorkspaceToggle}
+          onWorkspaceDragStart={handleWorkspaceDragStart}
+          onWorkspaceDragOver={handleWorkspaceDragOver}
+          onWorkspaceDrop={(event, workspaceId) => {
+            void handleWorkspaceDrop(event, workspaceId)
+          }}
+          onWorkspaceDragEnd={handleWorkspaceDragEnd}
+          onCreateSessionInWorkspace={(workspaceId) => {
+            void createSessionInWorkspace(workspaceId)
+          }}
+          onSessionClick={(workspaceId, sessionId) => {
+            void handleSessionClick(workspaceId, sessionId)
+          }}
+          onRenameSession={handleSessionRenameRequest}
+          onDeleteSession={handleSessionDeleteRequest}
+          onPickWorkspace={() => {
+            void pickWorkspace()
+          }}
+          onSidebarResizeStart={handleSidebarResizeStart}
+          mcpOpen={mcpOpen}
+          mcpDraft={mcpDraft}
+          mcpJsonImportText={mcpJsonImportText}
+          mcpWarmupSummary={mcpWarmupSummary}
+          mcpWarmup={mcpWarmup}
+          mcpWarmupBusy={mcpWarmupBusy}
+          mcpProbingId={mcpProbingId}
+          onCloseMcpHub={() => {
+            setMcpOpen(false)
+            setMcpJsonImportText('')
+          }}
+          onSaveMcpServers={() => {
+            void saveMcpServers()
+          }}
+          onRerunMcpWarmup={() => {
+            void rerunMcpWarmup()
+          }}
+          onMcpJsonImportTextChange={setMcpJsonImportText}
+          onImportMcpFromJsonText={importMcpFromJsonText}
+          onOpenMcpAdd={openMcpAdd}
+          onSetMcpEnabled={(id, checked) => {
+            setMcpDraft((prev) => prev.map((x) => (x.id === id ? { ...x, enabled: checked } : x)))
+          }}
+          onProbeMcpRow={(row) => {
+            void probeMcpRow(row)
+          }}
+          onOpenMcpEdit={openMcpEdit}
+          onDeleteMcpRow={(id) => {
+            setMcpDraft((prev) => prev.filter((x) => x.id !== id))
+          }}
+          onOpenExternalWithConfirm={openExternalWithConfirm}
+          settingsOpen={settingsOpen}
+          settingsForm={form}
+          defaultSettingsFormValues={DEFAULT_FORM_VALUES}
+          onSaveSettings={() => {
+            void saveSettings()
+          }}
+          onCloseSettings={() => setSettingsOpen(false)}
+          onSettingsProviderChange={onSettingsProviderChange}
+          skillsOpen={skillsOpen}
+          skillsStateLoading={skillsStateLoading}
+          installedSkillRows={installedSkillRows}
+          installedMarketFolderIds={installedMarketFolderIds}
+          skillsMarketInstallingId={skillsMarketInstallingId}
+          onCloseSkillsHub={() => setSkillsOpen(false)}
+          onReloadSkillsState={() => {
+            void reloadSkillsState()
+          }}
+          onInstallMarketSkill={(item) => {
+            void installMarketSkill(item)
+          }}
+          onUninstallSkillRow={(row) => {
+            void uninstallSkillRow(row)
+          }}
         />
         <div className="app-main-pane">
           <div className="app-topbar">
@@ -1741,248 +1627,6 @@ export function App() {
       </div>
 
       <Modal
-        title="MCP 与扩展"
-        open={mcpOpen}
-        onCancel={() => {
-          setMcpOpen(false)
-          setMcpJsonImportText('')
-        }}
-        width={760}
-        destroyOnHidden
-        footer={[
-          <Button
-            key="close"
-            onClick={() => {
-              setMcpOpen(false)
-              setMcpJsonImportText('')
-            }}
-          >
-            关闭
-          </Button>,
-          <Button key="save" type="primary" onClick={() => void saveMcpServers()}>
-            保存 MCP
-          </Button>
-        ]}
-      >
-        <Tabs
-          items={[
-            {
-              key: 'servers',
-              label: '我的 MCP',
-              children: (
-                <div>
-                  <Alert
-                    type="info"
-                    showIcon
-                    style={{ marginBottom: 12 }}
-                    message="stdio 方式连接 MCP 子进程"
-                    description={
-                      <div>
-                        <div>
-                          与 Cursor 类似：填写启动命令与参数。启用后，Agent
-                          在「已开启工具」模式下会把各服务器的工具挂到对话中（工具名以 mcp_
-                          开头）。应用启动时会<strong>预检</strong>已启用的服务器并
-                          <strong>池化复用</strong>
-                          连接，减少反复拉起子进程；长时间无调用会自动断开。
-                        </div>
-                        {mcpWarmupSummary ? (
-                          <div style={{ marginTop: 8 }}>
-                            <Text strong>预检摘要：</Text>
-                            {mcpWarmupSummary}
-                            {mcpWarmup ? (
-                              <Text type="secondary" style={{ marginLeft: 8 }}>
-                                （{new Date(mcpWarmup.atMs).toLocaleString()}）
-                              </Text>
-                            ) : null}
-                          </div>
-                        ) : null}
-                        {mcpWarmupBusy ? (
-                          <div style={{ marginTop: 8 }}>
-                            <Text type="secondary">正在预检已启用的 MCP…</Text>
-                          </div>
-                        ) : null}
-                      </div>
-                    }
-                  />
-                  <Space style={{ marginBottom: 12 }}>
-                    <Button
-                      size="small"
-                      loading={mcpWarmupBusy}
-                      onClick={() => void rerunMcpWarmup()}
-                    >
-                      重新预检全部 MCP
-                    </Button>
-                  </Space>
-                  <div style={{ marginBottom: 12 }}>
-                    <Text strong>从 JSON 导入</Text>
-                    <div style={{ marginTop: 6, marginBottom: 8 }}>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        支持 Cursor 片段：根对象含 <Text code>mcpServers</Text>
-                        ，子键为显示名，值为含 command、args、env
-                        等字段的对象；也支持本应用使用的服务器对象数组。
-                      </Text>
-                    </div>
-                    <TextArea
-                      value={mcpJsonImportText}
-                      onChange={(e) => setMcpJsonImportText(e.target.value)}
-                      placeholder={`例如：\n{\n  "mcpServers": {\n    "mysql": {\n      "command": "npx",\n      "args": ["-y", "@f4ww4z/mcp-mysql-server"],\n      "env": { "MYSQL_HOST": "localhost" }\n    }\n  }\n}`}
-                      rows={6}
-                      style={{ fontFamily: 'monospace', fontSize: 12 }}
-                    />
-                    <Button
-                      type="default"
-                      style={{ marginTop: 8 }}
-                      onClick={() => importMcpFromJsonText()}
-                    >
-                      解析并追加到列表
-                    </Button>
-                  </div>
-                  <Space style={{ marginBottom: 12 }}>
-                    <Button type="primary" onClick={openMcpAdd}>
-                      添加服务器
-                    </Button>
-                  </Space>
-                  <Table<McpServerEntry>
-                    size="small"
-                    rowKey="id"
-                    pagination={false}
-                    dataSource={mcpDraft}
-                    locale={{ emptyText: '暂无 MCP，可从「MCP 市场」挑选后在此添加' }}
-                    columns={[
-                      { title: '名称', dataIndex: 'name', width: 140, ellipsis: true },
-                      {
-                        title: '命令',
-                        dataIndex: 'command',
-                        width: 100,
-                        ellipsis: true
-                      },
-                      {
-                        title: '参数预览',
-                        key: 'args',
-                        ellipsis: true,
-                        render: (_, row) => (
-                          <Text type="secondary" ellipsis>
-                            {(row.args ?? []).join(' ').slice(0, 80)}
-                            {(row.args ?? []).join(' ').length > 80 ? '…' : ''}
-                          </Text>
-                        )
-                      },
-                      {
-                        title: '启用',
-                        width: 72,
-                        render: (_, row) => (
-                          <Switch
-                            checked={row.enabled}
-                            onChange={(checked) =>
-                              setMcpDraft((prev) =>
-                                prev.map((x) => (x.id === row.id ? { ...x, enabled: checked } : x))
-                              )
-                            }
-                          />
-                        )
-                      },
-                      {
-                        title: '启动预检',
-                        key: 'warmup',
-                        width: 108,
-                        render: (_, row) => {
-                          if (!row.enabled || !row.command?.trim()) {
-                            return <Text type="secondary">—</Text>
-                          }
-                          const r = mcpWarmup?.servers.find((x) => x.id === row.id)
-                          if (!r && mcpWarmupBusy) {
-                            return (
-                              <Tag color="processing" style={{ margin: 0 }}>
-                                检测中
-                              </Tag>
-                            )
-                          }
-                          if (!r) return <Text type="secondary">—</Text>
-                          if (r.ok) {
-                            return (
-                              <Tag color="success" style={{ margin: 0 }}>
-                                {r.toolCount} 工具
-                              </Tag>
-                            )
-                          }
-                          return (
-                            <Tag color="error" style={{ margin: 0 }} title={r.error}>
-                              失败
-                            </Tag>
-                          )
-                        }
-                      },
-                      {
-                        title: '操作',
-                        key: 'actions',
-                        width: 200,
-                        render: (_, row) => (
-                          <Space size={4} wrap>
-                            <Button
-                              size="small"
-                              loading={mcpProbingId === row.id}
-                              onClick={() => void probeMcpRow(row)}
-                            >
-                              测试
-                            </Button>
-                            <Button size="small" onClick={() => openMcpEdit(row)}>
-                              编辑
-                            </Button>
-                            <Button
-                              size="small"
-                              danger
-                              onClick={() =>
-                                setMcpDraft((prev) => prev.filter((x) => x.id !== row.id))
-                              }
-                            >
-                              删除
-                            </Button>
-                          </Space>
-                        )
-                      }
-                    ]}
-                  />
-                </div>
-              )
-            },
-            {
-              key: 'market',
-              label: 'MCP 市场',
-              children: (
-                <div>
-                  <Text type="secondary">
-                    以下为常用 MCP 发现与文档站点，点击在系统浏览器中打开（需确认）。
-                  </Text>
-                  <Divider style={{ margin: '12px 0' }} />
-                  <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                    {MCP_MARKET_LINKS.map((item) => (
-                      <Card key={item.url} size="small" type="inner">
-                        <Title level={5} style={{ marginTop: 0, marginBottom: 4 }}>
-                          {item.title}
-                        </Title>
-                        <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                          {item.desc}
-                        </Text>
-                        <Typography.Link
-                          href={item.url}
-                          onClick={(e) => {
-                            e.preventDefault()
-                            openExternalWithConfirm(item.url)
-                          }}
-                        >
-                          {item.url}
-                        </Typography.Link>
-                      </Card>
-                    ))}
-                  </Space>
-                </div>
-              )
-            }
-          ]}
-        />
-      </Modal>
-
-      <Modal
         title={
           mcpDraft.some((x) => x.id === mcpEditorRecord?.id) ? '编辑 MCP 服务器' : '添加 MCP 服务器'
         }
@@ -2055,224 +1699,6 @@ export function App() {
             </Form.Item>
           </Form>
         ) : null}
-      </Modal>
-
-      <Modal
-        title="设置（模型与密钥）"
-        open={settingsOpen}
-        onOk={() => void saveSettings()}
-        onCancel={() => setSettingsOpen(false)}
-        width={520}
-        destroyOnHidden
-      >
-        <Form form={form} layout="vertical" initialValues={DEFAULT_FORM_VALUES}>
-          <Form.Item name="provider" label="提供方" rules={[{ required: true }]}>
-            <Select
-              options={[
-                { value: 'deepseek', label: 'DeepSeek' },
-                { value: 'ollama', label: 'Ollama' }
-              ]}
-              onChange={(v) => onSettingsProviderChange(v as ModelProviderId)}
-            />
-          </Form.Item>
-          <Form.Item name="baseUrl" label="Base URL" rules={[{ required: true }]}>
-            <Input placeholder="DeepSeek: https://api.deepseek.com；Ollama: http://127.0.0.1:11434" />
-          </Form.Item>
-          <Form.Item name="model" label="Model" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item noStyle shouldUpdate={(prev, cur) => prev.provider !== cur.provider}>
-            {() => {
-              const p = form.getFieldValue('provider') as ModelProviderId
-              if (p === 'ollama') return null
-              return (
-                <Form.Item
-                  name="apiKey"
-                  label="API Key"
-                  rules={[{ required: true, message: '请先填写 API Key' }]}
-                  hasFeedback
-                >
-                  <Input.Password autoComplete="off" placeholder="仅保存在本机" />
-                </Form.Item>
-              )
-            }}
-          </Form.Item>
-          <Form.Item noStyle shouldUpdate={(prev, cur) => prev.provider !== cur.provider}>
-            {() =>
-              form.getFieldValue('provider') === 'ollama' ? (
-                <Form.Item
-                  name="enableTools"
-                  label="启用工作区工具"
-                  valuePropName="checked"
-                  extra="需模型支持 Ollama/OpenAI 的 tools API（如 llama3.2、qwen2.5）。deepseek-r1 等不支持，请保持关闭以免报错。"
-                >
-                  <Switch />
-                </Form.Item>
-              ) : null
-            }
-          </Form.Item>
-          <Form.Item name="maxConcurrentStreams" label="最大并行流">
-            <InputNumber min={1} max={8} className="app-settings-number" />
-          </Form.Item>
-          <Form.Item name="streamFlushMs" label="流式合并间隔 (ms)">
-            <InputNumber min={8} max={200} className="app-settings-number" />
-          </Form.Item>
-          <Form.Item name="streamFlushChars" label="流式合并字符数">
-            <InputNumber min={32} max={2000} className="app-settings-number" />
-          </Form.Item>
-          <Form.Item name="maxTerminalOutputChars" label="终端输出最大字符">
-            <InputNumber min={1} max={1000} className="app-settings-number" />
-          </Form.Item>
-          <Form.Item
-            name="tavilyApiKey"
-            label="Tavily API Key（联网搜索）"
-            extra="选填。填写后模型可调用 web_search；注册 https://tavily.com 。也可通过环境变量 TAVILY_API_KEY 提供（不设此项时）。"
-          >
-            <Input.Password autoComplete="off" placeholder="留空则不启用联网搜索" />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      <Modal
-        title="技能与市场"
-        open={skillsOpen}
-        onCancel={() => setSkillsOpen(false)}
-        width={920}
-        destroyOnHidden
-        footer={[
-          <Button key="close" onClick={() => setSkillsOpen(false)}>
-            关闭
-          </Button>,
-          <Button
-            key="reload-installed"
-            loading={skillsStateLoading}
-            onClick={() => void reloadSkillsState()}
-          >
-            刷新已安装
-          </Button>
-        ]}
-      >
-        <Tabs
-          items={[
-            {
-              key: 'installed',
-              label: '已安装',
-              children: (
-                <div>
-                  <Alert
-                    type="info"
-                    showIcon
-                    style={{ marginBottom: 12 }}
-                    message="卸载说明"
-                    description="内置（代码）与内置（随应用）不可卸载。市场安装位于 userData/skills/market。兼容目录来自旧版种子或手动放置的技能。"
-                  />
-                  <Table<SkillUiEntry>
-                    size="small"
-                    rowKey="key"
-                    loading={skillsStateLoading}
-                    pagination={false}
-                    dataSource={installedSkillRows}
-                    locale={{ emptyText: '暂无技能数据，请点击「刷新已安装」' }}
-                    scroll={{ x: 820 }}
-                    columns={[
-                      {
-                        title: '类型',
-                        dataIndex: 'kind',
-                        width: 120,
-                        render: (k: SkillUiEntry['kind']) => {
-                          const color =
-                            k === 'builtin_code'
-                              ? 'purple'
-                              : k === 'builtin_packaged'
-                                ? 'blue'
-                                : k === 'market'
-                                  ? 'green'
-                                  : 'orange'
-                          return <Tag color={color}>{skillKindLabel(k)}</Tag>
-                        }
-                      },
-                      { title: '工具名', dataIndex: 'toolName', width: 200, ellipsis: true },
-                      { title: '标题', dataIndex: 'title', width: 160, ellipsis: true },
-                      {
-                        title: '描述',
-                        dataIndex: 'description',
-                        ellipsis: true,
-                        render: (t: string) => (
-                          <Tooltip title={t}>
-                            <span>{t}</span>
-                          </Tooltip>
-                        )
-                      },
-                      {
-                        title: '来源',
-                        dataIndex: 'sourceLabel',
-                        width: 220,
-                        ellipsis: true
-                      },
-                      {
-                        title: '操作',
-                        key: 'actions',
-                        width: 120,
-                        render: (_, row) => {
-                          if (row.kind === 'builtin_code' || row.kind === 'builtin_packaged') {
-                            return (
-                              <Tooltip title="内置技能不可卸载">
-                                <Button size="small" disabled>
-                                  卸载
-                                </Button>
-                              </Tooltip>
-                            )
-                          }
-                          if (row.kind === 'market') {
-                            return (
-                              <Button
-                                size="small"
-                                danger
-                                onClick={() => void uninstallSkillRow(row)}
-                              >
-                                卸载
-                              </Button>
-                            )
-                          }
-                          const canLegacy = Boolean(row.legacyFolderRelative)
-                          return (
-                            <Tooltip
-                              title={
-                                canLegacy
-                                  ? '删除整个兼容技能目录'
-                                  : '该条目位于 skills 根目录，无法安全卸载'
-                              }
-                            >
-                              <Button
-                                size="small"
-                                danger
-                                disabled={!canLegacy}
-                                onClick={() => void uninstallSkillRow(row)}
-                              >
-                                卸载
-                              </Button>
-                            </Tooltip>
-                          )
-                        }
-                      }
-                    ]}
-                  />
-                </div>
-              )
-            },
-            {
-              key: 'market',
-              label: '技能市场',
-              children: (
-                <SkillsMarketPanel
-                  installedMarketFolderIds={installedMarketFolderIds}
-                  installingId={skillsMarketInstallingId}
-                  onInstall={installMarketSkill}
-                />
-              )
-            }
-          ]}
-        />
       </Modal>
 
       <Modal
