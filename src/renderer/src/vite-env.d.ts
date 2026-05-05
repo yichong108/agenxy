@@ -15,11 +15,17 @@ import type {
   SkillsUninstallPayload,
   SkillsUninstallResult,
   StreamEvent,
+  WebEditAction,
+  WindowChromeAction,
   WorkspaceInfo,
   WorkspacesPayload
 } from '@/shared/ipc'
 
 type Api = {
+  platform: NodeJS.Platform
+  windowAction: (action: WindowChromeAction) => Promise<void>
+  webEdit: (action: WebEditAction) => Promise<void>
+  showAbout: () => Promise<void>
   selectWorkspace: () => Promise<{ path: string }>
   getWorkspace: () => Promise<string>
   listWorkspaces: () => Promise<WorkspacesPayload>

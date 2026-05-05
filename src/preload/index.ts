@@ -18,6 +18,8 @@ import {
   type SkillsUninstallPayload,
   type SkillsUninstallResult,
   type StreamEvent,
+  type WebEditAction,
+  type WindowChromeAction,
   type WorkspaceInfo,
   type WorkspacesPayload
 } from '@/shared/ipc'
@@ -25,6 +27,13 @@ import {
 installElectronLogBridge()
 
 const api = {
+  /** 渲染进程用于判断是否启用 Windows 自定义标题栏菜单 */
+  platform: process.platform,
+  windowAction: (action: WindowChromeAction) =>
+    ipcRenderer.invoke(IPC.WINDOW_ACTION, action) as Promise<void>,
+  webEdit: (action: WebEditAction) =>
+    ipcRenderer.invoke(IPC.WEB_EDIT, action) as Promise<void>,
+  showAbout: () => ipcRenderer.invoke(IPC.APP_ABOUT) as Promise<void>,
   selectWorkspace: () => ipcRenderer.invoke(IPC.WORKSPACE_SELECT) as Promise<{ path: string }>,
   getWorkspace: () => ipcRenderer.invoke(IPC.WORKSPACE_GET) as Promise<string>,
   listWorkspaces: () => ipcRenderer.invoke(IPC.WORKSPACE_LIST) as Promise<WorkspacesPayload>,

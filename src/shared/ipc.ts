@@ -34,8 +34,20 @@ export const IPC = {
   /** 从市场 zip 安装技能包 */
   SKILLS_INSTALL: 'skills:install',
   /** 卸载市场或兼容目录技能包 */
-  SKILLS_UNINSTALL: 'skills:uninstall'
+  SKILLS_UNINSTALL: 'skills:uninstall',
+  /** Windows 自定义标题栏：窗口行为（最小化 / 最大化 / 关闭 / 重载 / 退出） */
+  WINDOW_ACTION: 'window:action',
+  /** 触发 webContents 编辑命令（撤销、复制等） */
+  WEB_EDIT: 'web:edit',
+  /** 关于对话框 */
+  APP_ABOUT: 'app:about'
 } as const
+
+/** 与 IPC.WINDOW_ACTION 对应的动作 */
+export type WindowChromeAction = 'minimize' | 'maximize-toggle' | 'close' | 'reload' | 'quit'
+
+/** 与 IPC.WEB_EDIT 对应的编辑命令 */
+export type WebEditAction = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll'
 
 export const EVENTS = {
   AGENT_STREAM: 'agent:stream',
