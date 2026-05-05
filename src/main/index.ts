@@ -33,6 +33,7 @@ import {
   getUiState,
   getWorkspace,
   listWorkspaces,
+  reorderWorkspaces,
   removeWorkspace,
   renameWorkspace,
   setSettings,
@@ -291,6 +292,14 @@ function registerIpc(): void {
     broadcastWorkspaces()
     broadcastSessions()
     return next
+  })
+  ipcMain.handle(IPC.WORKSPACE_REORDER, (_e, orderIds: string[]) => {
+    reorderWorkspaces(orderIds)
+    broadcastWorkspaces()
+    return {
+      list: listWorkspaces(),
+      activeWorkspaceId: getActiveWorkspaceId()
+    }
   })
   ipcMain.handle(IPC.WORKSPACE_RENAME, (_e, workspaceId: string, name: string) => {
     const next = renameWorkspace(workspaceId, name)

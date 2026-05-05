@@ -395,6 +395,30 @@ export function renameWorkspace(workspaceId: string, name: string): WorkspaceInf
   return nextItem
 }
 
+export function reorderWorkspaces(orderIds: string[]): WorkspaceInfo[] {
+  const list = listWorkspaces()
+  if (!Array.isArray(orderIds) || orderIds.length === 0) return list
+
+  const byId = new Map(list.map((item) => [item.id, item] as const))
+  const orderedIds: string[] = []
+  const seen = new Set<string>()
+  for (const id of orderIds) {
+    if (typeof id !== 'string') continue
+    if (!byId.has(id) || seen.has(id)) continue
+    seen.add(id)
+    orderedIds.push(id)
+  }
+  if (orderedIds.length === 0) return list
+
+  const next: WorkspaceInfo[] = orderedIds.map((id) => byId.get(id)!).filter(Boolean)
+  for (const item of list) {
+    if (!seen.has(item.id)) next.push(item)
+  }
+
+  store.set('workspaces', next)
+  return next
+}
+
 export function removeWorkspace(workspaceId: string): boolean {
   if (workspaceId === DEFAULT_WORKSPACE_ID) return false
   const list = listWorkspaces()

@@ -31,6 +31,7 @@ type Api = {
   listWorkspaces: () => Promise<WorkspacesPayload>
   addWorkspace: (dir: string) => Promise<WorkspaceInfo | null>
   activateWorkspace: (workspaceId: string) => Promise<WorkspaceInfo | null>
+  reorderWorkspaces: (orderIds: string[]) => Promise<WorkspacesPayload>
   renameWorkspace: (workspaceId: string, name: string) => Promise<WorkspaceInfo | null>
   removeWorkspace: (workspaceId: string) => Promise<{ ok: boolean }>
   getSettings: () => Promise<AppSettings>

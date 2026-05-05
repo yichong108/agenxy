@@ -63,9 +63,35 @@
 }
 
 .app-sidebar {
-  width: 300px;
   background: #f9f9f9;
-  border-right: 1px solid var(--aw-color-border-secondary);
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.app-sidebar-resizer {
+  width: 8px;
+  flex-shrink: 0;
+  position: relative;
+  cursor: col-resize;
+  background: transparent;
+}
+
+.app-sidebar-resizer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--aw-color-border-secondary);
+  transition: background-color 0.15s ease;
+}
+
+.app-sidebar-resizer:hover::before,
+.app-body.is-resizing .app-sidebar-resizer::before,
+.app-sidebar-resizer.is-dragging::before {
+  background: #9a9a9a;
 }
 
 .app-sidebar-inner {
@@ -147,6 +173,38 @@
   background: #f3f3f3;
 }
 
+.app-workspace-node-header.is-draggable {
+  cursor: grab;
+}
+
+.app-workspace-node-header.is-draggable:active {
+  cursor: grabbing;
+}
+
+.app-workspace-node {
+  position: relative;
+}
+
+.app-workspace-node.is-drop-before::before,
+.app-workspace-node.is-drop-after::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  border-radius: 999px;
+  background: #8a8a8a;
+  pointer-events: none;
+}
+
+.app-workspace-node.is-drop-before::before {
+  top: 0;
+}
+
+.app-workspace-node.is-drop-after::after {
+  bottom: 0;
+}
+
 .app-workspace-chevron-btn,
 .app-workspace-name-btn {
   border: 0;
@@ -182,16 +240,24 @@
   white-space: nowrap;
 }
 
-.app-workspace-session-count {
+.app-workspace-add-session-btn {
   margin-left: auto;
-  min-width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  font-size: 11px;
-  line-height: 18px;
-  text-align: center;
-  color: #595959;
-  background: #e0e0e0;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--aw-color-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.app-workspace-add-session-btn:hover {
+  background: #ededed;
+  color: var(--aw-color-text);
 }
 
 .app-workspace-chevron {

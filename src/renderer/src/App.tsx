@@ -5,7 +5,8 @@ import {
   SendOutlined,
   SettingOutlined,
   StopOutlined,
-  FolderOpenOutlined, ShopOutlined
+  FolderOpenOutlined,
+  ShopOutlined
 } from '@ant-design/icons'
 import {
   App as AntdApp,
@@ -27,7 +28,8 @@ import {
   Typography,
   Dropdown,
   Divider,
-  Tooltip, MenuProps
+  Tooltip,
+  MenuProps
 } from 'antd'
 import { findAndReplace } from 'mdast-util-find-and-replace'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -182,13 +184,24 @@ type RunStats = {
   status: 'running' | 'done' | 'error'
 }
 
+type WorkspaceDropMarker = {
+  workspaceId: string
+  placement: 'before' | 'after'
+}
+
 export function App() {
+  const SIDEBAR_MIN_WIDTH = 240
+  const SIDEBAR_MAX_WIDTH = 560
+  const SIDEBAR_DEFAULT_WIDTH = 300
   const { message: msgApi, modal: modalApi } = AntdApp.useApp()
   const preloadOk = typeof window !== 'undefined' && typeof window.bridge !== 'undefined'
   const bridge = window.bridge
   const bridgeCompat = bridge as typeof bridge & {
     listWorkspaces?: () => Promise<{ list: WorkspaceInfo[]; activeWorkspaceId: string | null }>
     listSessionsByWorkspace?: (workspaceId: string) => Promise<SessionInfo[]>
+    reorderWorkspaces?: (
+      orderIds: string[]
+    ) => Promise<{ list: WorkspaceInfo[]; activeWorkspaceId: string | null }>
     onWorkspacesSync?: (
       cb: (payload: { list: WorkspaceInfo[]; activeWorkspaceId: string | null }) => void
     ) => () => void
@@ -241,6 +254,8 @@ export function App() {
     useRef<Record<ModelProviderId, ProviderProfile>>(defaultProviderProfiles())
   const settingsProviderRef = useRef<ModelProviderId>('deepseek')
   const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState<Set<string>>(new Set())
+  const [draggingWorkspaceId, setDraggingWorkspaceId] = useState<string | null>(null)
+  const [workspaceDropMarker, setWorkspaceDropMarker] = useState<WorkspaceDropMarker | null>(null)
   const [renameId, setRenameId] = useState<string | null>(null)
   const [renameName, setRenameName] = useState('')
   const isDevEnv = import.meta.env.DEV
@@ -336,6 +351,9 @@ export function App() {
   const [running, setRunning] = useState<Record<string, boolean>>({})
   const [queued, setQueued] = useState<Record<string, number | undefined>>({})
   const [runStats, setRunStats] = useState<Record<string, RunStats | undefined>>({})
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH)
+  const [isSidebarResizing, setIsSidebarResizing] = useState(false)
+  const sidebarResizeStartRef = useRef<{ startX: number; startWidth: number } | null>(null)
 
   const mcpWarmupSummary = useMemo(() => {
     if (!mcpWarmup) return null
@@ -1176,6 +1194,54 @@ export function App() {
     })
   }, [])
 
+  const handleSidebarResizeStart = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return
+      event.preventDefault()
+      sidebarResizeStartRef.current = {
+        startX: event.clientX,
+        startWidth: sidebarWidth
+      }
+      setIsSidebarResizing(true)
+    },
+    [sidebarWidth]
+  )
+
+  useEffect(() => {
+    if (!isSidebarResizing) return
+    const previousCursor = document.body.style.cursor
+    const previousUserSelect = document.body.style.userSelect
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const dragState = sidebarResizeStartRef.current
+      if (!dragState) return
+      const delta = event.clientX - dragState.startX
+      const nextWidth = Math.min(
+        SIDEBAR_MAX_WIDTH,
+        Math.max(SIDEBAR_MIN_WIDTH, dragState.startWidth + delta)
+      )
+      setSidebarWidth(nextWidth)
+    }
+
+    const handleMouseUp = () => {
+      sidebarResizeStartRef.current = null
+      setIsSidebarResizing(false)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    window.addEventListener('blur', handleMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+      window.removeEventListener('blur', handleMouseUp)
+      document.body.style.cursor = previousCursor
+      document.body.style.userSelect = previousUserSelect
+    }
+  }, [isSidebarResizing])
+
   const handleSessionClick = useCallback(
     async (workspaceId: string, sessionId: string) => {
       if (workspaceId !== activeWorkspaceId && supportsMultiWorkspaceApi) {
@@ -1188,6 +1254,99 @@ export function App() {
       setActiveId(sessionId)
     },
     [activeWorkspaceId, bridgeCompat, msgApi, setActiveId, supportsMultiWorkspaceApi]
+  )
+
+  const createSessionInWorkspace = useCallback(
+    async (workspaceId: string) => {
+      if (!workspaceId) return
+      if (workspaceId !== activeWorkspaceId && supportsMultiWorkspaceApi) {
+        const workspace = await bridgeCompat.activateWorkspace!(workspaceId)
+        if (!workspace) {
+          msgApi.error('切换工作区失败')
+          return
+        }
+      }
+      const session = await bridge.createSession()
+      if (!session) {
+        msgApi.warning('请先创建或选择工作区')
+        return
+      }
+      setExpandedWorkspaceIds((prev) => {
+        const next = new Set(prev)
+        next.add(workspaceId)
+        return next
+      })
+      setActiveId(session.id)
+    },
+    [activeWorkspaceId, bridge, bridgeCompat, msgApi, setActiveId, supportsMultiWorkspaceApi]
+  )
+
+  const handleWorkspaceDragStart = useCallback(
+    (event: React.DragEvent<HTMLDivElement>, workspaceId: string) => {
+      setDraggingWorkspaceId(workspaceId)
+      setWorkspaceDropMarker(null)
+      event.dataTransfer.effectAllowed = 'move'
+      event.dataTransfer.setData('text/plain', workspaceId)
+    },
+    []
+  )
+
+  const handleWorkspaceDragEnd = useCallback(() => {
+    setDraggingWorkspaceId(null)
+    setWorkspaceDropMarker(null)
+  }, [])
+
+  const handleWorkspaceDragOver = useCallback(
+    (event: React.DragEvent<HTMLDivElement>, workspaceId: string) => {
+      if (!draggingWorkspaceId || draggingWorkspaceId === workspaceId) return
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'move'
+      const rect = event.currentTarget.getBoundingClientRect()
+      const midpoint = rect.top + rect.height / 2
+      const placement: WorkspaceDropMarker['placement'] =
+        event.clientY < midpoint ? 'before' : 'after'
+      setWorkspaceDropMarker((prev) => {
+        if (prev?.workspaceId === workspaceId && prev.placement === placement) return prev
+        return { workspaceId, placement }
+      })
+    },
+    [draggingWorkspaceId]
+  )
+
+  const handleWorkspaceDrop = useCallback(
+    async (event: React.DragEvent<HTMLDivElement>, targetWorkspaceId: string) => {
+      event.preventDefault()
+      const sourceWorkspaceId =
+        draggingWorkspaceId || event.dataTransfer.getData('text/plain') || null
+
+      const placement: WorkspaceDropMarker['placement'] =
+        workspaceDropMarker?.workspaceId === targetWorkspaceId
+          ? workspaceDropMarker.placement
+          : 'before'
+
+      setWorkspaceDropMarker(null)
+      setDraggingWorkspaceId(null)
+
+      if (!sourceWorkspaceId || sourceWorkspaceId === targetWorkspaceId) return
+      const sourceIndex = workspaces.findIndex((x) => x.id === sourceWorkspaceId)
+      const targetIndex = workspaces.findIndex((x) => x.id === targetWorkspaceId)
+      if (sourceIndex < 0 || targetIndex < 0) return
+
+      const next = [...workspaces]
+      const [dragged] = next.splice(sourceIndex, 1)
+      if (!dragged) return
+      const normalizedTargetIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex
+      const insertIndex = placement === 'after' ? normalizedTargetIndex + 1 : normalizedTargetIndex
+      next.splice(insertIndex, 0, dragged)
+      const nextIds = next.map((x) => x.id)
+
+      setWorkspaces(next)
+      if (typeof bridgeCompat.reorderWorkspaces === 'function') {
+        const payload = await bridgeCompat.reorderWorkspaces(nextIds)
+        setWorkspaces(payload.list)
+      }
+    },
+    [bridgeCompat, draggingWorkspaceId, workspaceDropMarker, workspaces]
   )
 
   return (
@@ -1203,286 +1362,312 @@ export function App() {
           />
         </div>
       ) : null}
-      <div className="app-body">
-      <div className="app-sidebar">
-        <div className="app-sidebar-inner">
-          <div className="app-sidebar-header">
-            <Text strong className="app-brand-text">
-              AgentWeave
-            </Text>
-            <Space size={0}>
+      <div className={`app-body ${isSidebarResizing ? 'is-resizing' : ''}`}>
+        <div className="app-sidebar" style={{ width: `${sidebarWidth}px` }}>
+          <div className="app-sidebar-inner">
+            <div className="app-sidebar-header">
+              <Text strong className="app-brand-text">
+                AgentWeave
+              </Text>
+              <Space size={0}>
+                <Button
+                  type="text"
+                  icon={<ApiOutlined />}
+                  onClick={openMcpHub}
+                  className="app-settings-btn"
+                  title="MCP 与扩展"
+                />
+                <Button
+                  type="text"
+                  icon={<ShopOutlined />}
+                  onClick={openSkillsHub}
+                  className="app-settings-btn"
+                  title="技能与市场"
+                />
+                <Button
+                  type="text"
+                  icon={<SettingOutlined />}
+                  onClick={openSettings}
+                  className="app-settings-btn"
+                  title="设置"
+                />
+              </Space>
+            </div>
+            <div className="app-new-session-wrap">
               <Button
-                type="text"
-                icon={<ApiOutlined />}
-                onClick={openMcpHub}
-                className="app-settings-btn"
-                title="MCP 与扩展"
-              />
-              <Button
-                type="text"
-                icon={<ShopOutlined />}
-                onClick={openSkillsHub}
-                className="app-settings-btn"
-                title="技能与市场"
-              />
-              <Button
-                type="text"
-                icon={<SettingOutlined />}
-                onClick={openSettings}
-                className="app-settings-btn"
-                title="设置"
-              />
-            </Space>
-          </div>
-          <div className="app-new-session-wrap">
-            <Button
-              block
-              type="primary"
-              icon={<PlusOutlined />}
-              className="app-new-session-btn"
-              onClick={async () => {
-                const s = await bridge.createSession()
-                if (!s) {
-                  msgApi.warning('请先创建或选择工作区')
-                  return
-                }
-                setActiveId(s.id)
-              }}
-            >
-              新会话
-            </Button>
-          </div>
-          <div className="app-workspace-tree">
-            {workspaces.map((workspace) => {
-              const isActiveWorkspace = workspace.id === activeWorkspaceId
-              const isExpanded = expandedWorkspaceIds.has(workspace.id)
-              const workspaceSessions = sessionsByWorkspace[workspace.id] || []
-              return (
-                <div
-                  key={workspace.id}
-                  className={`app-workspace-node ${isActiveWorkspace ? 'is-active' : ''}`}
-                >
-                  <div className="app-workspace-node-header">
-                    <button
-                      type="button"
-                      className="app-workspace-chevron-btn"
-                      aria-label={isExpanded ? '收起工作区会话' : '展开工作区会话'}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        handleWorkspaceToggle(workspace.id)
-                      }}
+                block
+                type="primary"
+                icon={<PlusOutlined />}
+                className="app-new-session-btn"
+                onClick={async () => {
+                  if (!activeWorkspaceId) {
+                    msgApi.warning('请先创建或选择工作区')
+                    return
+                  }
+                  await createSessionInWorkspace(activeWorkspaceId)
+                }}
+              >
+                新会话
+              </Button>
+            </div>
+            <div className="app-workspace-tree">
+              {workspaces.map((workspace) => {
+                const isActiveWorkspace = workspace.id === activeWorkspaceId
+                const isExpanded = expandedWorkspaceIds.has(workspace.id)
+                const dropMarkerPlacement =
+                  !!draggingWorkspaceId &&
+                  draggingWorkspaceId !== workspace.id &&
+                  workspaceDropMarker?.workspaceId === workspace.id
+                    ? workspaceDropMarker.placement
+                    : null
+                const workspaceSessions = sessionsByWorkspace[workspace.id] || []
+                return (
+                  <div
+                    key={workspace.id}
+                    className={`app-workspace-node ${isActiveWorkspace ? 'is-active' : ''} ${dropMarkerPlacement === 'before' ? 'is-drop-before' : ''} ${dropMarkerPlacement === 'after' ? 'is-drop-after' : ''}`}
+                  >
+                    <div
+                      className="app-workspace-node-header is-draggable"
+                      draggable
+                      onDragStart={(event) => handleWorkspaceDragStart(event, workspace.id)}
+                      onDragOver={(event) => handleWorkspaceDragOver(event, workspace.id)}
+                      onDrop={(event) => void handleWorkspaceDrop(event, workspace.id)}
+                      onDragEnd={handleWorkspaceDragEnd}
                     >
-                      <span
-                        className={`app-workspace-chevron ${isExpanded ? 'is-open' : ''}`}
-                        aria-hidden="true"
+                      <button
+                        type="button"
+                        className="app-workspace-chevron-btn"
+                        aria-label={isExpanded ? '收起工作区会话' : '展开工作区会话'}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          handleWorkspaceToggle(workspace.id)
+                        }}
                       >
-                        {'>'}
+                        <span
+                          className={`app-workspace-chevron ${isExpanded ? 'is-open' : ''}`}
+                          aria-hidden="true"
+                        >
+                          {'>'}
+                        </span>
+                      </button>
+                      <span className="app-workspace-name-btn">
+                        <Text className="app-workspace-name">{workspace.name}</Text>
                       </span>
-                    </button>
-                    <span className="app-workspace-name-btn">
-                      <Text className="app-workspace-name">{workspace.name}</Text>
-                    </span>
-                    {workspaceSessions.length > 0 && (
-                      <span className="app-workspace-session-count">
-                        {workspaceSessions.length}
-                      </span>
+                      <button
+                        type="button"
+                        className="app-workspace-add-session-btn"
+                        aria-label={`在${workspace.name}下添加会话`}
+                        title="添加会话"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          void createSessionInWorkspace(workspace.id)
+                        }}
+                      >
+                        <PlusOutlined />
+                      </button>
+                    </div>
+                    {isExpanded && (
+                      <div className="app-session-sublist">
+                        {workspaceSessions.map((s) => (
+                          <Dropdown
+                            key={s.id}
+                            menu={{
+                              items: [
+                                {
+                                  key: 'rename',
+                                  label: '重命名',
+                                  onClick: () => {
+                                    setRenameId(s.id)
+                                    setRenameName(s.name)
+                                  }
+                                },
+                                {
+                                  key: 'del',
+                                  danger: true,
+                                  label: '删除',
+                                  onClick: () => {
+                                    modalApi.confirm({
+                                      title: '删除此会话？',
+                                      onOk: () => {
+                                        void bridge
+                                          .deleteSession(s.id)
+                                          .then(() => msgApi.success('已删除'))
+                                      }
+                                    })
+                                  }
+                                }
+                              ]
+                            }}
+                            trigger={['contextMenu']}
+                          >
+                            <div
+                              className={`app-session-item app-session-item-sub ${s.id === activeId ? 'is-active' : ''}`}
+                              onClick={() => void handleSessionClick(workspace.id, s.id)}
+                            >
+                              <div className="app-session-title">{s.name}</div>
+                            </div>
+                          </Dropdown>
+                        ))}
+                        {workspaceSessions.length === 0 && (
+                          <div className="app-session-placeholder">当前工作区暂无会话</div>
+                        )}
+                      </div>
                     )}
                   </div>
-                  {isExpanded && (
-                    <div className="app-session-sublist">
-                      {workspaceSessions.map((s) => (
-                        <Dropdown
-                          key={s.id}
-                          menu={{
-                            items: [
-                              {
-                                key: 'rename',
-                                label: '重命名',
-                                onClick: () => {
-                                  setRenameId(s.id)
-                                  setRenameName(s.name)
-                                }
-                              },
-                              {
-                                key: 'del',
-                                danger: true,
-                                label: '删除',
-                                onClick: () => {
-                                  modalApi.confirm({
-                                    title: '删除此会话？',
-                                    onOk: () => {
-                                      void bridge
-                                        .deleteSession(s.id)
-                                        .then(() => msgApi.success('已删除'))
-                                    }
-                                  })
-                                }
-                              }
-                            ]
-                          }}
-                          trigger={['contextMenu']}
-                        >
-                          <div
-                            className={`app-session-item app-session-item-sub ${s.id === activeId ? 'is-active' : ''}`}
-                            onClick={() => void handleSessionClick(workspace.id, s.id)}
+                )
+              })}
+            </div>
+            <div className="app-workspace-btn-wrap">
+              <Button block icon={<FolderOpenOutlined />} onClick={pickWorkspace}>
+                添加并切换工作区
+              </Button>
+            </div>
+          </div>
+        </div>
+        <div
+          className={`app-sidebar-resizer ${isSidebarResizing ? 'is-dragging' : ''}`}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整侧边栏宽度"
+          onMouseDown={handleSidebarResizeStart}
+        />
+        <div className="app-main-pane">
+          <div className="app-topbar">
+            {activeId && (
+              <Space>
+                <Text type="secondary">会话</Text>
+                <Text>{sessions.find((s) => s.id === activeId)?.name}</Text>
+                {isRun && <Tag color="processing">执行中</Tag>}
+                {isQueued && isQueued > 0 && <Tag color="warning">排队 #{isQueued}</Tag>}
+                {currentRunStats && (
+                  <Text type="secondary">
+                    本轮: {currentRunStats.toolCalls} 次调用 / {currentRunStats.toolErrors} 次错误 /{' '}
+                    {((currentRunStats.durationMs ?? 0) / 1000).toFixed(2)}s
+                  </Text>
+                )}
+                {currentRunStats?.traceId && (
+                  <Tag color="default">trace: {currentRunStats.traceId.slice(-12)}</Tag>
+                )}
+              </Space>
+            )}
+          </div>
+          <div className="app-content">
+            {!preloadOk && (
+              <div className="app-preload-alert-wrap">
+                <Alert
+                  type="error"
+                  showIcon
+                  message="preload 注入失败"
+                  description="当前窗口未接收到主进程暴露的 API（window.bridge）。请重启 dev 进程后重试。"
+                />
+              </div>
+            )}
+            <div className="app-messages-shell">
+              <div
+                className="app-messages-scroll"
+                ref={messagesScrollRef}
+                onScroll={(e) => {
+                  autoScrollRef.current = isNearBottom(e.currentTarget)
+                }}
+              >
+                {currentMessages.map((m) => (
+                  <Card
+                    key={m.id}
+                    size="small"
+                    className={`app-message-card ${m.role === 'user' ? 'is-user' : 'is-assistant'}`}
+                  >
+                    <div className="app-message-content">
+                      {m.role === 'assistant' ? (
+                        <div className="app-message-markdown" onClick={onMarkdownClick}>
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm, remarkLinkifyBareUrls]}
+                            rehypePlugins={[rehypeHighlight]}
                           >
-                            <div className="app-session-title">{s.name}</div>
-                          </div>
-                        </Dropdown>
-                      ))}
-                      {workspaceSessions.length === 0 && (
-                        <div className="app-session-placeholder">当前工作区暂无会话</div>
+                            {m.content || (isRun ? '…' : '')}
+                          </ReactMarkdown>
+                        </div>
+                      ) : (
+                        m.content
                       )}
                     </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-          <div className="app-workspace-btn-wrap">
-            <Button block icon={<FolderOpenOutlined />} onClick={pickWorkspace}>
-              添加并切换工作区
-            </Button>
-          </div>
-        </div>
-      </div>
-      <div className="app-main-pane">
-        <div className="app-topbar">
-          {activeId && (
-            <Space>
-              <Text type="secondary">会话</Text>
-              <Text>{sessions.find((s) => s.id === activeId)?.name}</Text>
-              {isRun && <Tag color="processing">执行中</Tag>}
-              {isQueued && isQueued > 0 && <Tag color="warning">排队 #{isQueued}</Tag>}
-              {currentRunStats && (
-                <Text type="secondary">
-                  本轮: {currentRunStats.toolCalls} 次调用 / {currentRunStats.toolErrors} 次错误 /{' '}
-                  {((currentRunStats.durationMs ?? 0) / 1000).toFixed(2)}s
-                </Text>
-              )}
-              {currentRunStats?.traceId && (
-                <Tag color="default">trace: {currentRunStats.traceId.slice(-12)}</Tag>
-              )}
-            </Space>
-          )}
-        </div>
-        <div className="app-content">
-          {!preloadOk && (
-            <div className="app-preload-alert-wrap">
-              <Alert
-                type="error"
-                showIcon
-                message="preload 注入失败"
-                description="当前窗口未接收到主进程暴露的 API（window.bridge）。请重启 dev 进程后重试。"
+                    {m.role === 'assistant' &&
+                      m.id === latestAssistantMessageId &&
+                      currentTimeline.length > 0 && (
+                        <div className="app-timeline-wrap">
+                          {currentTimeline.map((e, idx) => (
+                            <div
+                              key={`${e.kind}-${'id' in e ? e.id : idx}-${idx}`}
+                              className="app-timeline-item"
+                            >
+                              {e.kind === 'error' ? (
+                                <Text type="danger">{e.message}</Text>
+                              ) : (
+                                <>
+                                  <Text code>
+                                    {e.name} {e.status === 'start' ? '…' : '✓'}
+                                  </Text>
+                                  {e.args && <Text type="secondary"> {e.args}</Text>}
+                                  {e.status === 'end' && e.result && (
+                                    <pre className="app-timeline-result">{e.result}</pre>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                  </Card>
+                ))}
+                {!currentMessages.length && (
+                  <Card size="small" className="app-empty-card">
+                    <Text type="secondary" className="app-empty-tip">
+                      发一条消息开始；务必先选择工作区并配置 API Key。
+                    </Text>
+                  </Card>
+                )}
+                <div ref={messagesBottomRef} />
+              </div>
+            </div>
+            <div className="app-composer">
+              <TextArea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                autoSize={{ minRows: 1, maxRows: 6 }}
+                placeholder="输入消息… (Enter 发送，Shift+Enter 换行)"
+                className="app-composer-input"
+                onPressEnter={(e) => {
+                  if (!e.shiftKey) {
+                    e.preventDefault()
+                    void send()
+                  }
+                }}
               />
-            </div>
-          )}
-          <div className="app-messages-shell">
-            <div
-              className="app-messages-scroll"
-              ref={messagesScrollRef}
-              onScroll={(e) => {
-                autoScrollRef.current = isNearBottom(e.currentTarget)
-              }}
-            >
-              {currentMessages.map((m) => (
-                <Card
-                  key={m.id}
-                  size="small"
-                  className={`app-message-card ${m.role === 'user' ? 'is-user' : 'is-assistant'}`}
-                >
-                  <div className="app-message-content">
-                    {m.role === 'assistant' ? (
-                      <div className="app-message-markdown" onClick={onMarkdownClick}>
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm, remarkLinkifyBareUrls]}
-                          rehypePlugins={[rehypeHighlight]}
-                        >
-                          {m.content || (isRun ? '…' : '')}
-                        </ReactMarkdown>
-                      </div>
-                    ) : (
-                      m.content
-                    )}
-                  </div>
-                  {m.role === 'assistant' &&
-                    m.id === latestAssistantMessageId &&
-                    currentTimeline.length > 0 && (
-                      <div className="app-timeline-wrap">
-                        {currentTimeline.map((e, idx) => (
-                          <div
-                            key={`${e.kind}-${'id' in e ? e.id : idx}-${idx}`}
-                            className="app-timeline-item"
-                          >
-                            {e.kind === 'error' ? (
-                              <Text type="danger">{e.message}</Text>
-                            ) : (
-                              <>
-                                <Text code>
-                                  {e.name} {e.status === 'start' ? '…' : '✓'}
-                                </Text>
-                                {e.args && <Text type="secondary"> {e.args}</Text>}
-                                {e.status === 'end' && e.result && (
-                                  <pre className="app-timeline-result">{e.result}</pre>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                </Card>
-              ))}
-              {!currentMessages.length && (
-                <Card size="small" className="app-empty-card">
-                  <Text type="secondary" className="app-empty-tip">
-                    发一条消息开始；务必先选择工作区并配置 API Key。
-                  </Text>
-                </Card>
-              )}
-              <div ref={messagesBottomRef} />
-            </div>
-          </div>
-          <div className="app-composer">
-            <TextArea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              autoSize={{ minRows: 1, maxRows: 6 }}
-              placeholder="输入消息… (Enter 发送，Shift+Enter 换行)"
-              className="app-composer-input"
-              onPressEnter={(e) => {
-                if (!e.shiftKey) {
-                  e.preventDefault()
-                  void send()
-                }
-              }}
-            />
-            <div className="app-composer-actions">
-              {showSendButton && (
-                <Button
-                  type="primary"
-                  icon={<SendOutlined />}
-                  onClick={() => void send()}
-                  disabled={!activeId}
-                  className="app-send-btn"
-                >
-                  发送
-                </Button>
-              )}
-              {showStopButton && (
-                <Button
-                  danger
-                  icon={<StopOutlined />}
-                  onClick={() => void bridge.cancelAgent(activeId!)}
-                  className="app-stop-btn"
-                >
-                  停止
-                </Button>
-              )}
+              <div className="app-composer-actions">
+                {showSendButton && (
+                  <Button
+                    type="primary"
+                    icon={<SendOutlined />}
+                    onClick={() => void send()}
+                    disabled={!activeId}
+                    className="app-send-btn"
+                  >
+                    发送
+                  </Button>
+                )}
+                {showStopButton && (
+                  <Button
+                    danger
+                    icon={<StopOutlined />}
+                    onClick={() => void bridge.cancelAgent(activeId!)}
+                    className="app-stop-btn"
+                  >
+                    停止
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
       </div>
 
       <Modal

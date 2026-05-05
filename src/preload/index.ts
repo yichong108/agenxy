@@ -31,8 +31,7 @@ const api = {
   platform: process.platform,
   windowAction: (action: WindowChromeAction) =>
     ipcRenderer.invoke(IPC.WINDOW_ACTION, action) as Promise<void>,
-  webEdit: (action: WebEditAction) =>
-    ipcRenderer.invoke(IPC.WEB_EDIT, action) as Promise<void>,
+  webEdit: (action: WebEditAction) => ipcRenderer.invoke(IPC.WEB_EDIT, action) as Promise<void>,
   showAbout: () => ipcRenderer.invoke(IPC.APP_ABOUT) as Promise<void>,
   selectWorkspace: () => ipcRenderer.invoke(IPC.WORKSPACE_SELECT) as Promise<{ path: string }>,
   getWorkspace: () => ipcRenderer.invoke(IPC.WORKSPACE_GET) as Promise<string>,
@@ -41,6 +40,8 @@ const api = {
     ipcRenderer.invoke(IPC.WORKSPACE_ADD, dir) as Promise<WorkspaceInfo | null>,
   activateWorkspace: (workspaceId: string) =>
     ipcRenderer.invoke(IPC.WORKSPACE_ACTIVATE, workspaceId) as Promise<WorkspaceInfo | null>,
+  reorderWorkspaces: (orderIds: string[]) =>
+    ipcRenderer.invoke(IPC.WORKSPACE_REORDER, orderIds) as Promise<WorkspacesPayload>,
   renameWorkspace: (workspaceId: string, name: string) =>
     ipcRenderer.invoke(IPC.WORKSPACE_RENAME, workspaceId, name) as Promise<WorkspaceInfo | null>,
   removeWorkspace: (workspaceId: string) =>

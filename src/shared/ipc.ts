@@ -6,6 +6,7 @@ export const IPC = {
   WORKSPACE_LIST: 'workspace:list',
   WORKSPACE_ADD: 'workspace:add',
   WORKSPACE_ACTIVATE: 'workspace:activate',
+  WORKSPACE_REORDER: 'workspace:reorder',
   WORKSPACE_RENAME: 'workspace:rename',
   WORKSPACE_REMOVE: 'workspace:remove',
   SETTINGS_GET: 'settings:get',
