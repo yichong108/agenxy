@@ -16,7 +16,13 @@ import {
 } from '@/shared/ipc'
 import { logScope } from '@/main/logger'
 import { buildMcpLangChainTools, collectMcpServerContextHints } from '@/main/mcp/mcp-runtime'
-import { getSessionMessages, getSettings, getWorkspaceById, setSessionMessages } from '@/main/store'
+import {
+  getSessionMessages,
+  getSettings,
+  getWorkspaceById,
+  setSessionMessages,
+  userDataPath
+} from '@/main/store'
 import {
   deleteFileTool,
   globFilesTool,
@@ -197,7 +203,7 @@ function buildSystemPrompt(root: string, settings: AppSettings): string {
 - shell 在沙盒目录（工作区根）下执行 shell 命令，等待进程结束后返回 stdout/stderr。Windows 为 cmd 风格。
 - 当用户要求“查看/读取工作区文件”或“列出目录”时，优先调用 read_file/list_dir 再回答。
 - 当用户明确要求删除工作区内的某个文件时，使用 delete_file（仅删普通文件，不删目录）。
-- 按文件名/路径模式找文件时用 glob（如 **/*.ts），按文件内容找子串时用 search_workspace。
+- 按文件名/路径模式找文件时用 glob（如 **/*.ts）：结果包含工作区与「用户数据」目录（技能市场安装等）；read_file/write 等仍限工作区内路径。
 ${webRule}
 - 回答简洁、可执行；修改代码前先 read/list。`
 }
@@ -534,7 +540,10 @@ async function makeTools(
           traceId: runCtx.traceId,
           timestampMs: startedAt
         })
-        const r = await globFilesTool(root, pattern, { maxFiles: max_results })
+        const r = await globFilesTool(root, pattern, {
+          maxFiles: max_results,
+          userDataRoot: userDataPath()
+        })
         onTool({
           kind: 'tool',
           id,
@@ -551,7 +560,7 @@ async function makeTools(
       {
         name: 'glob',
         description:
-          '在工作区根下按文件名 glob 列出匹配的文件路径（仅文件）。pattern 使用 Node 风格，如 **/*.ts、src/**/*.tsx；已排除 node_modules/.git/dist 等',
+          '在工作区根与 Electron 用户数据目录（userData）下按同一 pattern 做 glob，列出匹配的**文件**路径（仅文件）。返回分「工作区」「用户数据」两段，用户数据路径为相对 userData 根；pattern 使用 Node 风格如 **/*.ts、skills/**/*.md；两侧均排除 node_modules/.git/dist 及 Chromium 缓存等目录',
         schema: z.object({
           pattern: z.string(),
           max_results: z.number().int().min(1).max(500).optional()

@@ -192,13 +192,62 @@ const GLOB_EXCLUDE = [
   '**/coverage/**'
 ] as const
 
+/** 用户数据根下额外排除（Electron/Chromium 缓存等） */
+const GLOB_EXCLUDE_USERDATA_EXTRA = [
+  '**/Cache/**',
+  '**/GPUCache/**',
+  '**/blob_storage/**',
+  '**/skills/.cache/**',
+  '**/Code Cache/**',
+  '**/DawnGraphiteCache/**'
+] as const
+
+async function globFilesUnderRoot(
+  rootAbs: string,
+  pat: string,
+  budget: number,
+  exclude: readonly string[]
+): Promise<{ relPosix: string[]; hitCap: boolean }> {
+  const relPosix: string[] = []
+  const iter = fs.glob(pat, {
+    cwd: rootAbs,
+    exclude: [...exclude]
+  })
+  for await (const entry of iter) {
+    const abs = path.resolve(rootAbs, entry)
+    const relToRoot = path.relative(rootAbs, abs)
+    if (relToRoot.startsWith('..') || path.isAbsolute(relToRoot)) {
+      continue
+    }
+    try {
+      const st = await fs.stat(abs)
+      if (!st.isFile()) {
+        continue
+      }
+    } catch {
+      continue
+    }
+    relPosix.push(relToRoot.split(path.sep).join('/'))
+    if (relPosix.length >= budget) {
+      break
+    }
+  }
+  const hitCap = relPosix.length >= budget
+  return { relPosix, hitCap }
+}
+
+function rootsAreSame(a: string, b: string): boolean {
+  return path.normalize(path.resolve(a)) === path.normalize(path.resolve(b))
+}
+
 /**
- * 在工作区根下按文件名 glob 查找**文件**（不含目录）。pattern 为相对工作区的 Node glob。
+ * 在工作区根与可选的 Electron userData 根下按文件名 glob 查找**文件**（不含目录）。
+ * pattern 为相对各根目录的 Node glob（两处使用同一 pattern）。
  */
 export async function globFilesTool(
   workspace: string,
   pattern: string,
-  options?: { maxFiles?: number }
+  options?: { maxFiles?: number; userDataRoot?: string | null }
 ): Promise<string> {
   const root = ensureWorkspaceExists(workspace)
   const pat = pattern.trim()
@@ -207,48 +256,64 @@ export async function globFilesTool(
   }
   const norm = pat.replace(/\\/g, '/')
   if (path.isAbsolute(pat)) {
-    return '请使用相对工作区根的 glob 模式（不要用绝对路径）'
+    return '请使用相对根目录的 glob 模式（不要用绝对路径）'
   }
   if (norm.split('/').some((seg) => seg === '..')) {
     return 'pattern 中不得包含 .. 段'
   }
 
   const maxFiles = Math.min(Math.max(options?.maxFiles ?? 200, 1), 500)
-  const results: string[] = []
+  const wsBudget = Math.ceil(maxFiles / 2)
+  const udBudget = maxFiles - wsBudget
 
+  let wsRel: string[] = []
+  let wsHitCap = false
   try {
-    const iter = fs.glob(pat, {
-      cwd: root,
-      exclude: [...GLOB_EXCLUDE]
-    })
-    for await (const entry of iter) {
-      if (results.length >= maxFiles) {
-        break
-      }
-      const abs = path.resolve(root, entry)
-      const relToRoot = path.relative(root, abs)
-      if (relToRoot.startsWith('..') || path.isAbsolute(relToRoot)) {
-        continue
-      }
-      try {
-        const st = await fs.stat(abs)
-        if (!st.isFile()) {
-          continue
-        }
-      } catch {
-        continue
-      }
-      results.push(relToRoot.split(path.sep).join('/'))
-    }
+    const ws = await globFilesUnderRoot(root, pat, wsBudget, GLOB_EXCLUDE)
+    wsRel = ws.relPosix
+    wsHitCap = ws.hitCap
   } catch (e) {
-    return `glob 失败: ${(e as Error).message}`
+    return `工作区 glob 失败: ${(e as Error).message}`
   }
 
-  results.sort()
-  if (!results.length) {
+  let udRel: string[] = []
+  let udHitCap = false
+  const udRaw = options?.userDataRoot?.trim()
+  if (udRaw && udBudget > 0 && !rootsAreSame(root, udRaw)) {
+    const udAbs = path.resolve(udRaw)
+    try {
+      const st = await fs.stat(udAbs)
+      if (st.isDirectory()) {
+        const excludeUd = [...GLOB_EXCLUDE, ...GLOB_EXCLUDE_USERDATA_EXTRA]
+        try {
+          const ud = await globFilesUnderRoot(udAbs, pat, udBudget, excludeUd)
+          udRel = ud.relPosix
+          udHitCap = ud.hitCap
+        } catch (e) {
+          return (
+            (wsRel.length ? `【工作区】\n${wsRel.sort().join('\n')}\n\n` : '') +
+            `用户数据目录 glob 失败: ${(e as Error).message}`
+          )
+        }
+      }
+    } catch {
+      // userData 不存在或不可读：忽略，仅返回工作区结果
+    }
+  }
+
+  if (!wsRel.length && !udRel.length) {
     return `未匹配到文件: ${pattern}`
   }
-  const truncated = results.length >= maxFiles
-  const suffix = truncated ? `\n（最多返回 ${maxFiles} 条，已截断）` : ''
-  return results.join('\n') + suffix
+
+  const lines: string[] = []
+  if (wsRel.length) {
+    lines.push('【工作区】\n' + [...wsRel].sort().join('\n'))
+  }
+  if (udRel.length) {
+    lines.push('【用户数据】（相对 Electron userData 根）\n' + [...udRel].sort().join('\n'))
+  }
+
+  const truncatedNote =
+    wsHitCap || udHitCap ? `\n（最多返回 ${maxFiles} 条，某一分区已满额截断）` : ''
+  return lines.join('\n\n') + truncatedNote
 }
