@@ -133,7 +133,6 @@
   padding: 9px 10px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   text-align: left;
   transition: background-color 0.18s ease;
@@ -143,13 +142,9 @@
   background: var(--aw-color-fill-tertiary);
 }
 
-.app-workspace-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .app-workspace-name {
+  flex: 1;
+  min-width: 0;
   color: var(--aw-color-text);
   font-size: 16px;
   font-weight: 500;
@@ -160,6 +155,7 @@
 }
 
 .app-workspace-session-count {
+  margin-left: auto;
   min-width: 18px;
   height: 18px;
   border-radius: 999px;

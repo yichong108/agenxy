@@ -1277,20 +1277,18 @@ export function App() {
                     className="app-workspace-node-header"
                     onClick={() => void handleWorkspaceClick(workspace.id)}
                   >
+                    <span
+                      className={`app-workspace-chevron ${isExpanded ? 'is-open' : ''}`}
+                      aria-hidden="true"
+                    >
+                      {'>'}
+                    </span>
                     <Text className="app-workspace-name">{workspace.name}</Text>
-                    <div className="app-workspace-header-actions">
-                      {workspaceSessions.length > 0 && (
-                        <span className="app-workspace-session-count">
-                          {workspaceSessions.length}
-                        </span>
-                      )}
-                      <span
-                        className={`app-workspace-chevron ${isExpanded ? 'is-open' : ''}`}
-                        aria-hidden="true"
-                      >
-                        {'>'}
+                    {workspaceSessions.length > 0 && (
+                      <span className="app-workspace-session-count">
+                        {workspaceSessions.length}
                       </span>
-                    </div>
+                    )}
                   </button>
                   {isExpanded && (
                     <div className="app-session-sublist">
