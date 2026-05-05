@@ -1,4 +1,4 @@
-﻿import { App as AntApp, ConfigProvider } from 'antd'
+import { App as AntApp, ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import dayjs from 'dayjs'
 import React from 'react'
@@ -51,7 +51,51 @@ if (root) {
       <ConfigProvider
         locale={zhCN}
         theme={{
-          token: { borderRadius: 8 }
+          token: {
+            colorPrimary: '#262626',
+            colorInfo: '#262626',
+            colorSuccess: '#262626',
+            colorWarning: '#595959',
+            colorError: '#434343',
+            borderRadius: 12,
+            borderRadiusSM: 10,
+            borderRadiusLG: 14,
+            wireframe: false,
+            fontSize: 13,
+            controlHeight: 36
+          },
+          components: {
+            Button: {
+              controlHeight: 36,
+              borderRadius: 10,
+              fontWeight: 500,
+              primaryShadow: 'none'
+            },
+            Card: {
+              borderRadiusLG: 14
+            },
+            Input: {
+              borderRadius: 10
+            },
+            Select: {
+              borderRadius: 10
+            },
+            Modal: {
+              borderRadiusLG: 16
+            },
+            Table: {
+              borderRadius: 12,
+              headerBg: '#fafafa'
+            },
+            Tabs: {
+              itemColor: '#595959',
+              itemSelectedColor: '#111111',
+              inkBarColor: '#111111'
+            },
+            Tag: {
+              borderRadiusSM: 8
+            }
+          }
         }}
       >
         <AppErrorBoundary>
