@@ -22,6 +22,7 @@
     "@langchain/core": "^1.1.41",
     "@langchain/openai": "^1.4.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "adm-zip": "^0.5.17",
     "antd": "^5.24.6",
     "dayjs": "^1.11.13",
     "electron-log": "^5.4.3",
@@ -40,6 +41,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@types/adm-zip": "^0.5.8",
     "@types/node": "^22.14.1",
     "@types/react": "^18.3.20",
     "@types/react-dom": "^18.3.6",

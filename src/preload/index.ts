@@ -1,5 +1,6 @@
 ﻿import { contextBridge, ipcRenderer } from 'electron'
 
+import { installElectronLogBridge } from '@/preload/electron-log-bridge'
 import {
   EVENTS,
   IPC,
@@ -11,12 +12,16 @@ import {
   type McpWarmupStatus,
   type RendererUiState,
   type SessionInfo,
+  type SkillsCatalogFetchResult,
+  type SkillsInstallResult,
+  type SkillsMarketCatalogItem,
+  type SkillsRuntimeState,
+  type SkillsUninstallPayload,
+  type SkillsUninstallResult,
   type StreamEvent,
   type WorkspaceInfo,
   type WorkspacesPayload
 } from '@/shared/ipc'
-
-import { installElectronLogBridge } from '@/preload/electron-log-bridge'
 
 installElectronLogBridge()
 
@@ -103,7 +108,14 @@ const api = {
     return () => {
       ipcRenderer.removeListener(EVENTS.SETTINGS_SYNC, h)
     }
-  }
+  },
+  getSkillsState: () => ipcRenderer.invoke(IPC.SKILLS_STATE) as Promise<SkillsRuntimeState>,
+  fetchSkillsCatalog: () =>
+    ipcRenderer.invoke(IPC.SKILLS_CATALOG_FETCH) as Promise<SkillsCatalogFetchResult>,
+  installSkillFromMarket: (item: SkillsMarketCatalogItem) =>
+    ipcRenderer.invoke(IPC.SKILLS_INSTALL, item) as Promise<SkillsInstallResult>,
+  uninstallSkill: (payload: SkillsUninstallPayload) =>
+    ipcRenderer.invoke(IPC.SKILLS_UNINSTALL, payload) as Promise<SkillsUninstallResult>
 }
 
 contextBridge.exposeInMainWorld('bridge', api)
