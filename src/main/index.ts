@@ -50,7 +50,7 @@ import {
   type RendererUiState,
   type SkillsMarketCatalogItem,
   type SkillsUninstallPayload,
-  type StreamEvent
+  type StreamEvent,
   type WebEditAction,
   type WindowChromeAction
 } from '@/shared/ipc'

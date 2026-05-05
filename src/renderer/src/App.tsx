@@ -5,7 +5,7 @@ import {
   SendOutlined,
   SettingOutlined,
   StopOutlined,
-  FolderOpenOutlined
+  FolderOpenOutlined, ShopOutlined
 } from '@ant-design/icons'
 import {
   App as AntdApp,
@@ -27,7 +27,7 @@ import {
   Typography,
   Dropdown,
   Divider,
-  Tooltip
+  Tooltip, MenuProps
 } from 'antd'
 import { findAndReplace } from 'mdast-util-find-and-replace'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
