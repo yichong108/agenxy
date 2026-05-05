@@ -16,6 +16,7 @@ import {
   FloatButton,
   Input,
   InputNumber,
+  Menu,
   Modal,
   Select,
   Space,
@@ -25,7 +26,8 @@ import {
   Tag,
   Typography,
   Dropdown,
-  Divider
+  Divider,
+  type MenuProps
 } from 'antd'
 import { findAndReplace } from 'mdast-util-find-and-replace'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -219,6 +221,92 @@ export function App() {
   const [renameId, setRenameId] = useState<string | null>(null)
   const [renameName, setRenameName] = useState('')
   const isDevEnv = import.meta.env.DEV
+
+  const isWinCustomChrome = preloadOk && bridge.platform === 'win32'
+
+  const winMenubarItems: MenuProps['items'] = useMemo(() => {
+    if (!isWinCustomChrome) return []
+    const viewChildren: MenuProps['items'] = [
+      {
+        key: 'reload',
+        label: '重新加载',
+        onClick: () => {
+          void bridge.windowAction('reload')
+        }
+      }
+    ]
+    if (isDevEnv) {
+      viewChildren.push({
+        key: 'devtools',
+        label: '切换开发者工具',
+        onClick: () => {
+          void bridge
+            .toggleDevtools()
+            .then(() => {
+              window.location.reload()
+            })
+            .catch(() => {})
+        }
+      })
+    }
+    return [
+      {
+        key: 'file',
+        label: '文件',
+        children: [
+          {
+            key: 'quit',
+            label: '退出',
+            onClick: () => {
+              void bridge.windowAction('quit')
+            }
+          }
+        ]
+      },
+      {
+        key: 'edit',
+        label: '编辑',
+        children: [
+          { key: 'undo', label: '撤销', onClick: () => void bridge.webEdit('undo') },
+          { key: 'redo', label: '重做', onClick: () => void bridge.webEdit('redo') },
+          { type: 'divider' },
+          { key: 'cut', label: '剪切', onClick: () => void bridge.webEdit('cut') },
+          { key: 'copy', label: '复制', onClick: () => void bridge.webEdit('copy') },
+          { key: 'paste', label: '粘贴', onClick: () => void bridge.webEdit('paste') },
+          { key: 'selectAll', label: '全选', onClick: () => void bridge.webEdit('selectAll') }
+        ]
+      },
+      {
+        key: 'view',
+        label: '视图',
+        children: viewChildren
+      },
+      {
+        key: 'window',
+        label: '窗口',
+        children: [
+          { key: 'min', label: '最小化', onClick: () => void bridge.windowAction('minimize') },
+          {
+            key: 'max',
+            label: '最大化 / 还原',
+            onClick: () => void bridge.windowAction('maximize-toggle')
+          },
+          { key: 'close', label: '关闭窗口', onClick: () => void bridge.windowAction('close') }
+        ]
+      },
+      {
+        key: 'help',
+        label: '帮助',
+        children: [
+          {
+            key: 'about',
+            label: '关于 AgentWeave',
+            onClick: () => void bridge.showAbout()
+          }
+        ]
+      }
+    ]
+  }, [bridge, isDevEnv, isWinCustomChrome])
 
   const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({})
   const [timeline, setTimeline] = useState<Record<string, ToolTimelineEvent[]>>({})
@@ -993,6 +1081,18 @@ export function App() {
 
   return (
     <div className="app-shell">
+      {isWinCustomChrome ? (
+        <div className="app-win-titlebar">
+          <Menu
+            mode="horizontal"
+            selectable={false}
+            triggerSubMenuAction="click"
+            items={winMenubarItems}
+            className="app-win-menubar"
+          />
+        </div>
+      ) : null}
+      <div className="app-body">
       <div className="app-sidebar">
         <div className="app-sidebar-inner">
           <div className="app-sidebar-header">
@@ -1258,6 +1358,7 @@ export function App() {
             </div>
           </div>
         </div>
+      </div>
       </div>
 
       <Modal

@@ -15,7 +15,48 @@
 
   height: 100%;
   display: flex;
+  flex-direction: column;
   background: var(--aw-color-bg-layout);
+}
+
+.app-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+}
+
+.app-win-titlebar {
+  flex-shrink: 0;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  padding-left: 8px;
+  padding-right: 132px;
+  box-sizing: border-box;
+  background: var(--aw-color-bg-layout);
+  border-bottom: 1px solid var(--aw-color-border-secondary);
+  -webkit-app-region: drag;
+}
+
+.app-win-menubar {
+  flex: 1;
+  min-width: 0;
+  border-bottom: none !important;
+  background: transparent !important;
+  height: 32px !important;
+  line-height: 30px !important;
+  -webkit-app-region: no-drag;
+}
+
+.app-win-menubar.ant-menu-horizontal {
+  border-bottom: none;
+}
+
+.app-win-menubar.ant-menu-horizontal > .ant-menu-item,
+.app-win-menubar.ant-menu-horizontal > .ant-menu-submenu {
+  padding-inline: 10px;
+  top: 0;
 }
 
 .app-sidebar {

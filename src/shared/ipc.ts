@@ -28,8 +28,20 @@ export const IPC = {
   /** 读取最近一次 MCP 池化预热结果（应用启动或保存 MCP 后） */
   MCP_WARMUP_GET: 'mcp:warmup:get',
   /** 立即重新执行池化预热并复用/更新连接 */
-  MCP_WARMUP_RUN: 'mcp:warmup:run'
+  MCP_WARMUP_RUN: 'mcp:warmup:run',
+  /** Windows 自定义标题栏：窗口行为（最小化 / 最大化 / 关闭 / 重载 / 退出） */
+  WINDOW_ACTION: 'window:action',
+  /** 触发 webContents 编辑命令（撤销、复制等） */
+  WEB_EDIT: 'web:edit',
+  /** 关于对话框 */
+  APP_ABOUT: 'app:about'
 } as const
+
+/** 与 IPC.WINDOW_ACTION 对应的动作 */
+export type WindowChromeAction = 'minimize' | 'maximize-toggle' | 'close' | 'reload' | 'quit'
+
+/** 与 IPC.WEB_EDIT 对应的编辑命令 */
+export type WebEditAction = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll'
 
 export const EVENTS = {
   AGENT_STREAM: 'agent:stream',

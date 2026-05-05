@@ -2,7 +2,7 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron'
 
 import { bindAgentIpc, cancelRun, runUserMessage, resetQueue } from '@/main/agent/agent-service'
 import { ensureUserSkillsSeeded } from '@/main/agent/skills'
@@ -42,7 +42,9 @@ import {
   type McpWarmupReport,
   type McpWarmupStatus,
   type RendererUiState,
-  type StreamEvent
+  type StreamEvent,
+  type WebEditAction,
+  type WindowChromeAction
 } from '@/shared/ipc'
 
 mainLog.info('Electron 主进程启动')
@@ -157,18 +159,32 @@ if (!gotSingleInstanceLock) {
 }
 
 function createWindow(): void {
+  const webPreferences = {
+    preload: path.join(__dirname, '../preload/index.cjs'),
+    contextIsolation: true,
+    nodeIntegration: false,
+    sandbox: true
+  }
+  /** Windows：隐藏原生标题栏与菜单栏占位，由渲染进程顶栏 + titleBarOverlay 承载系统按钮 */
+  const win32Chrome =
+    process.platform === 'win32'
+      ? ({
+          titleBarStyle: 'hidden' as const,
+          titleBarOverlay: {
+            color: '#f5f5f5',
+            symbolColor: '#000000d9',
+            height: 32
+          }
+        } as const)
+      : {}
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
     minWidth: 900,
     minHeight: 600,
-    webPreferences: {
-      preload: path.join(__dirname, '../preload/index.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true
-    },
-    show: false
+    webPreferences,
+    show: false,
+    ...win32Chrome
   })
   const rendererUrl = process.env['ELECTRON_RENDERER_URL']
   if (rendererUrl) {
@@ -416,10 +432,81 @@ function registerIpc(): void {
     }
     return await probeMcpServer(entry)
   })
+
+  ipcMain.handle(IPC.WINDOW_ACTION, (_e, action: WindowChromeAction) => {
+    const win = BrowserWindow.getFocusedWindow() ?? mainWindow
+    switch (action) {
+      case 'quit':
+        app.quit()
+        return
+      case 'reload':
+        win?.webContents.reload()
+        return
+      case 'minimize':
+        win?.minimize()
+        return
+      case 'maximize-toggle':
+        if (!win) return
+        if (win.isMaximized()) win.unmaximize()
+        else win.maximize()
+        return
+      case 'close':
+        win?.close()
+        return
+      default:
+        return
+    }
+  })
+
+  ipcMain.handle(IPC.WEB_EDIT, (_e, action: WebEditAction) => {
+    const win = BrowserWindow.getFocusedWindow() ?? mainWindow
+    const wc = win?.webContents
+    if (!wc) return
+    switch (action) {
+      case 'undo':
+        wc.undo()
+        return
+      case 'redo':
+        wc.redo()
+        return
+      case 'cut':
+        wc.cut()
+        return
+      case 'copy':
+        wc.copy()
+        return
+      case 'paste':
+        wc.paste()
+        return
+      case 'selectAll':
+        wc.selectAll()
+        return
+      default:
+        return
+    }
+  })
+
+  ipcMain.handle(IPC.APP_ABOUT, async () => {
+    const win = BrowserWindow.getFocusedWindow() ?? mainWindow
+    const opts = {
+      type: 'info' as const,
+      title: '关于 AgentWeave',
+      message: 'AgentWeave',
+      detail: `版本 ${app.getVersion()}`
+    }
+    if (win && !win.isDestroyed()) {
+      await dialog.showMessageBox(win, opts)
+    } else {
+      await dialog.showMessageBox(opts)
+    }
+  })
 }
 
 app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return
+  if (process.platform === 'win32') {
+    Menu.setApplicationMenu(null)
+  }
   void (async () => {
     await loadReactDevtoolsExtension()
     await ensureUserSkillsSeeded()
