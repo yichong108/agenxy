@@ -7,6 +7,15 @@ description: Create stunning, animation-rich HTML presentations from scratch or 
 
 Create zero-dependency, animation-rich HTML presentations that run entirely in the browser.
 
+## Local skill assets (read order)
+
+Before loading bundled references (`html-template.md`, `viewport-base.css`, `STYLE_PRESETS.md`, `animation-patterns.md`, `scripts/`, etc.), **first** check whether the **current working directory** (the user’s project or session root—the workspace folder the task runs against) contains a **`frontend-slides/`** directory at its top level.
+
+- If `./frontend-slides/` exists and has the file you need, **read and use those paths** (for example `./frontend-slides/viewport-base.css`, `./frontend-slides/scripts/extract-pptx.py`).
+- Only if that folder is missing or does not contain the required asset, fall back to files **next to this `SKILL.md`** (relative paths as documented in Phase 3 and Supporting Files).
+
+Apply the same priority when running helper scripts: prefer `./frontend-slides/scripts/...` when present.
+
 ## Core Principles
 
 1. **Zero Dependencies** — Single HTML files with inline CSS/JS. No npm, no build tools.
@@ -178,7 +187,7 @@ Generate the full presentation using content from Phase 1 (text, or text + curat
 
 If images were provided, the slide outline already incorporates them from Step 1.2. If not, CSS-generated visuals (gradients, shapes, patterns) provide visual interest — this is a fully supported first-class path.
 
-**Before generating, read these supporting files:**
+**Before generating, read these supporting files** (after **Local skill assets (read order)** — try `./frontend-slides/` under the current directory first):
 
 - [html-template.md](html-template.md) — HTML architecture and JS features
 - [viewport-base.css](viewport-base.css) — Mandatory CSS (include in full)
