@@ -1,16 +1,49 @@
+import { existsSync } from 'node:fs'
 import type { Dirent } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { tool } from '@langchain/core/tools'
+import { app } from 'electron'
 import { z } from 'zod'
 
 import type { AppSettings, ToolCallEvent, ToolTimelineEvent } from '../../../shared/ipc.js'
+import { userDataPath } from '../../store.js'
 import { listDirTool, readFileTool, searchWorkspace, writeFileTool } from '../../tools/fs-tools.js'
 import { runCommand } from '../../tools/terminal.js'
 
-const MAX_WORKSPACE_SKILLS = 24
-const SKILL_SCAN_DIRS = ['.agent-weave/skills', '.cursor/skills', 'skills']
+/** 单次加载上限（内置分发 + 用户目录；同名时用户目录覆盖内置） */
+const MAX_LOADED_SKILLS = 96
+
+/** 用户安装的技能目录（应用用户数据下） */
+function userInstalledSkillsRoot(): { absRoot: string; sourcePrefix: string } {
+  return {
+    absRoot: path.join(userDataPath(), '.agent-weave', 'skills'),
+    sourcePrefix: '.agent-weave/skills'
+  }
+}
+
+/**
+ * 安装包内随应用分发的 skills（electron-builder extraResources → resources/skills）。
+ * 开发模式下解析为仓库根目录下的 skills/（与 out/main/agent/skills 相对）。
+ */
+function bundledSkillsScanRoot(): { absRoot: string; sourcePrefix: string } | null {
+  const absRoot = app.isPackaged
+    ? path.join(process.resourcesPath, 'skills')
+    : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../skills')
+  if (!existsSync(absRoot)) return null
+  return { absRoot, sourcePrefix: 'bundled/skills' }
+}
+
+/** 扫描顺序：内置分发 → 用户数据目录（同名时用户覆盖内置） */
+function allSkillScanRoots(): { absRoot: string; sourcePrefix: string }[] {
+  const roots: { absRoot: string; sourcePrefix: string }[] = []
+  const bundled = bundledSkillsScanRoot()
+  if (bundled) roots.push(bundled)
+  roots.push(userInstalledSkillsRoot())
+  return roots
+}
 const MAX_SKILL_MD_SIZE_BYTES = 10 * 1024 * 1024
 
 type RunContext = {
@@ -215,18 +248,19 @@ function makeBuiltinSkillDefinitions(ctx: SkillToolContext): SkillDefinition[] {
 }
 
 /**
- * 加载工作区技能定义
+ * 加载技能定义（安装包内置 + 用户数据目录，不读取当前工作区目录）
  */
-async function loadWorkspaceSkillDefs(ctx: SkillToolContext): Promise<SkillDefinition[]> {
+async function loadBundledAndUserSkillDefs(): Promise<SkillDefinition[]> {
   const defs: SkillDefinition[] = []
-  for (const dir of SKILL_SCAN_DIRS) {
+  const scanRoots = allSkillScanRoots()
+
+  for (const { absRoot: absDir, sourcePrefix } of scanRoots) {
     /*
     markdown格式技能定义加载
     */
-    const absDir = path.join(ctx.root, dir)
     const mdFiles = await collectSkillMarkdownFiles(absDir)
     for (const absPath of mdFiles) {
-      if (defs.length >= MAX_WORKSPACE_SKILLS) return defs
+      if (defs.length >= MAX_LOADED_SKILLS) return defs
       try {
         const st = await fs.stat(absPath)
         if (st.size > MAX_SKILL_MD_SIZE_BYTES) {
@@ -237,12 +271,12 @@ async function loadWorkspaceSkillDefs(ctx: SkillToolContext): Promise<SkillDefin
         if (!parsed) {
           continue
         }
-        const rel = path.relative(ctx.root, absPath).replaceAll('\\', '/')
+        const rel = path.join(sourcePrefix, path.relative(absDir, absPath)).replaceAll('\\', '/')
         const folderName = path.basename(path.dirname(absPath))
         const skillName = sanitizeToolName(parsed.meta.name || folderName)
         const description =
           parsed.meta.description ||
-          `工作区技能文档：${rel}。按技能说明执行对应步骤，并在必要时调用工具。`
+          `技能文档：${rel}。按技能说明执行对应步骤，并在必要时调用工具。`
         defs.push({
           name: skillName,
           description,
@@ -273,7 +307,7 @@ async function loadWorkspaceSkillDefs(ctx: SkillToolContext): Promise<SkillDefin
       .map((entry) => entry.name)
       .sort((a, b) => a.localeCompare(b))
     for (const fileName of jsonFiles) {
-      if (defs.length >= MAX_WORKSPACE_SKILLS) return defs
+      if (defs.length >= MAX_LOADED_SKILLS) return defs
       const absPath = path.join(absDir, fileName)
       try {
         const raw = await fs.readFile(absPath, 'utf8')
@@ -284,8 +318,8 @@ async function loadWorkspaceSkillDefs(ctx: SkillToolContext): Promise<SkillDefin
         // TODO: type解析
         defs.push({
           name: skillName,
-          description: parsed.description || `工作区说明技能：${dir}/${fileName}`,
-          source: `${dir}/${fileName}`,
+          description: parsed.description || `说明技能：${sourcePrefix}/${fileName}`,
+          source: `${sourcePrefix}/${fileName}`,
           schema: z.object({ question: z.string().optional() }),
           execute: async (args) => {
             const question = typeof args.question === 'string' ? args.question : ''
@@ -376,8 +410,8 @@ function toTool(def: SkillDefinition, ctx: SkillToolContext): SkillTool {
 
 export async function buildSkillBundle(ctx: SkillToolContext): Promise<SkillBundle> {
   const builtin = makeBuiltinSkillDefinitions(ctx)
-  const workspace = await loadWorkspaceSkillDefs(ctx)
-  const merged = dedupeSkillDefinitions([...builtin, ...workspace])
+  const fileSkills = await loadBundledAndUserSkillDefs()
+  const merged = dedupeSkillDefinitions([...builtin, ...fileSkills])
   const tools = merged.map((item) => toTool(item, ctx))
   return {
     tools,

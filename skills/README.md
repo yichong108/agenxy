@@ -1,10 +1,9 @@
 # Skills 使用说明
 
-本项目会自动扫描以下目录中的技能：
+本项目会自动扫描以下目录中的技能（**不**读取当前打开的工作区目录）：
 
-- `.agent-weave/skills`
-- `.cursor/skills`
-- `skills`
+- **内置**：打包后位于安装包 `resources/skills`（开发时对应仓库根目录的 `skills/`）
+- **用户扩展**：应用用户数据目录下的 `.agent-weave/skills`（可与内置同名覆盖）
 
 仅识别文件名为 `SKILL.md` 的技能文档，并读取其 frontmatter 元数据。
 
