@@ -1,8 +1,8 @@
-import { randomUUID } from 'node:crypto'
+﻿import { randomUUID } from 'node:crypto'
 
-import type { SessionInfo } from '../shared/ipc.js'
+import type { SessionInfo } from '@/shared/ipc'
 
-import { clearSessionState, initSessionState } from './agent/agent-service.js'
+import { clearSessionState, initSessionState } from '@/main/agent/agent-service'
 import {
   getActiveWorkspaceId,
   deleteSessionMessages,
@@ -11,7 +11,7 @@ import {
   listWorkspaces,
   moveWorkspaceSessionData,
   setSessionsMeta
-} from './store.js'
+} from '@/main/store'
 
 const listByWorkspace = new Map<string, SessionInfo[]>()
 const nameCounterByWorkspace = new Map<string, number>()

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+﻿import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 
 import { app } from 'electron'
@@ -19,7 +19,7 @@ import {
   type SessionInfo,
   type WorkspaceInfo,
   type WorkspaceUiState
-} from '../shared/ipc.js'
+} from '@/shared/ipc'
 
 type StoreSchema = {
   workspaces: WorkspaceInfo[]

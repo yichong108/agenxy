@@ -1,14 +1,14 @@
-import { App as AntApp, ConfigProvider } from 'antd'
+﻿import { App as AntApp, ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import dayjs from 'dayjs'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import 'antd/dist/reset.css'
-import './assets/reset.scss'
+import '@/renderer/src/assets/reset.scss'
 
 import 'dayjs/locale/zh-cn'
-import { App } from './App'
-import { renderLog } from './logger.js' // 初始化渲染端 electron-log（IPC → 主进程落盘）
+import { App } from '@/renderer/src/App'
+import { renderLog } from '@/renderer/src/logger' // 初始化渲染端 electron-log（IPC → 主进程落盘）
 
 dayjs.locale('zh-cn')
 

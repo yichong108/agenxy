@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+﻿import { existsSync } from 'node:fs'
 import type { Dirent } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -8,10 +8,10 @@ import { tool } from '@langchain/core/tools'
 import { app } from 'electron'
 import { z } from 'zod'
 
-import type { AppSettings, ToolCallEvent, ToolTimelineEvent } from '../../../shared/ipc.js'
-import { userDataPath } from '../../store.js'
-import { listDirTool, readFileTool, searchWorkspace, writeFileTool } from '../../tools/fs-tools.js'
-import { runCommand } from '../../tools/terminal.js'
+import type { AppSettings, ToolCallEvent, ToolTimelineEvent } from '@/shared/ipc'
+import { userDataPath } from '@/main/store'
+import { listDirTool, readFileTool, searchWorkspace, writeFileTool } from '@/main/tools/fs-tools'
+import { runCommand } from '@/main/tools/terminal'
 
 /** 单次加载上限（内置分发 + 用户目录；同名时用户目录覆盖内置） */
 const MAX_LOADED_SKILLS = 96
@@ -26,12 +26,12 @@ function userInstalledSkillsRoot(): { absRoot: string; sourcePrefix: string } {
 
 /**
  * 安装包内随应用分发的 skills（electron-builder extraResources → resources/skills）。
- * 开发模式下解析为仓库根目录下的 skills/（与 out/main/agent/skills 相对）。
+ * 开发模式下解析为 src/skills/（与 out/main/agent/skills 相对）。
  */
 function bundledSkillsScanRoot(): { absRoot: string; sourcePrefix: string } | null {
   const absRoot = app.isPackaged
     ? path.join(process.resourcesPath, 'skills')
-    : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../skills')
+    : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../src/skills')
   if (!existsSync(absRoot)) return null
   return { absRoot, sourcePrefix: 'bundled/skills' }
 }

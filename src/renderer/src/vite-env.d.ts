@@ -12,7 +12,7 @@ import type {
   StreamEvent,
   WorkspaceInfo,
   WorkspacesPayload
-} from '@shared/ipc'
+} from '@/shared/ipc'
 
 type Api = {
   selectWorkspace: () => Promise<{ path: string }>

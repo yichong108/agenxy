@@ -7,8 +7,5 @@ dist
 *.log
 .env
 .env.*
-.idea/.gitignore
-.idea/agent-weave.iml
-.idea/modules.xml
-.idea/vcs.xml
+.idea/
 workspace_demo

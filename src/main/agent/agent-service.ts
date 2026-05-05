@@ -1,4 +1,4 @@
-import { AIMessage, HumanMessage, SystemMessage, type BaseMessage } from '@langchain/core/messages'
+﻿import { AIMessage, HumanMessage, SystemMessage, type BaseMessage } from '@langchain/core/messages'
 import { tool } from '@langchain/core/tools'
 import { createReactAgent } from '@langchain/langgraph/prebuilt'
 import { ChatOpenAI } from '@langchain/openai'
@@ -13,10 +13,10 @@ import {
   type StreamEvent,
   type ToolTimelineEvent,
   getActiveProviderProfile
-} from '../../shared/ipc.js'
-import { logScope } from '../logger.js'
-import { buildMcpLangChainTools, collectMcpServerContextHints } from '../mcp/mcp-runtime.js'
-import { getSessionMessages, getSettings, getWorkspaceById, setSessionMessages } from '../store.js'
+} from '@/shared/ipc'
+import { logScope } from '@/main/logger'
+import { buildMcpLangChainTools, collectMcpServerContextHints } from '@/main/mcp/mcp-runtime'
+import { getSessionMessages, getSettings, getWorkspaceById, setSessionMessages } from '@/main/store'
 import {
   deleteFileTool,
   globFilesTool,
@@ -24,13 +24,13 @@ import {
   readFileTool,
   searchWorkspace,
   writeFileTool
-} from '../tools/fs-tools.js'
-import { runCommand, killCommand } from '../tools/terminal.js'
-import { isTavilyConfigured, tavilyWebSearch } from '../tools/web-search.js'
+} from '@/main/tools/fs-tools'
+import { runCommand, killCommand } from '@/main/tools/terminal'
+import { isTavilyConfigured, tavilyWebSearch } from '@/main/tools/web-search'
 
-import { StreamBatcher } from './batcher.js'
-import { ConcurrencyQueue } from './queue.js'
-import { buildSkillBundle } from './skills/index.js'
+import { StreamBatcher } from '@/main/agent/batcher'
+import { ConcurrencyQueue } from '@/main/agent/queue'
+import { buildSkillBundle } from '@/main/agent/skills/index'
 
 const agentLog = logScope('agent')
 

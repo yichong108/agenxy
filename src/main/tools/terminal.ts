@@ -1,6 +1,6 @@
-import { type ChildProcess, spawn } from 'node:child_process'
+﻿import { type ChildProcess, spawn } from 'node:child_process'
 
-import { ensureWorkspaceExists } from '../path-guard.js'
+import { ensureWorkspaceExists } from '@/main/path-guard'
 
 const running = new Map<string, ChildProcess>()
 

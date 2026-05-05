@@ -53,10 +53,10 @@ import {
   type StreamEvent,
   type ToolTimelineEvent,
   type WorkspaceInfo
-} from '@shared/ipc'
+} from '@/shared/ipc'
 
-import { useUiStore } from './store/ui-store'
-import './App.scss'
+import { useUiStore } from '@/renderer/src/store/ui-store'
+import '@/renderer/src/App.scss'
 
 const { Text, Title } = Typography
 

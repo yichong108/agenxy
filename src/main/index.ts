@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+﻿import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -13,11 +13,11 @@ import {
   type McpWarmupStatus,
   type RendererUiState,
   type StreamEvent
-} from '../shared/ipc.js'
+} from '@/shared/ipc'
 
-import { bindAgentIpc, cancelRun, runUserMessage, resetQueue } from './agent/agent-service.js'
-import { mainLog } from './logger.js'
-import { disposeMcpConnectionPool, probeMcpServer, warmupMcpServers } from './mcp/mcp-runtime.js'
+import { bindAgentIpc, cancelRun, runUserMessage, resetQueue } from '@/main/agent/agent-service'
+import { mainLog } from '@/main/logger'
+import { disposeMcpConnectionPool, probeMcpServer, warmupMcpServers } from '@/main/mcp/mcp-runtime'
 import {
   loadSessionList,
   getSessions,
@@ -27,7 +27,7 @@ import {
   getSessionWorkspaceId,
   removeWorkspaceSessions,
   touchSession
-} from './sessions.js'
+} from '@/main/sessions'
 import {
   getActiveWorkspace,
   getActiveWorkspaceId,
@@ -43,7 +43,7 @@ import {
   setUiState,
   setActiveWorkspace,
   upsertWorkspaceByPath
-} from './store.js'
+} from '@/main/store'
 
 mainLog.info('Electron 主进程启动')
 

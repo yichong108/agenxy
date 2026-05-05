@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-import { defaultWorkspaceUiState, type WorkspaceUiState } from '@shared/ipc'
+import { defaultWorkspaceUiState, type WorkspaceUiState } from '@/shared/ipc'
 
 type UiStoreState = {
   activeWorkspaceId: string | null

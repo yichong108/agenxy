@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+﻿import { contextBridge, ipcRenderer } from 'electron'
 
 import {
   EVENTS,
@@ -14,9 +14,9 @@ import {
   type StreamEvent,
   type WorkspaceInfo,
   type WorkspacesPayload
-} from '../shared/ipc.js'
+} from '@/shared/ipc'
 
-import { installElectronLogBridge } from './electron-log-bridge.js'
+import { installElectronLogBridge } from '@/preload/electron-log-bridge'
 
 installElectronLogBridge()
 

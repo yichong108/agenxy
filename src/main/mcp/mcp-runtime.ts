@@ -1,4 +1,4 @@
-import { tool } from '@langchain/core/tools'
+﻿import { tool } from '@langchain/core/tools'
 /* eslint-disable import/no-unresolved -- @modelcontextprotocol/sdk 使用 package exports 子路径 */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import {
@@ -14,8 +14,8 @@ import type {
   McpServerEntry,
   McpWarmupServerResult,
   ToolTimelineEvent
-} from '../../shared/ipc.js'
-import { logScope } from '../logger.js'
+} from '@/shared/ipc'
+import { logScope } from '@/main/logger'
 
 const mcpLog = logScope('mcp')
 
