@@ -18,6 +18,7 @@ type RunContext = {
   traceId: string
 }
 
+// 技能工具上下文
 type SkillToolContext = {
   root: string
   termKey: string
@@ -39,6 +40,7 @@ type SkillTool = {
 type SkillDefinition = {
   name: string
   description: string
+  // 技能来源: 文档路径
   source: string
   schema: z.AnyZodObject
   execute: (args: Record<string, unknown>) => Promise<string>
@@ -95,8 +97,11 @@ function parseSkillFrontmatter(markdown: string): { meta: SkillMdMeta; body: str
   return { meta, body }
 }
 
-async function collectSkillMarkdownFiles(rootDir: string): Promise<string[]> {
-  const queue: string[] = [rootDir]
+/**
+ * 收集工作区技能文档绝对路径
+ */
+async function collectSkillMarkdownFiles(absDir: string): Promise<string[]> {
+  const queue: string[] = [absDir]
   const out: string[] = []
   while (queue.length) {
     const current = queue.shift()
@@ -209,9 +214,15 @@ function makeBuiltinSkillDefinitions(ctx: SkillToolContext): SkillDefinition[] {
   ]
 }
 
+/**
+ * 加载工作区技能定义
+ */
 async function loadWorkspaceSkillDefs(ctx: SkillToolContext): Promise<SkillDefinition[]> {
   const defs: SkillDefinition[] = []
   for (const dir of SKILL_SCAN_DIRS) {
+    /*
+    markdown格式技能定义加载
+    */
     const absDir = path.join(ctx.root, dir)
     const mdFiles = await collectSkillMarkdownFiles(absDir)
     for (const absPath of mdFiles) {
@@ -248,6 +259,9 @@ async function loadWorkspaceSkillDefs(ctx: SkillToolContext): Promise<SkillDefin
       }
     }
 
+    /*
+    json格式技能定义加载
+    */
     let entries: Dirent[] = []
     try {
       entries = await fs.readdir(absDir, { withFileTypes: true })
@@ -267,68 +281,7 @@ async function loadWorkspaceSkillDefs(ctx: SkillToolContext): Promise<SkillDefin
         const skillName = sanitizeToolName(
           parsed.name || parsed.id || path.basename(fileName, '.json')
         )
-        const type = parsed.type || 'instruction'
-        if (type === 'command') {
-          defs.push({
-            name: skillName,
-            description: parsed.description || `工作区命令技能：${dir}/${fileName}`,
-            source: `${dir}/${fileName}`,
-            schema: z.object({
-              command: z.string().optional(),
-              question: z.string().optional()
-            }),
-            execute: async (args) => {
-              const question = typeof args.question === 'string' ? args.question : ''
-              const commandInput = typeof args.command === 'string' ? args.command.trim() : ''
-              const defaultCommand = parsed.command ? applyTemplate(parsed.command, question) : ''
-              const command = commandInput || defaultCommand
-              if (!command) throw new Error(`技能 ${skillName} 缺少 command`)
-              return await runCommand(
-                ctx.termKey,
-                ctx.root,
-                command,
-                ctx.settings.maxTerminalOutputChars
-              )
-            }
-          })
-          continue
-        }
-        if (type === 'write_file') {
-          defs.push({
-            name: skillName,
-            description: parsed.description || `工作区写文件技能：${dir}/${fileName}`,
-            source: `${dir}/${fileName}`,
-            schema: z.object({
-              path: z.string().optional(),
-              content: z.string().optional(),
-              question: z.string().optional(),
-              mode: z.enum(['overwrite', 'append']).optional()
-            }),
-            execute: async (args) => {
-              const question = typeof args.question === 'string' ? args.question : ''
-              const mode = args.mode === 'append' ? 'append' : 'overwrite'
-              const targetPath =
-                (typeof args.path === 'string' && args.path.trim()) ||
-                (parsed.path ? applyTemplate(parsed.path, question) : '')
-              if (!targetPath) throw new Error(`技能 ${skillName} 缺少 path`)
-              const targetContent =
-                (typeof args.content === 'string' && args.content) ||
-                (parsed.content ? applyTemplate(parsed.content, question) : '')
-              if (mode === 'append') {
-                let previous = ''
-                try {
-                  previous = await readFileTool(ctx.root, targetPath)
-                } catch {
-                  previous = ''
-                }
-                const merged = previous ? `${previous}\n${targetContent}` : targetContent
-                return await writeFileTool(ctx.root, targetPath, merged)
-              }
-              return await writeFileTool(ctx.root, targetPath, targetContent)
-            }
-          })
-          continue
-        }
+        // TODO: type解析
         defs.push({
           name: skillName,
           description: parsed.description || `工作区说明技能：${dir}/${fileName}`,
