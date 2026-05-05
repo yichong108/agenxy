@@ -17,18 +17,34 @@ import type { AppSettings, ToolCallEvent, ToolTimelineEvent } from '@/shared/ipc
 /** 单次加载上限 */
 const MAX_LOADED_SKILLS = 96
 
-/** 用户技能目录绝对路径：`Electron userData/.agent-weave/skills` */
+/** 用户技能目录绝对路径：`Electron userData/skills` */
 export function userSkillsAbsRoot(): string {
-  return path.join(userDataPath(), '.agent-weave', 'skills')
+  return path.join(userDataPath(), 'skills')
 }
 
-/** 用于首次填充用户目录的内置 skills 源路径（打包：`resources/skills`；开发：`src/skills`） */
+/**
+ * 用于首次填充用户目录的内置 skills 源路径。
+ * 打包：`resources/skills`。
+ * 开发：主进程多为单文件 bundle（`out/main/index.js`），`import.meta.url` 位于 `out/main`，向上两级即到项目根下的 `src/skills`；
+ * 另尝试 `app.getAppPath()/src/skills`（通常即 package.json 所在目录）。
+ */
 function bundledSkillsSourceDir(): string | null {
-  const absRoot = app.isPackaged
-    ? path.join(process.resourcesPath, 'skills')
-    : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../src/skills')
-  if (!existsSync(absRoot)) return null
-  return absRoot
+  if (app.isPackaged) {
+    const absRoot = path.join(process.resourcesPath, 'skills')
+    return existsSync(absRoot) ? absRoot : null
+  }
+  const appPathSkills = path.join(app.getAppPath(), 'src', 'skills')
+  if (existsSync(appPathSkills)) return appPathSkills
+  const fromBundle = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '..',
+    '..',
+    'src',
+    'skills'
+  )
+  if (existsSync(fromBundle)) return fromBundle
+  mainLog.warn('[skills] 开发模式下未找到内置种子，已尝试:', appPathSkills, fromBundle)
+  return null
 }
 
 async function directoryIsEmpty(absDir: string): Promise<boolean> {
@@ -47,6 +63,9 @@ async function directoryIsEmpty(absDir: string): Promise<boolean> {
 export async function ensureUserSkillsSeeded(): Promise<void> {
   const userRoot = userSkillsAbsRoot()
   await fs.mkdir(userRoot, { recursive: true })
+  if (!app.isPackaged) {
+    mainLog.info('[skills] 用户技能目录（位于 userData/skills）:', userRoot)
+  }
   if (!(await directoryIsEmpty(userRoot))) return
   const bundled = bundledSkillsSourceDir()
   if (!bundled) {
@@ -64,7 +83,7 @@ export async function ensureUserSkillsSeeded(): Promise<void> {
 function userInstalledSkillsRoot(): { absRoot: string; sourcePrefix: string } {
   return {
     absRoot: userSkillsAbsRoot(),
-    sourcePrefix: '.agent-weave/skills'
+    sourcePrefix: 'skills'
   }
 }
 
