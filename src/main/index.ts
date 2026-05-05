@@ -41,6 +41,7 @@ import {
   setActiveWorkspace,
   upsertWorkspaceByPath
 } from '@/main/store'
+import { completeCommandInWorkspace, killCommand, runCommand } from '@/main/tools/terminal'
 import { listWorkspaceFileTree, readWorkspaceFileContent } from '@/main/workspace-files'
 import {
   IPC,
@@ -288,6 +289,38 @@ function registerIpc(): void {
       return { ok: false as const, error: '当前工作区未绑定目录' }
     }
     return await readWorkspaceFileContent(workspace.path, relPath)
+  })
+  ipcMain.handle(IPC.TERMINAL_RUN, async (_e, workspaceId: string, command: string) => {
+    const trimmed = String(command ?? '').trim()
+    if (!trimmed) return { output: '请输入命令后再执行。' }
+    const targetWorkspace = listWorkspaces().find((x) => x.id === workspaceId)
+    const workspacePath = targetWorkspace?.path
+    if (!workspacePath) {
+      return { output: '当前工作区未绑定目录，无法执行命令。' }
+    }
+    const sessionKey = `right-pane:${workspaceId}`
+    const output = await runCommand(
+      sessionKey,
+      workspacePath,
+      trimmed,
+      getSettings().maxTerminalOutputChars
+    )
+    return { output }
+  })
+  ipcMain.handle(IPC.TERMINAL_CANCEL, async (_e, workspaceId: string) => {
+    await killCommand(`right-pane:${workspaceId}`)
+    return { ok: true as const }
+  })
+  ipcMain.handle(IPC.TERMINAL_COMPLETE, async (_e, workspaceId: string, commandLine: string) => {
+    const targetWorkspace = listWorkspaces().find((x) => x.id === workspaceId)
+    const workspacePath = targetWorkspace?.path
+    if (!workspacePath) return { items: [] as string[] }
+    try {
+      const items = await completeCommandInWorkspace(workspacePath, String(commandLine ?? ''))
+      return { items }
+    } catch {
+      return { items: [] as string[] }
+    }
   })
   ipcMain.handle(IPC.WORKSPACE_LIST, () => ({
     list: listWorkspaces(),

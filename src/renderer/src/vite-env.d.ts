@@ -15,6 +15,8 @@ import type {
   SkillsUninstallPayload,
   SkillsUninstallResult,
   StreamEvent,
+  TerminalCompleteResult,
+  TerminalRunResult,
   WebEditAction,
   WindowChromeAction,
   WorkspaceFileContentResult,
@@ -38,6 +40,12 @@ type Api = {
   removeWorkspace: (workspaceId: string) => Promise<{ ok: boolean }>
   getWorkspaceFileTree: () => Promise<WorkspaceFileTreePayload>
   readWorkspaceFile: (relPath: string) => Promise<WorkspaceFileContentResult>
+  runTerminalCommand: (workspaceId: string, command: string) => Promise<TerminalRunResult>
+  cancelTerminalCommand: (workspaceId: string) => Promise<{ ok: true }>
+  completeTerminalCommand: (
+    workspaceId: string,
+    commandLine: string
+  ) => Promise<TerminalCompleteResult>
   getSettings: () => Promise<AppSettings>
   setSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>
   getUiState: () => Promise<RendererUiState>

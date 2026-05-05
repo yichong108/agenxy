@@ -11,6 +11,9 @@ export const IPC = {
   WORKSPACE_REMOVE: 'workspace:remove',
   WORKSPACE_FILE_TREE: 'workspace:file-tree',
   WORKSPACE_FILE_CONTENT: 'workspace:file-content',
+  TERMINAL_RUN: 'terminal:run',
+  TERMINAL_CANCEL: 'terminal:cancel',
+  TERMINAL_COMPLETE: 'terminal:complete',
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',
   UI_STATE_GET: 'ui-state:get',
@@ -442,6 +445,14 @@ export type WorkspaceFileContentResult =
       ok: false
       error: string
     }
+
+export type TerminalRunResult = {
+  output: string
+}
+
+export type TerminalCompleteResult = {
+  items: string[]
+}
 
 export type WorkspacesPayload = {
   list: WorkspaceInfo[]

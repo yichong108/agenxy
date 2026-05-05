@@ -18,6 +18,8 @@ import {
   type SkillsUninstallPayload,
   type SkillsUninstallResult,
   type StreamEvent,
+  type TerminalCompleteResult,
+  type TerminalRunResult,
   type WebEditAction,
   type WindowChromeAction,
   type WorkspaceFileContentResult,
@@ -52,6 +54,16 @@ const api = {
     ipcRenderer.invoke(IPC.WORKSPACE_FILE_TREE) as Promise<WorkspaceFileTreePayload>,
   readWorkspaceFile: (relPath: string) =>
     ipcRenderer.invoke(IPC.WORKSPACE_FILE_CONTENT, relPath) as Promise<WorkspaceFileContentResult>,
+  runTerminalCommand: (workspaceId: string, command: string) =>
+    ipcRenderer.invoke(IPC.TERMINAL_RUN, workspaceId, command) as Promise<TerminalRunResult>,
+  cancelTerminalCommand: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC.TERMINAL_CANCEL, workspaceId) as Promise<{ ok: true }>,
+  completeTerminalCommand: (workspaceId: string, commandLine: string) =>
+    ipcRenderer.invoke(
+      IPC.TERMINAL_COMPLETE,
+      workspaceId,
+      commandLine
+    ) as Promise<TerminalCompleteResult>,
   getSettings: () => ipcRenderer.invoke(IPC.SETTINGS_GET) as Promise<AppSettings>,
   setSettings: (patch: Partial<AppSettings>) =>
     ipcRenderer.invoke(IPC.SETTINGS_SET, patch) as Promise<AppSettings>,
