@@ -8,41 +8,69 @@ import { tool } from '@langchain/core/tools'
 import { app } from 'electron'
 import { z } from 'zod'
 
-import type { AppSettings, ToolCallEvent, ToolTimelineEvent } from '@/shared/ipc'
+import { mainLog } from '@/main/logger'
 import { userDataPath } from '@/main/store'
 import { listDirTool, readFileTool, searchWorkspace, writeFileTool } from '@/main/tools/fs-tools'
 import { runCommand } from '@/main/tools/terminal'
+import type { AppSettings, ToolCallEvent, ToolTimelineEvent } from '@/shared/ipc'
 
-/** 单次加载上限（内置分发 + 用户目录；同名时用户目录覆盖内置） */
+/** 单次加载上限 */
 const MAX_LOADED_SKILLS = 96
 
-/** 用户安装的技能目录（应用用户数据下） */
-function userInstalledSkillsRoot(): { absRoot: string; sourcePrefix: string } {
-  return {
-    absRoot: path.join(userDataPath(), '.agent-weave', 'skills'),
-    sourcePrefix: '.agent-weave/skills'
-  }
+/** 用户技能目录绝对路径：`Electron userData/.agent-weave/skills` */
+export function userSkillsAbsRoot(): string {
+  return path.join(userDataPath(), '.agent-weave', 'skills')
 }
 
-/**
- * 安装包内随应用分发的 skills（electron-builder extraResources → resources/skills）。
- * 开发模式下解析为 src/skills/（与 out/main/agent/skills 相对）。
- */
-function bundledSkillsScanRoot(): { absRoot: string; sourcePrefix: string } | null {
+/** 用于首次填充用户目录的内置 skills 源路径（打包：`resources/skills`；开发：`src/skills`） */
+function bundledSkillsSourceDir(): string | null {
   const absRoot = app.isPackaged
     ? path.join(process.resourcesPath, 'skills')
     : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../src/skills')
   if (!existsSync(absRoot)) return null
-  return { absRoot, sourcePrefix: 'bundled/skills' }
+  return absRoot
 }
 
-/** 扫描顺序：内置分发 → 用户数据目录（同名时用户覆盖内置） */
+async function directoryIsEmpty(absDir: string): Promise<boolean> {
+  try {
+    const entries = await fs.readdir(absDir)
+    return entries.length === 0
+  } catch {
+    return true
+  }
+}
+
+/**
+ * 保证用户技能目录存在；若为空则从内置目录复制一份（仅首次或用户清空后）。
+ * 之后运行时只从用户数据目录读取 skills，便于用户自行增删改。
+ */
+export async function ensureUserSkillsSeeded(): Promise<void> {
+  const userRoot = userSkillsAbsRoot()
+  await fs.mkdir(userRoot, { recursive: true })
+  if (!(await directoryIsEmpty(userRoot))) return
+  const bundled = bundledSkillsSourceDir()
+  if (!bundled) {
+    mainLog.info('[skills] 用户技能目录为空且无内置种子，跳过复制')
+    return
+  }
+  try {
+    await fs.cp(bundled, userRoot, { recursive: true })
+    mainLog.info('[skills] 已将内置技能种子复制到用户目录:', userRoot)
+  } catch (e) {
+    mainLog.error('[skills] 复制内置技能到用户目录失败', e)
+  }
+}
+
+function userInstalledSkillsRoot(): { absRoot: string; sourcePrefix: string } {
+  return {
+    absRoot: userSkillsAbsRoot(),
+    sourcePrefix: '.agent-weave/skills'
+  }
+}
+
+/** 仅从用户数据目录扫描技能 */
 function allSkillScanRoots(): { absRoot: string; sourcePrefix: string }[] {
-  const roots: { absRoot: string; sourcePrefix: string }[] = []
-  const bundled = bundledSkillsScanRoot()
-  if (bundled) roots.push(bundled)
-  roots.push(userInstalledSkillsRoot())
-  return roots
+  return [userInstalledSkillsRoot()]
 }
 const MAX_SKILL_MD_SIZE_BYTES = 10 * 1024 * 1024
 
@@ -248,7 +276,7 @@ function makeBuiltinSkillDefinitions(ctx: SkillToolContext): SkillDefinition[] {
 }
 
 /**
- * 加载技能定义（安装包内置 + 用户数据目录，不读取当前工作区目录）
+ * 从用户数据目录加载技能定义（不读取当前工作区目录）
  */
 async function loadBundledAndUserSkillDefs(): Promise<SkillDefinition[]> {
   const defs: SkillDefinition[] = []

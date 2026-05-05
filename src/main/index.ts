@@ -4,18 +4,8 @@ import { fileURLToPath } from 'node:url'
 
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron'
 
-import {
-  IPC,
-  EVENTS,
-  type AppSettings,
-  type McpServerEntry,
-  type McpWarmupReport,
-  type McpWarmupStatus,
-  type RendererUiState,
-  type StreamEvent
-} from '@/shared/ipc'
-
 import { bindAgentIpc, cancelRun, runUserMessage, resetQueue } from '@/main/agent/agent-service'
+import { ensureUserSkillsSeeded } from '@/main/agent/skills'
 import { mainLog } from '@/main/logger'
 import { disposeMcpConnectionPool, probeMcpServer, warmupMcpServers } from '@/main/mcp/mcp-runtime'
 import {
@@ -44,6 +34,16 @@ import {
   setActiveWorkspace,
   upsertWorkspaceByPath
 } from '@/main/store'
+import {
+  IPC,
+  EVENTS,
+  type AppSettings,
+  type McpServerEntry,
+  type McpWarmupReport,
+  type McpWarmupStatus,
+  type RendererUiState,
+  type StreamEvent
+} from '@/shared/ipc'
 
 mainLog.info('Electron 主进程启动')
 
@@ -422,6 +422,7 @@ app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return
   void (async () => {
     await loadReactDevtoolsExtension()
+    await ensureUserSkillsSeeded()
     loadSessionList()
     registerIpc()
     createWindow()
