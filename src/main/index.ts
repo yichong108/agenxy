@@ -100,7 +100,7 @@ async function loadReactDevtoolsExtension(): Promise<void> {
     return
   }
 
-  const extensionPath = path.resolve(__dirname, '../../extensions/react-devtools')
+  const extensionPath = path.resolve(__dirname, '../../src/extensions/react-devtools')
 
   const removeExistingReactDevtools = (): void => {
     try {
