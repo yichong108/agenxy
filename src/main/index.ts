@@ -41,6 +41,7 @@ import {
   setActiveWorkspace,
   upsertWorkspaceByPath
 } from '@/main/store'
+import { listWorkspaceFileTree, readWorkspaceFileContent } from '@/main/workspace-files'
 import {
   IPC,
   EVENTS,
@@ -274,6 +275,20 @@ function registerIpc(): void {
     return { path: workspace.path || '' }
   })
   ipcMain.handle(IPC.WORKSPACE_GET, () => getWorkspace())
+  ipcMain.handle(IPC.WORKSPACE_FILE_TREE, async () => {
+    const workspace = getActiveWorkspace()
+    if (!workspace?.path) {
+      return { rootPath: '', nodes: [] }
+    }
+    return await listWorkspaceFileTree(workspace.path)
+  })
+  ipcMain.handle(IPC.WORKSPACE_FILE_CONTENT, async (_e, relPath: string) => {
+    const workspace = getActiveWorkspace()
+    if (!workspace?.path) {
+      return { ok: false as const, error: '当前工作区未绑定目录' }
+    }
+    return await readWorkspaceFileContent(workspace.path, relPath)
+  })
   ipcMain.handle(IPC.WORKSPACE_LIST, () => ({
     list: listWorkspaces(),
     activeWorkspaceId: getActiveWorkspaceId()

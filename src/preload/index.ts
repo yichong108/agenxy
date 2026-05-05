@@ -20,6 +20,8 @@ import {
   type StreamEvent,
   type WebEditAction,
   type WindowChromeAction,
+  type WorkspaceFileContentResult,
+  type WorkspaceFileTreePayload,
   type WorkspaceInfo,
   type WorkspacesPayload
 } from '@/shared/ipc'
@@ -46,6 +48,10 @@ const api = {
     ipcRenderer.invoke(IPC.WORKSPACE_RENAME, workspaceId, name) as Promise<WorkspaceInfo | null>,
   removeWorkspace: (workspaceId: string) =>
     ipcRenderer.invoke(IPC.WORKSPACE_REMOVE, workspaceId) as Promise<{ ok: boolean }>,
+  getWorkspaceFileTree: () =>
+    ipcRenderer.invoke(IPC.WORKSPACE_FILE_TREE) as Promise<WorkspaceFileTreePayload>,
+  readWorkspaceFile: (relPath: string) =>
+    ipcRenderer.invoke(IPC.WORKSPACE_FILE_CONTENT, relPath) as Promise<WorkspaceFileContentResult>,
   getSettings: () => ipcRenderer.invoke(IPC.SETTINGS_GET) as Promise<AppSettings>,
   setSettings: (patch: Partial<AppSettings>) =>
     ipcRenderer.invoke(IPC.SETTINGS_SET, patch) as Promise<AppSettings>,

@@ -38,6 +38,7 @@ import rehypeHighlight from 'rehype-highlight'
 import remarkGfm from 'remark-gfm'
 import 'highlight.js/styles/github.css'
 
+import { WorkspaceRightPane } from '@/renderer/src/right-pane/WorkspaceRightPane'
 import { SkillsMarketPanel } from '@/renderer/src/skills-market/SkillsMarketPanel'
 import { useUiStore } from '@/renderer/src/store/ui-store'
 import {
@@ -193,6 +194,9 @@ export function App() {
   const SIDEBAR_MIN_WIDTH = 240
   const SIDEBAR_MAX_WIDTH = 560
   const SIDEBAR_DEFAULT_WIDTH = 300
+  const RIGHT_PANE_MIN_WIDTH = 420
+  const RIGHT_PANE_MAX_WIDTH = 860
+  const RIGHT_PANE_DEFAULT_WIDTH = 560
   const { message: msgApi, modal: modalApi } = AntdApp.useApp()
   const preloadOk = typeof window !== 'undefined' && typeof window.bridge !== 'undefined'
   const bridge = window.bridge
@@ -354,6 +358,9 @@ export function App() {
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH)
   const [isSidebarResizing, setIsSidebarResizing] = useState(false)
   const sidebarResizeStartRef = useRef<{ startX: number; startWidth: number } | null>(null)
+  const [rightPaneWidth, setRightPaneWidth] = useState(RIGHT_PANE_DEFAULT_WIDTH)
+  const [isRightPaneResizing, setIsRightPaneResizing] = useState(false)
+  const rightPaneResizeStartRef = useRef<{ startX: number; startWidth: number } | null>(null)
 
   const mcpWarmupSummary = useMemo(() => {
     if (!mcpWarmup) return null
@@ -1242,6 +1249,54 @@ export function App() {
     }
   }, [isSidebarResizing])
 
+  const handleRightPaneResizeStart = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return
+      event.preventDefault()
+      rightPaneResizeStartRef.current = {
+        startX: event.clientX,
+        startWidth: rightPaneWidth
+      }
+      setIsRightPaneResizing(true)
+    },
+    [rightPaneWidth]
+  )
+
+  useEffect(() => {
+    if (!isRightPaneResizing) return
+    const previousCursor = document.body.style.cursor
+    const previousUserSelect = document.body.style.userSelect
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const dragState = rightPaneResizeStartRef.current
+      if (!dragState) return
+      const delta = event.clientX - dragState.startX
+      const nextWidth = Math.min(
+        RIGHT_PANE_MAX_WIDTH,
+        Math.max(RIGHT_PANE_MIN_WIDTH, dragState.startWidth - delta)
+      )
+      setRightPaneWidth(nextWidth)
+    }
+
+    const handleMouseUp = () => {
+      rightPaneResizeStartRef.current = null
+      setIsRightPaneResizing(false)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    window.addEventListener('blur', handleMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+      window.removeEventListener('blur', handleMouseUp)
+      document.body.style.cursor = previousCursor
+      document.body.style.userSelect = previousUserSelect
+    }
+  }, [isRightPaneResizing, RIGHT_PANE_MAX_WIDTH, RIGHT_PANE_MIN_WIDTH])
+
   const handleSessionClick = useCallback(
     async (workspaceId: string, sessionId: string) => {
       if (workspaceId !== activeWorkspaceId && supportsMultiWorkspaceApi) {
@@ -1362,7 +1417,9 @@ export function App() {
           />
         </div>
       ) : null}
-      <div className={`app-body ${isSidebarResizing ? 'is-resizing' : ''}`}>
+      <div
+        className={`app-body ${isSidebarResizing ? 'is-sidebar-resizing' : ''} ${isRightPaneResizing ? 'is-right-resizing' : ''}`}
+      >
         <div className="app-sidebar" style={{ width: `${sidebarWidth}px` }}>
           <div className="app-sidebar-inner">
             <div className="app-sidebar-header">
@@ -1668,6 +1725,19 @@ export function App() {
             </div>
           </div>
         </div>
+        <div
+          className={`app-right-resizer ${isRightPaneResizing ? 'is-dragging' : ''}`}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整右侧栏宽度"
+          onMouseDown={handleRightPaneResizeStart}
+        />
+        <WorkspaceRightPane
+          bridge={bridge}
+          activeWorkspaceId={activeWorkspaceId}
+          activeWorkspacePath={workspaces.find((x) => x.id === activeWorkspaceId)?.path ?? null}
+          width={rightPaneWidth}
+        />
       </div>
 
       <Modal

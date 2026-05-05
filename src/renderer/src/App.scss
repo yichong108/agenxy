@@ -88,9 +88,32 @@
   transition: background-color 0.15s ease;
 }
 
+.app-right-resizer {
+  width: 8px;
+  flex-shrink: 0;
+  position: relative;
+  cursor: col-resize;
+  background: transparent;
+}
+
+.app-right-resizer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--aw-color-border-secondary);
+  transition: background-color 0.15s ease;
+}
+
 .app-sidebar-resizer:hover::before,
-.app-body.is-resizing .app-sidebar-resizer::before,
-.app-sidebar-resizer.is-dragging::before {
+.app-body.is-sidebar-resizing .app-sidebar-resizer::before,
+.app-sidebar-resizer.is-dragging::before,
+.app-right-resizer:hover::before,
+.app-body.is-right-resizing .app-right-resizer::before,
+.app-right-resizer.is-dragging::before {
   background: #9a9a9a;
 }
 

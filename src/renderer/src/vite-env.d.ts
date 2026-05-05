@@ -17,6 +17,8 @@ import type {
   StreamEvent,
   WebEditAction,
   WindowChromeAction,
+  WorkspaceFileContentResult,
+  WorkspaceFileTreePayload,
   WorkspaceInfo,
   WorkspacesPayload
 } from '@/shared/ipc'
@@ -34,6 +36,8 @@ type Api = {
   reorderWorkspaces: (orderIds: string[]) => Promise<WorkspacesPayload>
   renameWorkspace: (workspaceId: string, name: string) => Promise<WorkspaceInfo | null>
   removeWorkspace: (workspaceId: string) => Promise<{ ok: boolean }>
+  getWorkspaceFileTree: () => Promise<WorkspaceFileTreePayload>
+  readWorkspaceFile: (relPath: string) => Promise<WorkspaceFileContentResult>
   getSettings: () => Promise<AppSettings>
   setSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>
   getUiState: () => Promise<RendererUiState>

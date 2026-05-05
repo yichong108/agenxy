@@ -9,6 +9,8 @@ export const IPC = {
   WORKSPACE_REORDER: 'workspace:reorder',
   WORKSPACE_RENAME: 'workspace:rename',
   WORKSPACE_REMOVE: 'workspace:remove',
+  WORKSPACE_FILE_TREE: 'workspace:file-tree',
+  WORKSPACE_FILE_CONTENT: 'workspace:file-content',
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',
   UI_STATE_GET: 'ui-state:get',
@@ -415,6 +417,31 @@ export type WorkspaceInfo = {
   updatedAt: number
   isDefault?: boolean
 }
+
+export type WorkspaceFileNode = {
+  name: string
+  /** 相对工作区根路径（POSIX 斜杠） */
+  path: string
+  kind: 'directory' | 'file'
+  children?: WorkspaceFileNode[]
+}
+
+export type WorkspaceFileTreePayload = {
+  rootPath: string
+  nodes: WorkspaceFileNode[]
+}
+
+export type WorkspaceFileContentResult =
+  | {
+      ok: true
+      path: string
+      content: string
+      truncated: boolean
+    }
+  | {
+      ok: false
+      error: string
+    }
 
 export type WorkspacesPayload = {
   list: WorkspaceInfo[]
