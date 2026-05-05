@@ -297,8 +297,10 @@ export function App() {
   const [queued, setQueued] = useState<Record<string, number | undefined>>({})
   const [runStats, setRunStats] = useState<Record<string, RunStats | undefined>>({})
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [isSidebarResizing, setIsSidebarResizing] = useState(false)
   const sidebarResizeStartRef = useRef<{ startX: number; startWidth: number } | null>(null)
+  const sidebarExpandedWidthRef = useRef(SIDEBAR_DEFAULT_WIDTH)
   const [rightPaneWidth, setRightPaneWidth] = useState(RIGHT_PANE_DEFAULT_WIDTH)
   const [isRightPaneResizing, setIsRightPaneResizing] = useState(false)
   const rightPaneResizeStartRef = useRef<{ startX: number; startWidth: number } | null>(null)
@@ -1144,6 +1146,7 @@ export function App() {
 
   const handleSidebarResizeStart = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
+      if (isSidebarCollapsed) return
       if (event.button !== 0) return
       event.preventDefault()
       sidebarResizeStartRef.current = {
@@ -1152,8 +1155,20 @@ export function App() {
       }
       setIsSidebarResizing(true)
     },
-    [sidebarWidth]
+    [isSidebarCollapsed, sidebarWidth]
   )
+
+  const handleSidebarCollapseToggle = useCallback(() => {
+    setIsSidebarCollapsed((prev) => {
+      if (prev) {
+        setSidebarWidth(sidebarExpandedWidthRef.current)
+        return false
+      }
+      sidebarExpandedWidthRef.current = sidebarWidth
+      setSidebarWidth(56)
+      return true
+    })
+  }, [sidebarWidth])
 
   useEffect(() => {
     if (!isSidebarResizing) return
@@ -1171,6 +1186,7 @@ export function App() {
         Math.max(SIDEBAR_MIN_WIDTH, dragState.startWidth + delta)
       )
       setSidebarWidth(nextWidth)
+      sidebarExpandedWidthRef.current = nextWidth
     }
 
     const handleMouseUp = () => {
@@ -1388,6 +1404,7 @@ export function App() {
       >
         <WorkspaceLeftPane
           sidebarWidth={sidebarWidth}
+          isSidebarCollapsed={isSidebarCollapsed}
           isSidebarResizing={isSidebarResizing}
           activeWorkspaceId={activeWorkspaceId}
           activeSessionId={activeId}
@@ -1419,6 +1436,7 @@ export function App() {
             void pickWorkspace()
           }}
           onSidebarResizeStart={handleSidebarResizeStart}
+          onSidebarCollapseToggle={handleSidebarCollapseToggle}
           mcpOpen={mcpOpen}
           mcpDraft={mcpDraft}
           mcpJsonImportText={mcpJsonImportText}

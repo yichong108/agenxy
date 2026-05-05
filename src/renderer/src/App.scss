@@ -76,6 +76,10 @@
   background: transparent;
 }
 
+.app-sidebar-resizer.is-hidden {
+  width: 0;
+}
+
 .app-sidebar-resizer::before {
   content: '';
   position: absolute;
@@ -131,11 +135,21 @@
   align-items: center;
 }
 
+.app-sidebar-inner.is-collapsed .app-sidebar-header {
+  justify-content: center;
+  padding: 12px 0;
+}
+
 .app-brand-text {
   color: #262626;
   font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.3px;
+}
+
+.app-sidebar-collapse-btn {
+  width: 30px;
+  height: 30px;
 }
 
 .app-settings-btn {
