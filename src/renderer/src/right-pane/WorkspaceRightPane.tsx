@@ -3,6 +3,8 @@ import {
   FileOutlined,
   FolderOpenOutlined,
   FolderOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
   RightOutlined
 } from '@ant-design/icons'
 import Editor, { loader } from '@monaco-editor/react'
@@ -227,10 +229,13 @@ type WorkspaceRightPaneProps = {
   activeWorkspaceId: string | null
   activeWorkspacePath: string | null
   width: number
+  isCollapsed: boolean
+  onToggleCollapse: () => void
 }
 
 export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
-  const { bridge, activeWorkspaceId, activeWorkspacePath, width } = props
+  const { bridge, activeWorkspaceId, activeWorkspacePath, width, isCollapsed, onToggleCollapse } =
+    props
   const { message: msgApi } = AntdApp.useApp()
   const [activePanel, setActivePanel] = useState<'file' | 'terminal'>('file')
   const [fileTreeLoading, setFileTreeLoading] = useState(false)
@@ -568,120 +573,139 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
   }, [activePanel, activeWorkspaceId, writeTerminalPrompt])
 
   return (
-    <aside className="app-right-pane" style={{ width: `${width}px` }}>
+    <aside
+      className={`app-right-pane ${isCollapsed ? 'is-collapsed' : ''}`}
+      style={{ width: `${width}px` }}
+    >
       <div className="app-right-toolbar">
-        <Button
-          size="small"
-          type="text"
-          className={`app-right-toolbar-btn ${activePanel === 'file' ? 'is-active' : ''}`}
-          icon={<FileOutlined />}
-          onClick={() => setActivePanel('file')}
-          aria-label="文件"
-          title="文件"
-        />
-        <Button
-          size="small"
-          type="text"
-          className={`app-right-toolbar-btn ${activePanel === 'terminal' ? 'is-active' : ''}`}
-          icon={<CodeOutlined />}
-          onClick={() => setActivePanel('terminal')}
-          aria-label="控制台终端"
-          title="控制台终端"
-        />
-      </div>
-      <div className="app-right-content">
-        {activePanel === 'file' ? (
+        {!isCollapsed ? (
           <>
-            <div className="app-right-tree-panel">
-              <div className="app-right-tree-wrap" ref={treeContainerRef}>
-                {fileTreeLoading ? (
-                  <div className="app-right-tree-loading">
-                    <Spin size="small" />
-                    <Text type="secondary">正在加载文件树...</Text>
-                  </div>
-                ) : fileTreeData.length ? (
-                  <Tree<FileTreeDataNode>
-                    className="app-right-tree"
-                    data={fileTreeData}
-                    width="100%"
-                    height={Math.max(treeHeight, 240)}
-                    rowHeight={26}
-                    indent={16}
-                    openByDefault={false}
-                    initialOpenState={fileTreeOpenState}
-                    disableDrag
-                    disableEdit
-                    selectionFollowsFocus
-                    selection={selectedFileKey ?? undefined}
-                    onToggle={(id) => {
-                      setFileTreeExpandedKeys((prev) =>
-                        prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-                      )
-                    }}
-                    onSelect={(nodes) => {
-                      const node = nodes[0]
-                      if (!node || node.data.kind !== 'file') return
-                      const relPath = node.id
-                      setSelectedFileKey(relPath)
-                      void previewWorkspaceFile(relPath)
-                    }}
-                  >
-                    {FileTreeNodeRenderer}
-                  </Tree>
-                ) : (
-                  <Text type="secondary" className="app-right-empty-tip">
-                    当前工作区暂无可展示文件
-                  </Text>
-                )}
-              </div>
-            </div>
-            <div className="app-right-preview-wrap">
-              <div className="app-right-preview-header">
-                <Text strong>{filePreviewPath || '文件内容'}</Text>
-                {filePreviewTruncated ? <Tag color="warning">已截断</Tag> : null}
-              </div>
-              <div className="app-right-preview-body">
-                {filePreviewLoading ? (
-                  <div className="app-right-preview-loading">
-                    <Spin size="small" />
-                    <Text type="secondary">正在读取文件...</Text>
-                  </div>
-                ) : filePreviewError ? (
-                  <Text type="danger">{filePreviewError}</Text>
-                ) : filePreviewContent ? (
-                  <div className="app-right-preview-editor">
-                    <Editor
-                      path={filePreviewPath || undefined}
-                      language={filePreviewLanguage}
-                      value={filePreviewContent}
-                      theme={ISLANDS_LIGHT_THEME_NAME}
-                      options={{
-                        readOnly: true,
-                        automaticLayout: true,
-                        minimap: { enabled: false },
-                        lineNumbers: 'on',
-                        wordWrap: 'on',
-                        renderWhitespace: 'selection',
-                        scrollBeyondLastLine: false,
-                        contextmenu: false,
-                        fontSize: 12
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <Text type="secondary" className="app-right-empty-tip">
-                    点击文件树中的文件即可预览内容
-                  </Text>
-                )}
-              </div>
-            </div>
+            <Button
+              size="small"
+              type="text"
+              className={`app-right-toolbar-btn ${activePanel === 'file' ? 'is-active' : ''}`}
+              icon={<FileOutlined />}
+              onClick={() => setActivePanel('file')}
+              aria-label="文件"
+              title="文件"
+            />
+            <Button
+              size="small"
+              type="text"
+              className={`app-right-toolbar-btn ${activePanel === 'terminal' ? 'is-active' : ''}`}
+              icon={<CodeOutlined />}
+              onClick={() => setActivePanel('terminal')}
+              aria-label="控制台终端"
+              title="控制台终端"
+            />
           </>
-        ) : (
-          <div className="app-right-terminal-panel">
-            <div ref={terminalContainerRef} className="app-right-terminal-canvas" />
-          </div>
-        )}
+        ) : null}
+        <div className="app-right-toolbar-spacer" />
+        <Button
+          size="small"
+          type="text"
+          className="app-right-toolbar-btn app-right-toolbar-toggle"
+          icon={isCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+          onClick={onToggleCollapse}
+          aria-label={isCollapsed ? '展开右边栏' : '收起右边栏'}
+          title={isCollapsed ? '展开右边栏' : '收起右边栏'}
+        />
       </div>
+      {!isCollapsed ? (
+        <div className="app-right-content">
+          {activePanel === 'file' ? (
+            <>
+              <div className="app-right-tree-panel">
+                <div className="app-right-tree-wrap" ref={treeContainerRef}>
+                  {fileTreeLoading ? (
+                    <div className="app-right-tree-loading">
+                      <Spin size="small" />
+                      <Text type="secondary">正在加载文件树...</Text>
+                    </div>
+                  ) : fileTreeData.length ? (
+                    <Tree<FileTreeDataNode>
+                      className="app-right-tree"
+                      data={fileTreeData}
+                      width="100%"
+                      height={Math.max(treeHeight, 240)}
+                      rowHeight={26}
+                      indent={16}
+                      openByDefault={false}
+                      initialOpenState={fileTreeOpenState}
+                      disableDrag
+                      disableEdit
+                      selectionFollowsFocus
+                      selection={selectedFileKey ?? undefined}
+                      onToggle={(id) => {
+                        setFileTreeExpandedKeys((prev) =>
+                          prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+                        )
+                      }}
+                      onSelect={(nodes) => {
+                        const node = nodes[0]
+                        if (!node || node.data.kind !== 'file') return
+                        const relPath = node.id
+                        setSelectedFileKey(relPath)
+                        void previewWorkspaceFile(relPath)
+                      }}
+                    >
+                      {FileTreeNodeRenderer}
+                    </Tree>
+                  ) : (
+                    <Text type="secondary" className="app-right-empty-tip">
+                      当前工作区暂无可展示文件
+                    </Text>
+                  )}
+                </div>
+              </div>
+              <div className="app-right-preview-wrap">
+                <div className="app-right-preview-header">
+                  <Text strong>{filePreviewPath || '文件内容'}</Text>
+                  {filePreviewTruncated ? <Tag color="warning">已截断</Tag> : null}
+                </div>
+                <div className="app-right-preview-body">
+                  {filePreviewLoading ? (
+                    <div className="app-right-preview-loading">
+                      <Spin size="small" />
+                      <Text type="secondary">正在读取文件...</Text>
+                    </div>
+                  ) : filePreviewError ? (
+                    <Text type="danger">{filePreviewError}</Text>
+                  ) : filePreviewContent ? (
+                    <div className="app-right-preview-editor">
+                      <Editor
+                        path={filePreviewPath || undefined}
+                        language={filePreviewLanguage}
+                        value={filePreviewContent}
+                        theme={ISLANDS_LIGHT_THEME_NAME}
+                        options={{
+                          readOnly: true,
+                          automaticLayout: true,
+                          minimap: { enabled: false },
+                          lineNumbers: 'on',
+                          wordWrap: 'on',
+                          renderWhitespace: 'selection',
+                          scrollBeyondLastLine: false,
+                          contextmenu: false,
+                          fontSize: 12
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <Text type="secondary" className="app-right-empty-tip">
+                      点击文件树中的文件即可预览内容
+                    </Text>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="app-right-terminal-panel">
+              <div ref={terminalContainerRef} className="app-right-terminal-canvas" />
+            </div>
+          )}
+        </div>
+      ) : null}
     </aside>
   )
 }

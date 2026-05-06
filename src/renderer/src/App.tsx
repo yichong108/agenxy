@@ -138,6 +138,7 @@ export function App() {
   const RIGHT_PANE_MIN_WIDTH = 420
   const RIGHT_PANE_MAX_WIDTH = 860
   const RIGHT_PANE_DEFAULT_WIDTH = 560
+  const RIGHT_PANE_COLLAPSED_WIDTH = 56
   const { message: msgApi, modal: modalApi } = AntdApp.useApp()
   const preloadOk = typeof window !== 'undefined' && typeof window.bridge !== 'undefined'
   const bridge = window.bridge
@@ -302,8 +303,10 @@ export function App() {
   const sidebarResizeStartRef = useRef<{ startX: number; startWidth: number } | null>(null)
   const sidebarExpandedWidthRef = useRef(SIDEBAR_DEFAULT_WIDTH)
   const [rightPaneWidth, setRightPaneWidth] = useState(RIGHT_PANE_DEFAULT_WIDTH)
+  const [isRightPaneCollapsed, setIsRightPaneCollapsed] = useState(false)
   const [isRightPaneResizing, setIsRightPaneResizing] = useState(false)
   const rightPaneResizeStartRef = useRef<{ startX: number; startWidth: number } | null>(null)
+  const rightPaneExpandedWidthRef = useRef(RIGHT_PANE_DEFAULT_WIDTH)
 
   const mcpWarmupSummary = useMemo(() => {
     if (!mcpWarmup) return null
@@ -1208,6 +1211,7 @@ export function App() {
 
   const handleRightPaneResizeStart = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
+      if (isRightPaneCollapsed) return
       if (event.button !== 0) return
       event.preventDefault()
       rightPaneResizeStartRef.current = {
@@ -1216,8 +1220,19 @@ export function App() {
       }
       setIsRightPaneResizing(true)
     },
-    [rightPaneWidth]
+    [isRightPaneCollapsed, rightPaneWidth]
   )
+
+  const handleRightPaneCollapseToggle = useCallback(() => {
+    setIsRightPaneCollapsed((prev) => {
+      if (prev) {
+        setRightPaneWidth(rightPaneExpandedWidthRef.current)
+        return false
+      }
+      rightPaneExpandedWidthRef.current = rightPaneWidth
+      return true
+    })
+  }, [rightPaneWidth])
 
   useEffect(() => {
     if (!isRightPaneResizing) return
@@ -1235,6 +1250,7 @@ export function App() {
         Math.max(RIGHT_PANE_MIN_WIDTH, dragState.startWidth - delta)
       )
       setRightPaneWidth(nextWidth)
+      rightPaneExpandedWidthRef.current = nextWidth
     }
 
     const handleMouseUp = () => {
@@ -1629,18 +1645,22 @@ export function App() {
             </div>
           </div>
         </div>
-        <div
-          className={`app-right-resizer ${isRightPaneResizing ? 'is-dragging' : ''}`}
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="调整右侧栏宽度"
-          onMouseDown={handleRightPaneResizeStart}
-        />
+        {!isRightPaneCollapsed ? (
+          <div
+            className={`app-right-resizer ${isRightPaneResizing ? 'is-dragging' : ''}`}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="调整右侧栏宽度"
+            onMouseDown={handleRightPaneResizeStart}
+          />
+        ) : null}
         <WorkspaceRightPane
           bridge={bridge}
           activeWorkspaceId={activeWorkspaceId}
           activeWorkspacePath={workspaces.find((x) => x.id === activeWorkspaceId)?.path ?? null}
-          width={rightPaneWidth}
+          width={isRightPaneCollapsed ? RIGHT_PANE_COLLAPSED_WIDTH : rightPaneWidth}
+          isCollapsed={isRightPaneCollapsed}
+          onToggleCollapse={handleRightPaneCollapseToggle}
         />
       </div>
 

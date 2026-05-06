@@ -8,6 +8,11 @@
   background: #fafafa;
 }
 
+.app-right-pane.is-collapsed {
+  min-width: 0;
+  max-width: 56px;
+}
+
 .app-right-toolbar {
   height: 52px;
   display: flex;
@@ -31,6 +36,14 @@
 .app-right-toolbar-btn.ant-btn.is-active:hover {
   background: rgba(0, 0, 0, 0.06);
   color: var(--aw-color-text-primary);
+}
+
+.app-right-toolbar-spacer {
+  flex: 1;
+}
+
+.app-right-toolbar-toggle.ant-btn {
+  margin-left: auto;
 }
 
 .app-right-content {
