@@ -39,6 +39,8 @@ type WorkspaceLeftPaneProps = {
   activeWorkspaceId: string | null
   activeSessionId: string | null
   workspaces: WorkspaceInfo[]
+  /** 工作区树为空时的说明（由上层区分「无任何工作区」与「仅 Home 且无会话」等） */
+  workspaceTreeEmptyMessage: string
   sessionsByWorkspace: Record<string, SessionInfo[]>
   expandedWorkspaceIds: Set<string>
   draggingWorkspaceId: string | null
@@ -105,6 +107,7 @@ export function WorkspaceLeftPane({
   activeWorkspaceId,
   activeSessionId,
   workspaces,
+  workspaceTreeEmptyMessage,
   sessionsByWorkspace,
   expandedWorkspaceIds,
   draggingWorkspaceId,
@@ -217,9 +220,7 @@ export function WorkspaceLeftPane({
             <div className="app-workspace-tree">
               {workspaces.length === 0 ? (
                 <div className="app-workspace-tree-empty" role="status">
-                  <Text type="secondary">
-                    暂无工作区。请点击下方「添加并切换工作区」选择项目文件夹。
-                  </Text>
+                  <Text type="secondary">{workspaceTreeEmptyMessage}</Text>
                 </div>
               ) : (
                 workspaces.map((workspace) => {

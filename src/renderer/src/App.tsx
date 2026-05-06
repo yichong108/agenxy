@@ -18,6 +18,7 @@ import {
 } from 'antd'
 import { findAndReplace } from 'mdast-util-find-and-replace'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import ReactMarkdown from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
 import remarkGfm from 'remark-gfm'
@@ -188,6 +189,42 @@ export function App() {
     }
     return out
   }, [sessionsByWorkspace, byWorkspaceUi])
+
+  /** 侧栏不鼓励使用 Home：仅当 Home 存在可见会话时才列出该项 */
+  const workspacesForSidebar = useMemo(() => {
+    const homeHasSessions =
+      (sessionsByWorkspaceForSidebar[HOME_WORKSPACE_ID] ?? []).length > 0
+    if (homeHasSessions) return workspaces
+    return workspaces.filter((w) => w.id !== HOME_WORKSPACE_ID)
+  }, [workspaces, sessionsByWorkspaceForSidebar])
+
+  const workspaceTreeEmptyMessage = useMemo(() => {
+    if (workspacesForSidebar.length > 0) return ''
+    if (workspaces.length === 0) {
+      return '暂无工作区。请点击下方「添加并切换工作区」选择项目文件夹。'
+    }
+    return '请添加项目文件夹作为工作区；用户目录（Home）仅在已有会话记录时显示在侧栏。'
+  }, [workspaces.length, workspacesForSidebar.length])
+
+  /** 顶栏工作区下拉始终含 Home；侧栏移除 Home 后主进程同步列表可能不含该项 */
+  const workspacesWithComposerHomeStub = useMemo(() => {
+    if (workspaces.some((w) => w.id === HOME_WORKSPACE_ID)) return workspaces
+    const stub: WorkspaceInfo = {
+      id: HOME_WORKSPACE_ID,
+      name: 'Home',
+      path: null,
+      createdAt: 0,
+      updatedAt: 0
+    }
+    return [stub, ...workspaces]
+  }, [workspaces])
+
+  /** 顶栏当前工作区：与主进程一致；仅 null 时视为 Home（避免列表尚未合并时误当作无效选中） */
+  const composerSelectedWorkspaceId = useMemo(
+    () => activeWorkspaceId ?? HOME_WORKSPACE_ID,
+    [activeWorkspaceId]
+  )
+
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [mcpOpen, setMcpOpen] = useState(false)
   const [mcpDraft, setMcpDraft] = useState<McpServerEntry[]>([])
@@ -219,6 +256,8 @@ export function App() {
   const profilesDraftRef =
     useRef<Record<ModelProviderId, ProviderProfile>>(defaultProviderProfiles())
   const settingsProviderRef = useRef<ModelProviderId>('deepseek')
+  /** 避免首屏 load 完成前把「无选中」误判为需要强制回到 Home */
+  const didInitialWorkspaceLoadRef = useRef(false)
   const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState<Set<string>>(new Set())
   const [draggingWorkspaceId, setDraggingWorkspaceId] = useState<string | null>(null)
   const [workspaceDropMarker, setWorkspaceDropMarker] = useState<WorkspaceDropMarker | null>(null)
@@ -400,9 +439,11 @@ export function App() {
     if (supportsMultiWorkspaceApi) {
       const workspacePayload = await bridgeCompat.listWorkspaces!()
       const workspaceList = workspacePayload.list
-      setWorkspaces(workspaceList)
+      flushSync(() => {
+        setWorkspaces(workspaceList)
+        setExpandedWorkspaceIds(new Set(workspaceList.map((workspace) => workspace.id)))
+      })
       setActiveWorkspaceId(workspacePayload.activeWorkspaceId)
-      setExpandedWorkspaceIds(new Set(workspaceList.map((workspace) => workspace.id)))
 
       const sessionsMap: Record<string, SessionInfo[]> = {}
       const listByWorkspace = bridgeCompat.listSessionsByWorkspace
@@ -436,6 +477,7 @@ export function App() {
       if (nextActiveId) {
         await ensureSessionMessages(nextActiveId, true)
       }
+      didInitialWorkspaceLoadRef.current = true
       return
     }
 
@@ -467,6 +509,7 @@ export function App() {
     if (nextActiveId) {
       await ensureSessionMessages(nextActiveId, true)
     }
+    didInitialWorkspaceLoadRef.current = true
   }, [
     bridge,
     bridgeCompat,
@@ -621,9 +664,11 @@ export function App() {
     const unSub = [
       supportsMultiWorkspaceApi
         ? bridgeCompat.onWorkspacesSync!((payload) => {
-            setWorkspaces(payload.list)
+            flushSync(() => {
+              setWorkspaces(payload.list)
+              setExpandedWorkspaceIds(new Set(payload.list.map((workspace) => workspace.id)))
+            })
             setActiveWorkspaceId(payload.activeWorkspaceId)
-            setExpandedWorkspaceIds(new Set(payload.list.map((workspace) => workspace.id)))
             const listByWorkspace = bridgeCompat.listSessionsByWorkspace
             if (!listByWorkspace) return
             void Promise.all(
@@ -714,14 +759,14 @@ export function App() {
 
   const switchComposerWorkspace = useCallback(
     async (workspaceId: string) => {
-      if (!workspaceId || workspaceId === activeWorkspaceId) return
-      if (!supportsMultiWorkspaceApi) return
+      if (!workspaceId || workspaceId === composerSelectedWorkspaceId) return
+      if (!supportsMultiWorkspaceApi && workspaceId !== HOME_WORKSPACE_ID) return
       const workspace = await bridge.activateWorkspace(workspaceId)
       if (!workspace) {
         msgApi.error('切换工作区失败')
       }
     },
-    [activeWorkspaceId, bridge, msgApi, supportsMultiWorkspaceApi]
+    [bridge, composerSelectedWorkspaceId, msgApi, supportsMultiWorkspaceApi]
   )
 
   const handleComposerWorkspaceMenuClick = useCallback<NonNullable<MenuProps['onClick']>>(
@@ -736,7 +781,7 @@ export function App() {
   )
 
   const composerWorkspaceMenuItems = useMemo<MenuProps['items']>(() => {
-    const ordered = [...workspaces].sort((a, b) => {
+    const ordered = [...workspacesWithComposerHomeStub].sort((a, b) => {
       if (a.id === HOME_WORKSPACE_ID) return -1
       if (b.id === HOME_WORKSPACE_ID) return 1
       return 0
@@ -744,7 +789,7 @@ export function App() {
     const rows: MenuProps['items'] = ordered.map((w) => ({
       key: w.id,
       label: w.id === HOME_WORKSPACE_ID ? 'Home' : w.name,
-      disabled: w.id === activeWorkspaceId
+      disabled: w.id === composerSelectedWorkspaceId
     }))
     return [
       ...(rows ?? []),
@@ -755,13 +800,15 @@ export function App() {
         icon: <FolderOpenOutlined />
       }
     ]
-  }, [workspaces, activeWorkspaceId, supportsMultiWorkspaceApi])
+  }, [composerSelectedWorkspaceId, supportsMultiWorkspaceApi, workspacesWithComposerHomeStub])
 
   // 发送当前输入消息，并立即在本地追加用户消息（尚无会话时先创建再发送）
   const send = async () => {
     const t = input.trim()
     if (!t) return
-    const activeWorkspace = workspaces.find((x) => x.id === activeWorkspaceId)
+    const activeWorkspace = workspacesWithComposerHomeStub.find(
+      (x) => x.id === composerSelectedWorkspaceId
+    )
     if (!activeWorkspace?.path) {
       msgApi.warning('请先为当前工作区绑定路径')
       return
@@ -1168,9 +1215,15 @@ export function App() {
   const showSendButton = !isRun || hasInput
   const showStopButton = Boolean(activeId && isRun && !hasInput)
   const activeWorkspace = useMemo(
-    () => workspaces.find((w) => w.id === activeWorkspaceId),
-    [workspaces, activeWorkspaceId]
+    () => workspacesWithComposerHomeStub.find((w) => w.id === composerSelectedWorkspaceId),
+    [composerSelectedWorkspaceId, workspacesWithComposerHomeStub]
   )
+
+  useEffect(() => {
+    if (!preloadOk || !supportsMultiWorkspaceApi || !didInitialWorkspaceLoadRef.current) return
+    if (activeWorkspaceId != null) return
+    void bridge.activateWorkspace(HOME_WORKSPACE_ID)
+  }, [activeWorkspaceId, bridge, preloadOk, supportsMultiWorkspaceApi])
   const isEmptyConversation = currentMessages.length === 0
   const openExternalWithConfirm = useCallback(
     (href: string) => {
@@ -1231,13 +1284,12 @@ export function App() {
   }, [currentMessages, currentTimeline, scrollMessagesToBottom])
 
   useEffect(() => {
-    if (!activeWorkspaceId) return
     setExpandedWorkspaceIds((prev) => {
       const next = new Set(prev)
-      next.add(activeWorkspaceId)
+      next.add(composerSelectedWorkspaceId)
       return next
     })
-  }, [activeWorkspaceId])
+  }, [composerSelectedWorkspaceId])
 
   const handleWorkspaceToggle = useCallback((workspaceId: string) => {
     setExpandedWorkspaceIds((prev) => {
@@ -1389,10 +1441,10 @@ export function App() {
   const openBlankConversationInWorkspace = useCallback(
     async (workspaceId: string) => {
       if (!workspaceId) return
-      const ws = workspaces.find((w) => w.id === workspaceId)
+      const ws = workspacesWithComposerHomeStub.find((w) => w.id === workspaceId)
       let resolvedId = workspaceId
       if (!ws?.path) {
-        const hasHome = workspaces.some((w) => w.id === HOME_WORKSPACE_ID)
+        const hasHome = workspacesWithComposerHomeStub.some((w) => w.id === HOME_WORKSPACE_ID)
         if (!hasHome) {
           msgApi.warning('请先添加工作区')
           return
@@ -1421,17 +1473,18 @@ export function App() {
       setActiveId,
       setInput,
       supportsMultiWorkspaceApi,
-      workspaces
+      workspacesWithComposerHomeStub
     ]
   )
 
   const openBlankConversationForActiveWorkspace = useCallback(() => {
     void (async () => {
-      const ws = activeWorkspaceId ? workspaces.find((w) => w.id === activeWorkspaceId) : null
+      const cid = composerSelectedWorkspaceId
+      const ws = workspacesWithComposerHomeStub.find((w) => w.id === cid)
       const targetId =
-        activeWorkspaceId && ws?.path
-          ? activeWorkspaceId
-          : workspaces.some((w) => w.id === HOME_WORKSPACE_ID)
+        ws?.path && cid !== HOME_WORKSPACE_ID
+          ? cid
+          : workspacesWithComposerHomeStub.some((w) => w.id === HOME_WORKSPACE_ID)
             ? HOME_WORKSPACE_ID
             : null
       if (!targetId) {
@@ -1440,7 +1493,12 @@ export function App() {
       }
       await openBlankConversationInWorkspace(targetId)
     })()
-  }, [activeWorkspaceId, msgApi, openBlankConversationInWorkspace, workspaces])
+  }, [
+    composerSelectedWorkspaceId,
+    msgApi,
+    openBlankConversationInWorkspace,
+    workspacesWithComposerHomeStub
+  ])
 
   const handleSessionRenameRequest = useCallback((session: SessionInfo) => {
     setRenameId(session.id)
@@ -1462,16 +1520,15 @@ export function App() {
 
   const handleRemoveWorkspaceFromSidebar = useCallback(
     (workspace: WorkspaceInfo) => {
-      if (workspace.id === HOME_WORKSPACE_ID) {
-        msgApi.warning('Home（用户目录）工作区无法从侧栏移除')
-        return
-      }
       const isDefault = Boolean(workspace.isDefault)
+      const isHome = workspace.id === HOME_WORKSPACE_ID
       modalApi.confirm({
         title: '从侧边栏移除此工作区？',
-        content: isDefault
-          ? '默认工作区下的全部会话将从本机永久删除，不会并入其他工作区。移除后侧栏可为空，可通过下方按钮重新添加工作区。'
-          : '该工作区下的全部会话将从本机永久删除，不会并入其他工作区。之后可通过「添加并切换工作区」重新选择该文件夹。',
+        content: isHome
+          ? 'Home（用户目录）工作区下的全部会话将从本机永久删除，不会并入其他工作区。移除后不会再自动显示 Home；若需该路径仍可通过「添加并切换工作区」选择用户目录。'
+          : isDefault
+            ? '默认工作区下的全部会话将从本机永久删除，不会并入其他工作区。移除后侧栏可为空，可通过下方按钮重新添加工作区。'
+            : '该工作区下的全部会话将从本机永久删除，不会并入其他工作区。之后可通过「添加并切换工作区」重新选择该文件夹。',
         centered: true,
         okText: '移除',
         okButtonProps: { danger: true },
@@ -1661,7 +1718,8 @@ export function App() {
           isSidebarResizing={isSidebarResizing}
           activeWorkspaceId={activeWorkspaceId}
           activeSessionId={activeId}
-          workspaces={workspaces}
+          workspaces={workspacesForSidebar}
+          workspaceTreeEmptyMessage={workspaceTreeEmptyMessage}
           sessionsByWorkspace={sessionsByWorkspaceForSidebar}
           expandedWorkspaceIds={expandedWorkspaceIds}
           draggingWorkspaceId={draggingWorkspaceId}
@@ -1755,8 +1813,9 @@ export function App() {
               <Space>
                 <Text type="secondary">会话</Text>
                 <Text>
-                  {(sessionsByWorkspace[activeWorkspaceId ?? ''] ?? []).find((s) => s.id === activeId)
-                    ?.name}
+                  {(sessionsByWorkspace[composerSelectedWorkspaceId] ?? []).find(
+                    (s) => s.id === activeId
+                  )?.name}
                 </Text>
                 {isRun && <Tag color="processing">执行中</Tag>}
                 {isQueued && isQueued > 0 && <Tag color="warning">排队 #{isQueued}</Tag>}
@@ -1873,8 +1932,11 @@ export function App() {
         ) : null}
         <WorkspaceRightPane
           bridge={bridge}
-          activeWorkspaceId={activeWorkspaceId}
-          activeWorkspacePath={workspaces.find((x) => x.id === activeWorkspaceId)?.path ?? null}
+          activeWorkspaceId={composerSelectedWorkspaceId}
+          activeWorkspacePath={
+            workspacesWithComposerHomeStub.find((x) => x.id === composerSelectedWorkspaceId)?.path ??
+            null
+          }
           width={isRightPaneCollapsed ? RIGHT_PANE_COLLAPSED_WIDTH : rightPaneWidth}
           isCollapsed={isRightPaneCollapsed}
           onToggleCollapse={handleRightPaneCollapseToggle}

@@ -26,6 +26,7 @@ import {
 import { installSkillFromMarketItem } from '@/main/skills-market/install'
 import {
   ensureHomeWorkspaceInList,
+  restoreHomeWorkspaceInList,
   getActiveWorkspace,
   getActiveWorkspaceId,
   getSettings,
@@ -337,6 +338,9 @@ function registerIpc(): void {
     return workspace
   })
   ipcMain.handle(IPC.WORKSPACE_ACTIVATE, (_e, workspaceId: string) => {
+    if (workspaceId === HOME_WORKSPACE_ID) {
+      restoreHomeWorkspaceInList()
+    }
     const next = setActiveWorkspace(workspaceId)
     if (!next) return null
     broadcastWorkspaces()
@@ -407,6 +411,9 @@ function registerIpc(): void {
         workspaceId = home.id
         broadcastWorkspaces()
       }
+    }
+    if (!workspaceId) {
+      return null
     }
     const s = createSession(workspaceId, name)
     broadcastSessions()
