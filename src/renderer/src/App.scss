@@ -187,6 +187,15 @@
   padding: 0 6px 8px;
 }
 
+.app-workspace-tree-empty {
+  padding: 12px 8px 10px;
+  line-height: 1.5;
+}
+
+.app-workspace-tree-empty .ant-typography {
+  font-size: 12px;
+}
+
 .app-workspace-node {
   margin: 0 0 4px;
   border-radius: 10px;

@@ -215,21 +215,28 @@ export function WorkspaceLeftPane({
           )}
           {!isSidebarCollapsed && (
             <div className="app-workspace-tree">
-              {workspaces.map((workspace) => {
-                const isActiveWorkspace = workspace.id === activeWorkspaceId
-                const isExpanded = expandedWorkspaceIds.has(workspace.id)
-                const dropMarkerPlacement =
-                  !!draggingWorkspaceId &&
-                  draggingWorkspaceId !== workspace.id &&
-                  workspaceDropMarker?.workspaceId === workspace.id
-                    ? workspaceDropMarker.placement
-                    : null
-                const workspaceSessions = sessionsByWorkspace[workspace.id] || []
-                return (
-                  <div
-                    key={workspace.id}
-                    className={`app-workspace-node ${isActiveWorkspace ? 'is-active' : ''} ${dropMarkerPlacement === 'before' ? 'is-drop-before' : ''} ${dropMarkerPlacement === 'after' ? 'is-drop-after' : ''}`}
-                  >
+              {workspaces.length === 0 ? (
+                <div className="app-workspace-tree-empty" role="status">
+                  <Text type="secondary">
+                    暂无工作区。请点击下方「添加并切换工作区」选择项目文件夹。
+                  </Text>
+                </div>
+              ) : (
+                workspaces.map((workspace) => {
+                  const isActiveWorkspace = workspace.id === activeWorkspaceId
+                  const isExpanded = expandedWorkspaceIds.has(workspace.id)
+                  const dropMarkerPlacement =
+                    !!draggingWorkspaceId &&
+                    draggingWorkspaceId !== workspace.id &&
+                    workspaceDropMarker?.workspaceId === workspace.id
+                      ? workspaceDropMarker.placement
+                      : null
+                  const workspaceSessions = sessionsByWorkspace[workspace.id] || []
+                  return (
+                    <div
+                      key={workspace.id}
+                      className={`app-workspace-node ${isActiveWorkspace ? 'is-active' : ''} ${dropMarkerPlacement === 'before' ? 'is-drop-before' : ''} ${dropMarkerPlacement === 'after' ? 'is-drop-after' : ''}`}
+                    >
                     <div
                       className="app-workspace-node-header is-draggable"
                       draggable
@@ -332,9 +339,10 @@ export function WorkspaceLeftPane({
                         )}
                       </div>
                     )}
-                  </div>
-                )
-              })}
+                    </div>
+                  )
+                })
+              )}
             </div>
           )}
           {!isSidebarCollapsed && (

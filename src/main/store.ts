@@ -83,7 +83,9 @@ function ensureDefaultWorkspace(list: WorkspaceInfo[]): WorkspaceInfo[] {
 }
 
 function normalizeWorkspaces(input: WorkspaceInfo[]): WorkspaceInfo[] {
-  const list = ensureDefaultWorkspace(input)
+  const raw = Array.isArray(input) ? input : []
+  /** 仅当持久化列表为空时注入虚拟默认工作区；否则尊重用户从侧栏移除默认项后的列表 */
+  const list = raw.length === 0 ? ensureDefaultWorkspace(raw) : raw
   const dedupById = new Map<string, WorkspaceInfo>()
   const dedupByPath = new Map<string, string>()
   for (const item of list) {
@@ -380,9 +382,14 @@ export function upsertWorkspaceByPath(dir: string): WorkspaceInfo {
   if (existed) {
     return existed
   }
+  const listWasEmpty = list.length === 0
   const workspace = createWorkspaceFromPath(normalizedPath)
   const next = [...list, workspace]
   store.set('workspaces', next)
+  if (listWasEmpty && getSessionsMeta(DEFAULT_WORKSPACE_ID).length > 0) {
+    const { removeWorkspaceSessions } = require('@/main/sessions') as typeof import('@/main/sessions')
+    removeWorkspaceSessions(DEFAULT_WORKSPACE_ID, workspace.id)
+  }
   return workspace
 }
 
