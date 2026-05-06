@@ -61,6 +61,14 @@ function clampFileTreeSplitFraction(fraction: number, contentWidth: number): num
   return Math.min(maxF, Math.max(minF, fraction))
 }
 
+/** `clientHeight` 含 padding；虚拟列表高度需为内容区高度，否则会与 padding 叠出多余滚动条。 */
+function readTreeViewportHeight(el: HTMLElement): number {
+  const style = getComputedStyle(el)
+  const pt = Number.parseFloat(style.paddingTop) || 0
+  const pb = Number.parseFloat(style.paddingBottom) || 0
+  return Math.max(0, el.clientHeight - pt - pb)
+}
+
 type FileTreeDataNode = {
   id: string
   name: string
@@ -544,7 +552,7 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
   useEffect(() => {
     const container = treeContainerRef.current
     if (!container) return
-    const measure = () => setTreeHeight(container.clientHeight)
+    const measure = () => setTreeHeight(readTreeViewportHeight(container))
     measure()
     const observer = new ResizeObserver(() => {
       measure()

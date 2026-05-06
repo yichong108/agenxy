@@ -59,7 +59,7 @@
   min-width: 160px;
   min-height: 0;
   display: flex;
-  background: #f7f8fa;
+  background: var(--aw-color-bg-layout);
 }
 
 .app-right-file-split-handle {
@@ -84,11 +84,11 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  margin: 8px;
+  margin: 0;
   padding: 8px;
-  border: 1px solid #eceff3;
-  border-radius: 10px;
-  background: #ffffff;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
 .app-right-tree-loading,
@@ -103,6 +103,7 @@
 .app-right-tree {
   height: 100%;
   color: #2f3542;
+  background: transparent;
 }
 
 .app-right-tree-node {
@@ -279,7 +280,7 @@
 
 .app-right-empty-tip {
   display: block;
-  padding: 12px 2px;
+  padding: 12px 8px;
 }
 
 .app-right-tree-wrap::-webkit-scrollbar,
