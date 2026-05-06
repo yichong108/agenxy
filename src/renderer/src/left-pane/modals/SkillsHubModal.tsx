@@ -48,6 +48,7 @@ export function SkillsHubModal({
       onCancel={onClose}
       width={920}
       destroyOnHidden
+      centered
       footer={[
         <Button key="close" onClick={onClose}>
           关闭

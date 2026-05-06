@@ -56,6 +56,10 @@ type WorkspaceLeftPaneProps = {
   onSessionClick: (workspaceId: string, sessionId: string) => void
   onRenameSession: (session: SessionInfo) => void
   onDeleteSession: (session: SessionInfo) => void
+  /** 从左侧列表隐藏会话（不删除数据） */
+  onRemoveSessionFromSidebar?: (workspaceId: string, session: SessionInfo) => void
+  /** 多工作区模式下：从侧边栏移除非默认工作区（会话保留并合并到默认工作区） */
+  onRemoveWorkspaceFromSidebar?: (workspace: WorkspaceInfo) => void
   onPickWorkspace: () => void
   onSidebarResizeStart: (event: MouseEvent<HTMLDivElement>) => void
   onSidebarCollapseToggle: () => void
@@ -118,6 +122,8 @@ export function WorkspaceLeftPane({
   onSessionClick,
   onRenameSession,
   onDeleteSession,
+  onRemoveSessionFromSidebar,
+  onRemoveWorkspaceFromSidebar,
   onPickWorkspace,
   onSidebarResizeStart,
   onSidebarCollapseToggle,
@@ -246,9 +252,28 @@ export function WorkspaceLeftPane({
                           aria-hidden="true"
                         />
                       </button>
-                      <span className="app-workspace-name-btn">
-                        <Text className="app-workspace-name">{workspace.name}</Text>
-                      </span>
+                      {onRemoveWorkspaceFromSidebar && !workspace.isDefault ? (
+                        <Dropdown
+                          menu={{
+                            items: [
+                              {
+                                key: 'remove-from-sidebar',
+                                label: '从侧边栏移除',
+                                onClick: () => onRemoveWorkspaceFromSidebar(workspace)
+                              }
+                            ]
+                          }}
+                          trigger={['contextMenu']}
+                        >
+                          <span className="app-workspace-name-btn" role="presentation">
+                            <Text className="app-workspace-name">{workspace.name}</Text>
+                          </span>
+                        </Dropdown>
+                      ) : (
+                        <span className="app-workspace-name-btn">
+                          <Text className="app-workspace-name">{workspace.name}</Text>
+                        </span>
+                      )}
                       <button
                         type="button"
                         className="app-workspace-add-session-btn"
@@ -274,6 +299,16 @@ export function WorkspaceLeftPane({
                                   label: '重命名',
                                   onClick: () => onRenameSession(session)
                                 },
+                                ...(onRemoveSessionFromSidebar
+                                  ? [
+                                      {
+                                        key: 'remove-from-sidebar',
+                                        label: '从侧边栏移除',
+                                        onClick: () =>
+                                          onRemoveSessionFromSidebar(workspace.id, session)
+                                      }
+                                    ]
+                                  : []),
                                 {
                                   key: 'del',
                                   danger: true,

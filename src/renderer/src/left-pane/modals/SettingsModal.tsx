@@ -28,6 +28,7 @@ export function SettingsModal({
       onCancel={onCancel}
       width={520}
       destroyOnHidden
+      centered
     >
       <Form form={form} layout="vertical" initialValues={defaultFormValues}>
         <Form.Item name="provider" label="提供方" rules={[{ required: true }]}>

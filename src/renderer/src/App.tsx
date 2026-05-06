@@ -25,6 +25,14 @@ import 'highlight.js/styles/github.css'
 import { WorkspaceLeftPane } from '@/renderer/src/left-pane'
 import { WorkspaceRightPane } from '@/renderer/src/right-pane/WorkspaceRightPane'
 import { useUiStore } from '@/renderer/src/store/ui-store'
+
+function filterSessionsForSidebar(
+  list: SessionInfo[] | undefined,
+  hiddenIds: string[] | undefined
+): SessionInfo[] {
+  const hidden = new Set(hiddenIds ?? [])
+  return (list ?? []).filter((s) => !hidden.has(s.id))
+}
 import {
   applySettingsForm,
   defaultProviderProfiles,
@@ -46,7 +54,9 @@ import {
   type SkillsRuntimeState,
   type StreamEvent,
   type ToolTimelineEvent,
-  type WorkspaceInfo
+  defaultWorkspaceUiState,
+  type WorkspaceInfo,
+  type WorkspaceUiState
 } from '@/shared/ipc'
 
 import '@/renderer/src/App.scss'
@@ -168,6 +178,14 @@ export function App() {
   const input = useUiStore((s) => s.inputDraft)
   const setInput = useUiStore((s) => s.setInputDraft)
   const hydrateUiStore = useUiStore((s) => s.hydrateFromMain)
+  const byWorkspaceUi = useUiStore((s) => s.byWorkspace)
+  const sessionsByWorkspaceForSidebar = useMemo(() => {
+    const out: Record<string, SessionInfo[]> = {}
+    for (const [wid, list] of Object.entries(sessionsByWorkspace)) {
+      out[wid] = filterSessionsForSidebar(list, byWorkspaceUi[wid]?.sidebarHiddenSessionIds)
+    }
+    return out
+  }, [sessionsByWorkspace, byWorkspaceUi])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [mcpOpen, setMcpOpen] = useState(false)
   const [mcpDraft, setMcpDraft] = useState<McpServerEntry[]>([])
@@ -401,7 +419,11 @@ export function App() {
         sessionsMap[activeId ?? ''] = await bridge.listSessions()
       }
       setSessionsByWorkspace(sessionsMap)
-      const activeList = sessionsMap[workspacePayload.activeWorkspaceId ?? ''] ?? []
+      const activeWsId = workspacePayload.activeWorkspaceId ?? ''
+      const hidden =
+        useUiStore.getState().byWorkspace[activeWsId]?.sidebarHiddenSessionIds ?? []
+      const activeListRaw = sessionsMap[activeWsId] ?? []
+      const activeList = filterSessionsForSidebar(activeListRaw, hidden)
       setSessions(activeList)
       const currentActiveId = useUiStore.getState().activeSessionId
       const nextActiveId =
@@ -430,12 +452,15 @@ export function App() {
     setActiveWorkspaceId(legacyWorkspace.id)
     setExpandedWorkspaceIds(new Set([legacyWorkspace.id]))
     setSessionsByWorkspace({ [legacyWorkspace.id]: legacySessions })
-    setSessions(legacySessions)
+    const legacyHidden =
+      useUiStore.getState().byWorkspace[legacyWorkspace.id]?.sidebarHiddenSessionIds ?? []
+    const legacyVisible = filterSessionsForSidebar(legacySessions, legacyHidden)
+    setSessions(legacyVisible)
     const currentActiveId = useUiStore.getState().activeSessionId
     const nextActiveId =
-      currentActiveId && legacySessions.some((x) => x.id === currentActiveId)
+      currentActiveId && legacyVisible.some((x) => x.id === currentActiveId)
         ? currentActiveId
-        : (legacySessions[0]?.id ?? null)
+        : (legacyVisible[0]?.id ?? null)
     setActiveId(nextActiveId)
     if (nextActiveId) {
       await ensureSessionMessages(nextActiveId, true)
@@ -633,8 +658,12 @@ export function App() {
         form.setFieldsValue(settingsToFormValues(s))
       }),
       bridge.onSessionsSync((list) => {
-        setSessions(list)
         const workspaceId = useUiStore.getState().activeWorkspaceId
+        const hidden = workspaceId
+          ? (useUiStore.getState().byWorkspace[workspaceId]?.sidebarHiddenSessionIds ?? [])
+          : []
+        const visible = filterSessionsForSidebar(list, hidden)
+        setSessions(visible)
         if (workspaceId) {
           setSessionsByWorkspace((prev) => ({ ...prev, [workspaceId]: list }))
         }
@@ -643,8 +672,8 @@ export function App() {
           if (!validIds.has(id)) hydratedMessageSessions.current.delete(id)
         }
         const currentActiveId = useUiStore.getState().activeSessionId
-        if (currentActiveId && list.some((x) => x.id === currentActiveId)) return
-        setActiveId(list[0]?.id ?? null)
+        if (currentActiveId && visible.some((x) => x.id === currentActiveId)) return
+        setActiveId(visible[0]?.id ?? null)
       }),
       bridge.onStream(handleStream),
       bridge.onMcpWarmup((r) => {
@@ -801,6 +830,7 @@ export function App() {
         modalApi.confirm({
           title: '卸载市场技能？',
           content: `将删除目录「market/${folderId}」及其中的文件。`,
+          centered: true,
           okButtonProps: { danger: true },
           onOk: async () => {
             const r = await bridge.uninstallSkill({ kind: 'market', folderId })
@@ -823,6 +853,7 @@ export function App() {
         modalApi.confirm({
           title: '卸载兼容技能目录？',
           content: `将删除「skills/${rel}」。`,
+          centered: true,
           okButtonProps: { danger: true },
           onOk: async () => {
             const r = await bridge.uninstallSkill({ kind: 'legacy', legacyFolderRelative: rel })
@@ -985,6 +1016,7 @@ export function App() {
           modalApi.info({
             title: `「${row.name}」连接成功`,
             width: 600,
+            centered: true,
             content: (
               <div>
                 <Text>共 {r.tools.length} 个工具：</Text>
@@ -1085,6 +1117,7 @@ export function App() {
       modalApi.confirm({
         title: '即将打开外部链接',
         content: `目标地址：${target}`,
+        centered: true,
         okText: '继续打开',
         cancelText: '取消',
         onOk: async () => {
@@ -1326,12 +1359,61 @@ export function App() {
     (session: SessionInfo) => {
       modalApi.confirm({
         title: '删除此会话？',
+        centered: true,
         onOk: () => {
           void bridge.deleteSession(session.id).then(() => msgApi.success('已删除'))
         }
       })
     },
     [bridge, modalApi, msgApi]
+  )
+
+  const handleRemoveWorkspaceFromSidebar = useCallback(
+    (workspace: WorkspaceInfo) => {
+      if (workspace.isDefault) return
+      modalApi.confirm({
+        title: '从侧边栏移除此工作区？',
+        content: '该工作区下的会话将保留并合并到默认工作区，之后可通过「添加并切换工作区」重新加入。',
+        centered: true,
+        okText: '移除',
+        okButtonProps: { danger: true },
+        cancelText: '取消',
+        onOk: async () => {
+          const { ok } = await bridge.removeWorkspace(workspace.id)
+          if (ok) {
+            msgApi.success('已从侧边栏移除')
+          } else {
+            msgApi.error('移除失败（默认工作区不可移除）')
+          }
+        }
+      })
+    },
+    [bridge, modalApi, msgApi]
+  )
+
+  const handleRemoveSessionFromSidebar = useCallback(
+    (workspaceId: string, session: SessionInfo) => {
+      const { byWorkspace, activeSessionId } = useUiStore.getState()
+      const prev: WorkspaceUiState = byWorkspace[workspaceId] ?? { ...defaultWorkspaceUiState }
+      const prevHidden = prev.sidebarHiddenSessionIds ?? []
+      if (prevHidden.includes(session.id)) return
+      const sidebarHiddenSessionIds = [...prevHidden, session.id]
+      const nextWs: WorkspaceUiState = { ...prev, sidebarHiddenSessionIds }
+      const nextByWorkspace = { ...byWorkspace, [workspaceId]: nextWs }
+      useUiStore.setState({ byWorkspace: nextByWorkspace })
+      void window.bridge.setUiState({ byWorkspace: { [workspaceId]: nextWs } })
+
+      const list = sessionsByWorkspace[workspaceId] ?? []
+      const hiddenSet = new Set(sidebarHiddenSessionIds)
+      const visible = list.filter((s) => !hiddenSet.has(s.id))
+      if (activeSessionId === session.id) {
+        const nextId = visible[0]?.id ?? null
+        setActiveId(nextId)
+        if (nextId) void ensureSessionMessages(nextId, true)
+      }
+      msgApi.success('已从侧边栏移除')
+    },
+    [ensureSessionMessages, msgApi, sessionsByWorkspace, setActiveId]
   )
 
   const handleWorkspaceDragStart = useCallback(
@@ -1425,7 +1507,7 @@ export function App() {
           activeWorkspaceId={activeWorkspaceId}
           activeSessionId={activeId}
           workspaces={workspaces}
-          sessionsByWorkspace={sessionsByWorkspace}
+          sessionsByWorkspace={sessionsByWorkspaceForSidebar}
           expandedWorkspaceIds={expandedWorkspaceIds}
           draggingWorkspaceId={draggingWorkspaceId}
           workspaceDropMarker={workspaceDropMarker}
@@ -1448,6 +1530,10 @@ export function App() {
           }}
           onRenameSession={handleSessionRenameRequest}
           onDeleteSession={handleSessionDeleteRequest}
+          onRemoveSessionFromSidebar={handleRemoveSessionFromSidebar}
+          onRemoveWorkspaceFromSidebar={
+            supportsMultiWorkspaceApi ? handleRemoveWorkspaceFromSidebar : undefined
+          }
           onPickWorkspace={() => {
             void pickWorkspace()
           }}
@@ -1513,7 +1599,10 @@ export function App() {
             {activeId && (
               <Space>
                 <Text type="secondary">会话</Text>
-                <Text>{sessions.find((s) => s.id === activeId)?.name}</Text>
+                <Text>
+                  {(sessionsByWorkspace[activeWorkspaceId ?? ''] ?? []).find((s) => s.id === activeId)
+                    ?.name}
+                </Text>
                 {isRun && <Tag color="processing">执行中</Tag>}
                 {isQueued && isQueued > 0 && <Tag color="warning">排队 #{isQueued}</Tag>}
                 {currentRunStats && (
@@ -1678,6 +1767,7 @@ export function App() {
         okText="写入列表"
         destroyOnHidden
         width={520}
+        centered
       >
         {mcpEditorRecord ? (
           <Form
@@ -1754,6 +1844,7 @@ export function App() {
         onCancel={() => setRenameId(null)}
         okText="保存"
         destroyOnHidden
+        centered
       >
         <Input
           value={renameName}

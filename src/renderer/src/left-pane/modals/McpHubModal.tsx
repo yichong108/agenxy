@@ -94,6 +94,7 @@ export function McpHubModal({
       onCancel={onClose}
       width={760}
       destroyOnHidden
+      centered
       footer={[
         <Button key="close" onClick={onClose}>
           关闭

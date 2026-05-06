@@ -405,11 +405,14 @@ export const defaultRendererUiState: RendererUiState = {
 export type WorkspaceUiState = {
   activeSessionId: string | null
   inputDraft: string
+  /** 仍存在于主进程，但不在左侧会话列表中展示 */
+  sidebarHiddenSessionIds?: string[]
 }
 
 export const defaultWorkspaceUiState: WorkspaceUiState = {
   activeSessionId: null,
-  inputDraft: ''
+  inputDraft: '',
+  sidebarHiddenSessionIds: []
 }
 
 export type WorkspaceInfo = {

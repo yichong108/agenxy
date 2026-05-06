@@ -279,9 +279,14 @@ function normalizeUiState(input: Partial<RendererUiState>): RendererUiState {
   const byWorkspaceRaw = input.byWorkspace || {}
   const byWorkspace: Record<string, WorkspaceUiState> = {}
   for (const [workspaceId, value] of Object.entries(byWorkspaceRaw)) {
+    const hiddenRaw = value?.sidebarHiddenSessionIds
+    const sidebarHiddenSessionIds = Array.isArray(hiddenRaw)
+      ? hiddenRaw.filter((x): x is string => typeof x === 'string')
+      : []
     byWorkspace[workspaceId] = {
       activeSessionId: value?.activeSessionId ?? null,
-      inputDraft: value?.inputDraft ?? ''
+      inputDraft: value?.inputDraft ?? '',
+      sidebarHiddenSessionIds
     }
   }
   return {
@@ -323,7 +328,9 @@ export function setWorkspaceUiState(
       ...current.byWorkspace,
       [workspaceId]: {
         activeSessionId: patch.activeSessionId ?? prev.activeSessionId,
-        inputDraft: patch.inputDraft ?? prev.inputDraft
+        inputDraft: patch.inputDraft ?? prev.inputDraft,
+        sidebarHiddenSessionIds:
+          patch.sidebarHiddenSessionIds ?? prev.sidebarHiddenSessionIds ?? []
       }
     }
   })
