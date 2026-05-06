@@ -9,6 +9,7 @@ import {
   defaultRendererUiState,
   defaultWorkspaceUiState,
   defaultSettings,
+  HOME_WORKSPACE_ID,
   parseMcpServersFromUnknown,
   type AppSettings,
   type McpServerEntry,
@@ -26,6 +27,8 @@ type StoreSchema = {
   activeWorkspaceId: string | null
   /** 已完成工作区初始化；空列表时不自动塞回默认项（区别于首次安装种子） */
   workspaceBootstrapDone?: boolean
+  /** 用户已移除 Home（workspace-home），读取列表时不再自动插入该项 */
+  suppressHomeWorkspaceAutoEnsure?: boolean
   settings: AppSettings
   uiState: RendererUiState
   /** 会话元数据持久化：按 workspaceId 分桶 */
@@ -75,13 +78,6 @@ function createWorkspaceFromPath(workspacePath: string, timestamp = Date.now()):
 
 function normalizeWorkspacePath(dir: string): string {
   return path.resolve(dir).replace(/[\\/]+$/, '')
-}
-
-function ensureDefaultWorkspace(list: WorkspaceInfo[]): WorkspaceInfo[] {
-  if (list.some((item) => item.id === DEFAULT_WORKSPACE_ID)) {
-    return list
-  }
-  return [createDefaultWorkspace(), ...list]
 }
 
 function normalizeWorkspaces(input: WorkspaceInfo[]): WorkspaceInfo[] {
@@ -173,14 +169,22 @@ function migrateFromLegacyIfNeeded(): void {
   }
 
   if (!store.get('workspaceBootstrapDone')) {
-    const defaultWorkspace = createDefaultWorkspace(Date.now())
-    store.set('workspaces', [defaultWorkspace])
-    store.set('activeWorkspaceId', defaultWorkspace.id)
-    store.set('sessionsMetaByWorkspace', { [defaultWorkspace.id]: [] })
+    const now = Date.now()
+    const homePath = normalizeWorkspacePath(app.getPath('home'))
+    const homeWs: WorkspaceInfo = {
+      id: HOME_WORKSPACE_ID,
+      name: 'Home',
+      path: homePath,
+      createdAt: now,
+      updatedAt: now
+    }
+    store.set('workspaces', [homeWs])
+    store.set('activeWorkspaceId', homeWs.id)
+    store.set('sessionsMetaByWorkspace', { [homeWs.id]: [] })
     store.set('uiState', {
-      activeWorkspaceId: defaultWorkspace.id,
+      activeWorkspaceId: homeWs.id,
       byWorkspace: {
-        [defaultWorkspace.id]: {
+        [homeWs.id]: {
           activeSessionId: null,
           inputDraft: ''
         }
@@ -191,6 +195,50 @@ function migrateFromLegacyIfNeeded(): void {
 }
 
 migrateFromLegacyIfNeeded()
+
+/** 保证存在主目录工作区；若已有同路径工作区则合并会话后改为固定 Home ID（除非用户已移除 Home） */
+export function ensureHomeWorkspaceInList(): void {
+  const homePath = normalizeWorkspacePath(app.getPath('home'))
+  let list = normalizeWorkspaces(store.get('workspaces') || [])
+
+  if (list.some((x) => x.id === HOME_WORKSPACE_ID)) {
+    const idx = list.findIndex((x) => x.id === HOME_WORKSPACE_ID)
+    if (idx >= 0 && list[idx]!.path !== homePath) {
+      const next = [...list]
+      next[idx] = { ...next[idx]!, path: homePath, updatedAt: Date.now() }
+      store.set('workspaces', next)
+    }
+    return
+  }
+
+  if (store.get('suppressHomeWorkspaceAutoEnsure')) {
+    return
+  }
+
+  const dup = list.find((x) => x.path === homePath)
+  if (dup && dup.id !== HOME_WORKSPACE_ID) {
+    moveWorkspaceSessionData(dup.id, HOME_WORKSPACE_ID)
+    list = list.filter((x) => x.id !== dup.id)
+  }
+
+  const now = Date.now()
+  const homeWs: WorkspaceInfo = {
+    id: HOME_WORKSPACE_ID,
+    name: 'Home',
+    path: homePath,
+    createdAt: dup?.createdAt ?? now,
+    updatedAt: now
+  }
+  store.set('workspaces', [homeWs, ...list])
+}
+
+ensureHomeWorkspaceInList()
+
+/** 顶栏选择 Home 时：取消移除抑制并写回列表（与 ensureHomeWorkspaceInList 配合） */
+export function restoreHomeWorkspaceInList(): void {
+  store.set('suppressHomeWorkspaceAutoEnsure', false)
+  ensureHomeWorkspaceInList()
+}
 
 type LegacyFlatSettings = {
   apiKey?: string
@@ -373,6 +421,7 @@ export function setWorkspaceUiState(
 }
 
 export function listWorkspaces(): WorkspaceInfo[] {
+  ensureHomeWorkspaceInList()
   return normalizeWorkspaces(store.get('workspaces') || [])
 }
 
@@ -472,20 +521,18 @@ export function removeWorkspace(workspaceId: string): boolean {
   const next = list.filter((x) => x.id !== workspaceId)
   if (next.length === list.length) return false
 
-  const finalList =
-    workspaceId === DEFAULT_WORKSPACE_ID ? next : ensureDefaultWorkspace(next)
+  const finalList = next
   store.set('workspaces', finalList)
+
+  if (workspaceId === HOME_WORKSPACE_ID) {
+    store.set('suppressHomeWorkspaceAutoEnsure', true)
+  }
 
   const active = store.get('activeWorkspaceId')
   if (active === workspaceId || !finalList.some((x) => x.id === active)) {
-    const fallback =
-      workspaceId === DEFAULT_WORKSPACE_ID
-        ? (finalList[0]?.id ?? null)
-        : DEFAULT_WORKSPACE_ID
-    if (fallback && finalList.some((x) => x.id === fallback)) {
+    const fallback = finalList[0]?.id ?? null
+    if (fallback) {
       setActiveWorkspace(fallback)
-    } else if (finalList.length > 0) {
-      setActiveWorkspace(finalList[0]!.id)
     } else {
       store.set('activeWorkspaceId', null)
       setUiState({ activeWorkspaceId: null })

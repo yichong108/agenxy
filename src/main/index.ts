@@ -21,18 +21,19 @@ import {
   deleteSession,
   getSessionWorkspaceId,
   purgeWorkspaceSessions,
-  removeWorkspaceSessions,
   touchSession
 } from '@/main/sessions'
 import { installSkillFromMarketItem } from '@/main/skills-market/install'
 import {
+  ensureHomeWorkspaceInList,
+  restoreHomeWorkspaceInList,
   getActiveWorkspace,
   getActiveWorkspaceId,
-  getDefaultWorkspaceId,
   getSettings,
   getSessionMessages,
   getUiState,
   getWorkspace,
+  getWorkspaceById,
   listWorkspaces,
   reorderWorkspaces,
   removeWorkspace,
@@ -45,6 +46,7 @@ import {
 import { completeCommandInWorkspace, killCommand, runCommand } from '@/main/tools/terminal'
 import { listWorkspaceFileTree, readWorkspaceFileContent } from '@/main/workspace-files'
 import {
+  HOME_WORKSPACE_ID,
   IPC,
   EVENTS,
   type AppSettings,
@@ -336,6 +338,9 @@ function registerIpc(): void {
     return workspace
   })
   ipcMain.handle(IPC.WORKSPACE_ACTIVATE, (_e, workspaceId: string) => {
+    if (workspaceId === HOME_WORKSPACE_ID) {
+      restoreHomeWorkspaceInList()
+    }
     const next = setActiveWorkspace(workspaceId)
     if (!next) return null
     broadcastWorkspaces()
@@ -357,12 +362,7 @@ function registerIpc(): void {
     return next
   })
   ipcMain.handle(IPC.WORKSPACE_REMOVE, (_e, workspaceId: string) => {
-    const defaultWorkspaceId = getDefaultWorkspaceId()
-    if (workspaceId === defaultWorkspaceId) {
-      purgeWorkspaceSessions(defaultWorkspaceId)
-    } else {
-      removeWorkspaceSessions(workspaceId, defaultWorkspaceId)
-    }
+    purgeWorkspaceSessions(workspaceId)
     const ok = removeWorkspace(workspaceId)
     if (ok) {
       broadcastWorkspaces()
@@ -402,8 +402,19 @@ function registerIpc(): void {
     return getSessionMessages(workspaceId, sessionId)
   })
   ipcMain.handle(IPC.SESSIONS_CREATE, (_e, name?: string) => {
-    const workspaceId = getActiveWorkspaceId()
-    if (!workspaceId) return null
+    ensureHomeWorkspaceInList()
+    let workspaceId = getActiveWorkspaceId()
+    if (!workspaceId) {
+      const home = getWorkspaceById(HOME_WORKSPACE_ID)
+      if (home) {
+        setActiveWorkspace(home.id)
+        workspaceId = home.id
+        broadcastWorkspaces()
+      }
+    }
+    if (!workspaceId) {
+      return null
+    }
     const s = createSession(workspaceId, name)
     broadcastSessions()
     return s

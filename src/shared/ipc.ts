@@ -415,6 +415,9 @@ export const defaultWorkspaceUiState: WorkspaceUiState = {
   sidebarHiddenSessionIds: []
 }
 
+/** 固定 ID：用户主目录工作区；顶栏下拉始终含 Home 项（侧栏可无）；侧栏无可见会话时隐藏该项；移除后不会自动再出现，可从顶栏切回以恢复 */
+export const HOME_WORKSPACE_ID = 'workspace-home'
+
 export type WorkspaceInfo = {
   id: string
   name: string

@@ -39,6 +39,8 @@ type WorkspaceLeftPaneProps = {
   activeWorkspaceId: string | null
   activeSessionId: string | null
   workspaces: WorkspaceInfo[]
+  /** 工作区树为空时的说明（由上层区分「无任何工作区」与「仅 Home 且无会话」等） */
+  workspaceTreeEmptyMessage: string
   sessionsByWorkspace: Record<string, SessionInfo[]>
   expandedWorkspaceIds: Set<string>
   draggingWorkspaceId: string | null
@@ -46,19 +48,19 @@ type WorkspaceLeftPaneProps = {
   onOpenMcpHub: () => void
   onOpenSkillsHub: () => void
   onOpenSettings: () => void
-  onCreateSessionForActiveWorkspace: () => void
+  onOpenBlankConversation: () => void
   onToggleWorkspace: (workspaceId: string) => void
   onWorkspaceDragStart: (event: DragEvent<HTMLDivElement>, workspaceId: string) => void
   onWorkspaceDragOver: (event: DragEvent<HTMLDivElement>, workspaceId: string) => void
   onWorkspaceDrop: (event: DragEvent<HTMLDivElement>, workspaceId: string) => void
   onWorkspaceDragEnd: () => void
-  onCreateSessionInWorkspace: (workspaceId: string) => void
+  onOpenBlankConversationInWorkspace: (workspaceId: string) => void
   onSessionClick: (workspaceId: string, sessionId: string) => void
   onRenameSession: (session: SessionInfo) => void
   onDeleteSession: (session: SessionInfo) => void
   /** 从左侧列表隐藏会话（不删除数据） */
   onRemoveSessionFromSidebar?: (workspaceId: string, session: SessionInfo) => void
-  /** 多工作区模式下：从侧边栏移除工作区（非默认会话并入默认；默认工作区会话删除不合并） */
+  /** 多工作区模式下：从侧边栏移除工作区（该工作区下会话一律从本机删除，不并入其他工作区） */
   onRemoveWorkspaceFromSidebar?: (workspace: WorkspaceInfo) => void
   onPickWorkspace: () => void
   onSidebarResizeStart: (event: MouseEvent<HTMLDivElement>) => void
@@ -105,6 +107,7 @@ export function WorkspaceLeftPane({
   activeWorkspaceId,
   activeSessionId,
   workspaces,
+  workspaceTreeEmptyMessage,
   sessionsByWorkspace,
   expandedWorkspaceIds,
   draggingWorkspaceId,
@@ -112,13 +115,13 @@ export function WorkspaceLeftPane({
   onOpenMcpHub,
   onOpenSkillsHub,
   onOpenSettings,
-  onCreateSessionForActiveWorkspace,
+  onOpenBlankConversation,
   onToggleWorkspace,
   onWorkspaceDragStart,
   onWorkspaceDragOver,
   onWorkspaceDrop,
   onWorkspaceDragEnd,
-  onCreateSessionInWorkspace,
+  onOpenBlankConversationInWorkspace,
   onSessionClick,
   onRenameSession,
   onDeleteSession,
@@ -207,7 +210,7 @@ export function WorkspaceLeftPane({
                 type="primary"
                 icon={<PlusOutlined />}
                 className="app-new-session-btn"
-                onClick={onCreateSessionForActiveWorkspace}
+                onClick={onOpenBlankConversation}
               >
                 新会话
               </Button>
@@ -217,9 +220,7 @@ export function WorkspaceLeftPane({
             <div className="app-workspace-tree">
               {workspaces.length === 0 ? (
                 <div className="app-workspace-tree-empty" role="status">
-                  <Text type="secondary">
-                    暂无工作区。请点击下方「添加并切换工作区」选择项目文件夹。
-                  </Text>
+                  <Text type="secondary">{workspaceTreeEmptyMessage}</Text>
                 </div>
               ) : (
                 workspaces.map((workspace) => {
@@ -284,11 +285,11 @@ export function WorkspaceLeftPane({
                       <button
                         type="button"
                         className="app-workspace-add-session-btn"
-                        aria-label={`在${workspace.name}下添加会话`}
-                        title="添加会话"
+                        aria-label={`在${workspace.name}下打开空白对话`}
+                        title="空白对话"
                         onClick={(event) => {
                           event.stopPropagation()
-                          onCreateSessionInWorkspace(workspace.id)
+                          onOpenBlankConversationInWorkspace(workspace.id)
                         }}
                       >
                         <PlusOutlined />
