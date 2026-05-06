@@ -577,8 +577,8 @@ function registerIpc(): void {
     const win = BrowserWindow.getFocusedWindow() ?? mainWindow
     const opts = {
       type: 'info' as const,
-      title: '关于 AgentWeave',
-      message: 'AgentWeave',
+      title: '关于 trou',
+      message: 'trou',
       detail: `版本 ${app.getVersion()}`
     }
     if (win && !win.isDestroyed()) {

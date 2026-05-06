@@ -302,7 +302,7 @@ export function App() {
         children: [
           {
             key: 'about',
-            label: '关于 AgentWeave',
+            label: '关于 trou',
             onClick: () => void bridge.showAbout()
           }
         ]

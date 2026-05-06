@@ -145,4 +145,4 @@ const api = {
 
 contextBridge.exposeInMainWorld('bridge', api)
 
-export type AgentWeaveApi = typeof api
+export type TrouApi = typeof api
