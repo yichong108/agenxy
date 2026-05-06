@@ -10,6 +10,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
 import { App as AntdApp, Button, Spin, Tag, Typography } from 'antd'
 import { getClassWithColor } from 'file-icons-js'
+import islandsLightThemeJson from 'islands-theme/themes/Islands_Light-theme.json'
 import * as monaco from 'monaco-editor'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Tree, type NodeRendererProps } from 'react-arborist'
@@ -22,6 +23,7 @@ import 'file-icons-js/css/style.css'
 
 const { Text } = Typography
 loader.config({ monaco })
+const ISLANDS_LIGHT_THEME_NAME = 'islands-light'
 
 type FileTreeDataNode = {
   id: string
@@ -155,6 +157,71 @@ function inferMonacoLanguage(filePath: string): string {
   return languageMap[ext] ?? 'plaintext'
 }
 
+type VsCodeTokenColor = {
+  scope?: string | string[]
+  settings?: {
+    foreground?: string
+    background?: string
+    fontStyle?: string
+  }
+}
+
+type VsCodeTheme = {
+  type?: 'light' | 'dark' | 'hc'
+  colors?: Record<string, string>
+  tokenColors?: VsCodeTokenColor[]
+}
+
+function normalizeMonacoTokenColor(value?: string): string | undefined {
+  if (!value) return undefined
+  const raw = value.trim()
+  const hex = raw.startsWith('#') ? raw.slice(1) : raw
+  if (!/^[0-9a-fA-F]+$/.test(hex)) return undefined
+  if (hex.length === 3 || hex.length === 4) {
+    return hex
+      .split('')
+      .map((char) => `${char}${char}`)
+      .join('')
+      .slice(0, 6)
+      .toUpperCase()
+  }
+  if (hex.length === 6 || hex.length === 8) {
+    return hex.slice(0, 6).toUpperCase()
+  }
+  return undefined
+}
+
+function toMonacoThemeData(theme: VsCodeTheme): monaco.editor.IStandaloneThemeData {
+  const rules =
+    theme.tokenColors?.flatMap((tokenColor) => {
+      const scopes = tokenColor.scope
+        ? Array.isArray(tokenColor.scope)
+          ? tokenColor.scope
+          : [tokenColor.scope]
+        : []
+      const settings = tokenColor.settings ?? {}
+      const foreground = normalizeMonacoTokenColor(settings.foreground)
+      const background = normalizeMonacoTokenColor(settings.background)
+      if (!scopes.length || (!foreground && !background && !settings.fontStyle)) {
+        return []
+      }
+      return scopes.map((scope) => ({
+        token: scope,
+        foreground,
+        background,
+        fontStyle: settings.fontStyle
+      }))
+    }) ?? []
+  const base: monaco.editor.BuiltinTheme =
+    theme.type === 'dark' ? 'vs-dark' : theme.type === 'hc' ? 'hc-black' : 'vs'
+  return {
+    base,
+    inherit: true,
+    colors: theme.colors ?? {},
+    rules
+  }
+}
+
 type WorkspaceRightPaneProps = {
   bridge: Window['bridge']
   activeWorkspaceId: string | null
@@ -196,6 +263,13 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
   const terminalHistoryIndexRef = useRef<number | null>(null)
   const terminalHistoryDraftRef = useRef('')
   const filePreviewLanguage = useMemo(() => inferMonacoLanguage(filePreviewPath), [filePreviewPath])
+
+  useEffect(() => {
+    monaco.editor.defineTheme(
+      ISLANDS_LIGHT_THEME_NAME,
+      toMonacoThemeData(islandsLightThemeJson as VsCodeTheme)
+    )
+  }, [])
 
   const writeTerminalPrompt = useCallback((term: Terminal) => {
     term.write(`\x1b[38;2;102;102;102m${terminalPromptPrefixRef.current}\x1b[0m `)
@@ -580,7 +654,7 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
                       path={filePreviewPath || undefined}
                       language={filePreviewLanguage}
                       value={filePreviewContent}
-                      theme="vs"
+                      theme={ISLANDS_LIGHT_THEME_NAME}
                       options={{
                         readOnly: true,
                         automaticLayout: true,
