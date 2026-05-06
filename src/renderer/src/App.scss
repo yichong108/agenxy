@@ -300,6 +300,8 @@
 .app-workspace-chevron {
   color: var(--aw-color-text-tertiary);
   font-size: 12px;
+  display: inline-flex;
+  align-items: center;
   line-height: 1;
   transform: rotate(0deg);
   transition: transform 0.2s ease;

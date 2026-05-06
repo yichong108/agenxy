@@ -4,6 +4,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   PlusOutlined,
+  RightOutlined,
   SettingOutlined,
   ShopOutlined
 } from '@ant-design/icons'
@@ -240,12 +241,10 @@ export function WorkspaceLeftPane({
                           onToggleWorkspace(workspace.id)
                         }}
                       >
-                        <span
+                        <RightOutlined
                           className={`app-workspace-chevron ${isExpanded ? 'is-open' : ''}`}
                           aria-hidden="true"
-                        >
-                          {'>'}
-                        </span>
+                        />
                       </button>
                       <span className="app-workspace-name-btn">
                         <Text className="app-workspace-name">{workspace.name}</Text>

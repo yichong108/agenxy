@@ -1,30 +1,91 @@
-import { CodeOutlined, FileOutlined } from '@ant-design/icons'
+import {
+  CodeOutlined,
+  FileOutlined,
+  FolderOpenOutlined,
+  FolderOutlined,
+  RightOutlined
+} from '@ant-design/icons'
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
-import { App as AntdApp, Button, Spin, Tag, Tree, Typography } from 'antd'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { App as AntdApp, Button, Spin, Tag, Typography } from 'antd'
+import { getClassWithColor } from 'file-icons-js'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Tree, type NodeRendererProps } from 'react-arborist'
 
 import type { WorkspaceFileNode } from '@/shared/ipc'
 
 import '@/renderer/src/right-pane/WorkspaceRightPane.scss'
 import '@xterm/xterm/css/xterm.css'
+import 'file-icons-js/css/style.css'
 
 const { Text } = Typography
 
 type FileTreeDataNode = {
-  key: string
-  title: string
-  isLeaf?: boolean
+  id: string
+  name: string
+  kind: WorkspaceFileNode['kind']
   children?: FileTreeDataNode[]
+}
+
+function renderNodeTitle(
+  name: string,
+  kind: WorkspaceFileNode['kind'],
+  isOpen?: boolean
+): ReactNode {
+  if (kind === 'directory') {
+    return (
+      <span className="app-right-tree-title">
+        {isOpen ? (
+          <FolderOpenOutlined className="app-right-tree-title-icon app-right-tree-folder-icon" />
+        ) : (
+          <FolderOutlined className="app-right-tree-title-icon app-right-tree-folder-icon" />
+        )}
+        <span>{name}</span>
+      </span>
+    )
+  }
+
+  const atomIconClass = getClassWithColor(name) ?? 'text-icon medium-blue'
+
+  return (
+    <span className="app-right-tree-title">
+      <span className={`app-right-tree-atom-icon icon ${atomIconClass}`} aria-hidden />
+      <span>{name}</span>
+    </span>
+  )
 }
 
 function toAntdFileTree(nodes: WorkspaceFileNode[]): FileTreeDataNode[] {
   return nodes.map((node) => ({
-    key: node.path,
-    title: node.name,
-    isLeaf: node.kind === 'file',
+    id: node.path,
+    name: node.name,
+    kind: node.kind,
     children: node.kind === 'directory' ? toAntdFileTree(node.children ?? []) : undefined
   }))
+}
+
+function FileTreeNodeRenderer({ node, style, dragHandle }: NodeRendererProps<FileTreeDataNode>) {
+  return (
+    <div
+      style={style}
+      ref={dragHandle}
+      className={`app-right-tree-node ${node.isSelected ? 'is-selected' : ''}`}
+      onDoubleClick={() => {
+        if (node.isInternal) node.toggle()
+      }}
+    >
+      <span
+        className={`app-right-tree-switcher-icon ${node.isOpen ? 'is-open' : ''} ${node.isLeaf ? 'is-leaf' : ''}`}
+        onClick={(event) => {
+          event.stopPropagation()
+          if (node.isInternal) node.toggle()
+        }}
+      >
+        <RightOutlined />
+      </span>
+      {renderNodeTitle(node.data.name, node.data.kind, node.isOpen)}
+    </div>
+  )
 }
 
 function longestCommonPrefix(values: string[]): string {
@@ -59,7 +120,14 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
   const [filePreviewLoading, setFilePreviewLoading] = useState(false)
   const [filePreviewTruncated, setFilePreviewTruncated] = useState(false)
   const [filePreviewError, setFilePreviewError] = useState('')
+  const [selectedFileKey, setSelectedFileKey] = useState<string | null>(null)
+  const treeContainerRef = useRef<HTMLDivElement | null>(null)
+  const [treeHeight, setTreeHeight] = useState(0)
   const fileTreeData = useMemo(() => toAntdFileTree(fileTree), [fileTree])
+  const fileTreeOpenState = useMemo(
+    () => Object.fromEntries(fileTreeExpandedKeys.map((key) => [key, true])),
+    [fileTreeExpandedKeys]
+  )
   const terminalPromptPrefix = useMemo(
     () => `PS ${activeWorkspacePath || '[未绑定工作区]'}>`,
     [activeWorkspacePath]
@@ -235,11 +303,24 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
   useEffect(() => {
     setFileTree([])
     setFileTreeExpandedKeys([])
+    setSelectedFileKey(null)
     setFilePreviewPath('')
     setFilePreviewContent('')
     setFilePreviewTruncated(false)
     setFilePreviewError('')
   }, [activeWorkspaceId])
+
+  useEffect(() => {
+    const container = treeContainerRef.current
+    if (!container) return
+    const measure = () => setTreeHeight(container.clientHeight)
+    measure()
+    const observer = new ResizeObserver(() => {
+      measure()
+    })
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [activePanel])
 
   useEffect(() => {
     terminalPromptPrefixRef.current = terminalPromptPrefix
@@ -362,44 +443,62 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
       <div className="app-right-toolbar">
         <Button
           size="small"
+          type="text"
+          className={`app-right-toolbar-btn ${activePanel === 'file' ? 'is-active' : ''}`}
           icon={<FileOutlined />}
-          type={activePanel === 'file' ? 'primary' : 'default'}
           onClick={() => setActivePanel('file')}
-        >
-          文件
-        </Button>
+          aria-label="文件"
+          title="文件"
+        />
         <Button
           size="small"
+          type="text"
+          className={`app-right-toolbar-btn ${activePanel === 'terminal' ? 'is-active' : ''}`}
           icon={<CodeOutlined />}
-          type={activePanel === 'terminal' ? 'primary' : 'default'}
           onClick={() => setActivePanel('terminal')}
-        >
-          控制台终端
-        </Button>
+          aria-label="控制台终端"
+          title="控制台终端"
+        />
       </div>
       <div className="app-right-content">
         {activePanel === 'file' ? (
           <>
             <div className="app-right-tree-panel">
-              <div className="app-right-tree-wrap">
+              <div className="app-right-tree-wrap" ref={treeContainerRef}>
                 {fileTreeLoading ? (
                   <div className="app-right-tree-loading">
                     <Spin size="small" />
                     <Text type="secondary">正在加载文件树...</Text>
                   </div>
                 ) : fileTreeData.length ? (
-                  <Tree
-                    showLine
+                  <Tree<FileTreeDataNode>
                     className="app-right-tree"
-                    treeData={fileTreeData}
-                    expandedKeys={fileTreeExpandedKeys}
-                    onExpand={(keys) => setFileTreeExpandedKeys(keys.map((x) => String(x)))}
-                    onSelect={(_, info) => {
-                      const relPath = String(info.node.key)
-                      if (!info.node.isLeaf) return
+                    data={fileTreeData}
+                    width="100%"
+                    height={Math.max(treeHeight, 240)}
+                    rowHeight={26}
+                    indent={16}
+                    openByDefault={false}
+                    initialOpenState={fileTreeOpenState}
+                    disableDrag
+                    disableEdit
+                    selectionFollowsFocus
+                    selection={selectedFileKey ?? undefined}
+                    onToggle={(id) => {
+                      setFileTreeExpandedKeys((prev) =>
+                        prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+                      )
+                    }}
+                    onSelect={(nodes) => {
+                      const node = nodes[0]
+                      if (!node || node.data.kind !== 'file') return
+                      const relPath = node.id
+                      setSelectedFileKey(relPath)
                       void previewWorkspaceFile(relPath)
                     }}
-                  />
+                  >
+                    {FileTreeNodeRenderer}
+                  </Tree>
                 ) : (
                   <Text type="secondary" className="app-right-empty-tip">
                     当前工作区暂无可展示文件
