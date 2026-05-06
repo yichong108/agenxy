@@ -20,6 +20,7 @@ import {
   renameSession,
   deleteSession,
   getSessionWorkspaceId,
+  purgeWorkspaceSessions,
   removeWorkspaceSessions,
   touchSession
 } from '@/main/sessions'
@@ -357,7 +358,9 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.WORKSPACE_REMOVE, (_e, workspaceId: string) => {
     const defaultWorkspaceId = getDefaultWorkspaceId()
-    if (workspaceId !== defaultWorkspaceId) {
+    if (workspaceId === defaultWorkspaceId) {
+      purgeWorkspaceSessions(defaultWorkspaceId)
+    } else {
       removeWorkspaceSessions(workspaceId, defaultWorkspaceId)
     }
     const ok = removeWorkspace(workspaceId)

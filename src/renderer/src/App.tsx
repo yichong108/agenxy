@@ -1370,10 +1370,12 @@ export function App() {
 
   const handleRemoveWorkspaceFromSidebar = useCallback(
     (workspace: WorkspaceInfo) => {
-      if (workspace.isDefault) return
+      const isDefault = Boolean(workspace.isDefault)
       modalApi.confirm({
         title: '从侧边栏移除此工作区？',
-        content: '该工作区下的会话将保留并合并到默认工作区，之后可通过「添加并切换工作区」重新加入。',
+        content: isDefault
+          ? '默认工作区下的全部会话将从本机永久删除，不会并入其他工作区。移除后侧栏可为空，可通过下方按钮重新添加工作区。'
+          : '该工作区下的会话将保留并合并到默认工作区，之后可通过「添加并切换工作区」重新加入。',
         centered: true,
         okText: '移除',
         okButtonProps: { danger: true },
@@ -1383,7 +1385,7 @@ export function App() {
           if (ok) {
             msgApi.success('已从侧边栏移除')
           } else {
-            msgApi.error('移除失败（默认工作区不可移除）')
+            msgApi.error('移除失败')
           }
         }
       })

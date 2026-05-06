@@ -24,6 +24,8 @@ import {
 type StoreSchema = {
   workspaces: WorkspaceInfo[]
   activeWorkspaceId: string | null
+  /** 已完成工作区初始化；空列表时不自动塞回默认项（区别于首次安装种子） */
+  workspaceBootstrapDone?: boolean
   settings: AppSettings
   uiState: RendererUiState
   /** 会话元数据持久化：按 workspaceId 分桶 */
@@ -84,8 +86,11 @@ function ensureDefaultWorkspace(list: WorkspaceInfo[]): WorkspaceInfo[] {
 
 function normalizeWorkspaces(input: WorkspaceInfo[]): WorkspaceInfo[] {
   const raw = Array.isArray(input) ? input : []
-  /** 仅当持久化列表为空时注入虚拟默认工作区；否则尊重用户从侧栏移除默认项后的列表 */
-  const list = raw.length === 0 ? ensureDefaultWorkspace(raw) : raw
+  /** 持久化空数组表示侧栏已清空，不在读取时自动注入默认工作区 */
+  if (raw.length === 0) {
+    return []
+  }
+  const list = raw
   const dedupById = new Map<string, WorkspaceInfo>()
   const dedupByPath = new Map<string, string>()
   for (const item of list) {
@@ -117,43 +122,72 @@ function migrateFromLegacyIfNeeded(): void {
     if (!activeWorkspaceId || !normalized.some((x) => x.id === activeWorkspaceId)) {
       store.set('activeWorkspaceId', normalized[0]?.id ?? null)
     }
+    store.set('workspaceBootstrapDone', true)
     return
   }
 
-  const now = Date.now()
   const legacyWorkspace = (store.get('workspace') || '').trim()
   const legacySessionsMeta = store.get('sessionsMeta') || []
   const legacySessionsMessages = store.get('sessionsMessages') || {}
-  const legacyUiStateRaw = store.get('uiState') as Partial<RendererUiState> &
-    Partial<WorkspaceUiState> & {
-      activeSessionId?: string | null
-      inputDraft?: string
+  const hasLegacyData =
+    Boolean(legacyWorkspace) ||
+    (Array.isArray(legacySessionsMeta) && legacySessionsMeta.length > 0) ||
+    (legacySessionsMessages &&
+      typeof legacySessionsMessages === 'object' &&
+      Object.keys(legacySessionsMessages).length > 0)
+
+  if (hasLegacyData) {
+    const now = Date.now()
+    const legacyUiStateRaw = store.get('uiState') as Partial<RendererUiState> &
+      Partial<WorkspaceUiState> & {
+        activeSessionId?: string | null
+        inputDraft?: string
+      }
+
+    const defaultWorkspace = createDefaultWorkspace(now)
+    const nextWorkspaces: WorkspaceInfo[] = [defaultWorkspace]
+    if (legacyWorkspace) {
+      nextWorkspaces.push(createWorkspaceFromPath(normalizeWorkspacePath(legacyWorkspace), now))
     }
 
-  const defaultWorkspace = createDefaultWorkspace(now)
-  const nextWorkspaces: WorkspaceInfo[] = [defaultWorkspace]
-  if (legacyWorkspace) {
-    nextWorkspaces.push(createWorkspaceFromPath(normalizeWorkspacePath(legacyWorkspace), now))
+    const activeSessionId =
+      typeof legacyUiStateRaw?.activeSessionId === 'string' ? legacyUiStateRaw.activeSessionId : null
+    const inputDraft =
+      typeof legacyUiStateRaw?.inputDraft === 'string' ? legacyUiStateRaw.inputDraft : ''
+
+    store.set('workspaces', nextWorkspaces)
+    store.set('activeWorkspaceId', defaultWorkspace.id)
+    store.set('sessionsMetaByWorkspace', { [defaultWorkspace.id]: legacySessionsMeta })
+    store.set('sessionsMessagesByWorkspace', { [defaultWorkspace.id]: legacySessionsMessages })
+    store.set('uiState', {
+      activeWorkspaceId: defaultWorkspace.id,
+      byWorkspace: {
+        [defaultWorkspace.id]: {
+          activeSessionId,
+          inputDraft
+        }
+      }
+    })
+    store.set('workspaceBootstrapDone', true)
+    return
   }
 
-  const activeSessionId =
-    typeof legacyUiStateRaw?.activeSessionId === 'string' ? legacyUiStateRaw.activeSessionId : null
-  const inputDraft =
-    typeof legacyUiStateRaw?.inputDraft === 'string' ? legacyUiStateRaw.inputDraft : ''
-
-  store.set('workspaces', nextWorkspaces)
-  store.set('activeWorkspaceId', defaultWorkspace.id)
-  store.set('sessionsMetaByWorkspace', { [defaultWorkspace.id]: legacySessionsMeta })
-  store.set('sessionsMessagesByWorkspace', { [defaultWorkspace.id]: legacySessionsMessages })
-  store.set('uiState', {
-    activeWorkspaceId: defaultWorkspace.id,
-    byWorkspace: {
-      [defaultWorkspace.id]: {
-        activeSessionId,
-        inputDraft
+  if (!store.get('workspaceBootstrapDone')) {
+    const defaultWorkspace = createDefaultWorkspace(Date.now())
+    store.set('workspaces', [defaultWorkspace])
+    store.set('activeWorkspaceId', defaultWorkspace.id)
+    store.set('sessionsMetaByWorkspace', { [defaultWorkspace.id]: [] })
+    store.set('uiState', {
+      activeWorkspaceId: defaultWorkspace.id,
+      byWorkspace: {
+        [defaultWorkspace.id]: {
+          activeSessionId: null,
+          inputDraft: ''
+        }
       }
-    }
-  })
+    })
+    store.set('workspaceBootstrapDone', true)
+  }
 }
 
 migrateFromLegacyIfNeeded()
@@ -434,20 +468,38 @@ export function reorderWorkspaces(orderIds: string[]): WorkspaceInfo[] {
 }
 
 export function removeWorkspace(workspaceId: string): boolean {
-  if (workspaceId === DEFAULT_WORKSPACE_ID) return false
   const list = listWorkspaces()
   const next = list.filter((x) => x.id !== workspaceId)
   if (next.length === list.length) return false
-  store.set('workspaces', ensureDefaultWorkspace(next))
-  const activeId = getActiveWorkspaceId()
-  if (activeId === workspaceId) {
-    setActiveWorkspace(DEFAULT_WORKSPACE_ID)
+
+  const finalList =
+    workspaceId === DEFAULT_WORKSPACE_ID ? next : ensureDefaultWorkspace(next)
+  store.set('workspaces', finalList)
+
+  const active = store.get('activeWorkspaceId')
+  if (active === workspaceId || !finalList.some((x) => x.id === active)) {
+    const fallback =
+      workspaceId === DEFAULT_WORKSPACE_ID
+        ? (finalList[0]?.id ?? null)
+        : DEFAULT_WORKSPACE_ID
+    if (fallback && finalList.some((x) => x.id === fallback)) {
+      setActiveWorkspace(fallback)
+    } else if (finalList.length > 0) {
+      setActiveWorkspace(finalList[0]!.id)
+    } else {
+      store.set('activeWorkspaceId', null)
+      setUiState({ activeWorkspaceId: null })
+    }
   }
+
   const uiState = getUiState()
   if (uiState.byWorkspace[workspaceId]) {
     const copied = { ...uiState.byWorkspace }
     delete copied[workspaceId]
     setUiState({ byWorkspace: copied })
+  }
+  if (finalList.length === 0) {
+    store.set('workspaceBootstrapDone', true)
   }
   return true
 }

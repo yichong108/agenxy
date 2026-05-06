@@ -144,3 +144,14 @@ export function removeWorkspaceSessions(fromWorkspaceId: string, toWorkspaceId: 
   setSessionsMeta(toWorkspaceId, merged)
   setSessionsMeta(fromWorkspaceId, [])
 }
+
+/** 删除某工作区下全部会话及消息（用于从侧栏移除默认工作区且不并入其他工作区） */
+export function purgeWorkspaceSessions(workspaceId: string): void {
+  const snapshot = [...ensureWorkspaceBucket(workspaceId)]
+  for (const s of snapshot) {
+    deleteSession(workspaceId, s.id)
+  }
+  listByWorkspace.set(workspaceId, [])
+  nameCounterByWorkspace.delete(workspaceId)
+  setSessionsMeta(workspaceId, [])
+}

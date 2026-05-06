@@ -58,7 +58,7 @@ type WorkspaceLeftPaneProps = {
   onDeleteSession: (session: SessionInfo) => void
   /** 从左侧列表隐藏会话（不删除数据） */
   onRemoveSessionFromSidebar?: (workspaceId: string, session: SessionInfo) => void
-  /** 多工作区模式下：从侧边栏移除非默认工作区（会话保留并合并到默认工作区） */
+  /** 多工作区模式下：从侧边栏移除工作区（非默认会话并入默认；默认工作区会话删除不合并） */
   onRemoveWorkspaceFromSidebar?: (workspace: WorkspaceInfo) => void
   onPickWorkspace: () => void
   onSidebarResizeStart: (event: MouseEvent<HTMLDivElement>) => void
@@ -259,7 +259,7 @@ export function WorkspaceLeftPane({
                           aria-hidden="true"
                         />
                       </button>
-                      {onRemoveWorkspaceFromSidebar && !workspace.isDefault ? (
+                      {onRemoveWorkspaceFromSidebar ? (
                         <Dropdown
                           menu={{
                             items: [
