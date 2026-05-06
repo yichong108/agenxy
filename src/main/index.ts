@@ -25,12 +25,14 @@ import {
 } from '@/main/sessions'
 import { installSkillFromMarketItem } from '@/main/skills-market/install'
 import {
+  ensureHomeWorkspaceInList,
   getActiveWorkspace,
   getActiveWorkspaceId,
   getSettings,
   getSessionMessages,
   getUiState,
   getWorkspace,
+  getWorkspaceById,
   listWorkspaces,
   reorderWorkspaces,
   removeWorkspace,
@@ -43,6 +45,7 @@ import {
 import { completeCommandInWorkspace, killCommand, runCommand } from '@/main/tools/terminal'
 import { listWorkspaceFileTree, readWorkspaceFileContent } from '@/main/workspace-files'
 import {
+  HOME_WORKSPACE_ID,
   IPC,
   EVENTS,
   type AppSettings,
@@ -395,13 +398,15 @@ function registerIpc(): void {
     return getSessionMessages(workspaceId, sessionId)
   })
   ipcMain.handle(IPC.SESSIONS_CREATE, (_e, name?: string) => {
+    ensureHomeWorkspaceInList()
     let workspaceId = getActiveWorkspaceId()
     if (!workspaceId) {
-      const homeDir = app.getPath('home')
-      const workspace = upsertWorkspaceByPath(homeDir)
-      setActiveWorkspace(workspace.id)
-      workspaceId = workspace.id
-      broadcastWorkspaces()
+      const home = getWorkspaceById(HOME_WORKSPACE_ID)
+      if (home) {
+        setActiveWorkspace(home.id)
+        workspaceId = home.id
+        broadcastWorkspaces()
+      }
     }
     const s = createSession(workspaceId, name)
     broadcastSessions()

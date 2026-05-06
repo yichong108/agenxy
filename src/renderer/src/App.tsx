@@ -56,6 +56,7 @@ import {
   type StreamEvent,
   type ToolTimelineEvent,
   defaultWorkspaceUiState,
+  HOME_WORKSPACE_ID,
   type WorkspaceInfo,
   type WorkspaceUiState
 } from '@/shared/ipc'
@@ -735,9 +736,14 @@ export function App() {
   )
 
   const composerWorkspaceMenuItems = useMemo<MenuProps['items']>(() => {
-    const rows: MenuProps['items'] = workspaces.map((w) => ({
+    const ordered = [...workspaces].sort((a, b) => {
+      if (a.id === HOME_WORKSPACE_ID) return -1
+      if (b.id === HOME_WORKSPACE_ID) return 1
+      return 0
+    })
+    const rows: MenuProps['items'] = ordered.map((w) => ({
       key: w.id,
-      label: w.name,
+      label: w.id === HOME_WORKSPACE_ID ? 'Home' : w.name,
       disabled: w.id === activeWorkspaceId
     }))
     return [
@@ -1383,8 +1389,18 @@ export function App() {
   const openBlankConversationInWorkspace = useCallback(
     async (workspaceId: string) => {
       if (!workspaceId) return
-      if (workspaceId !== activeWorkspaceId && supportsMultiWorkspaceApi) {
-        const workspace = await bridgeCompat.activateWorkspace!(workspaceId)
+      const ws = workspaces.find((w) => w.id === workspaceId)
+      let resolvedId = workspaceId
+      if (!ws?.path) {
+        const hasHome = workspaces.some((w) => w.id === HOME_WORKSPACE_ID)
+        if (!hasHome) {
+          msgApi.warning('请先添加工作区')
+          return
+        }
+        resolvedId = HOME_WORKSPACE_ID
+      }
+      if (resolvedId !== activeWorkspaceId && supportsMultiWorkspaceApi) {
+        const workspace = await bridgeCompat.activateWorkspace!(resolvedId)
         if (!workspace) {
           msgApi.error('切换工作区失败')
           return
@@ -1392,7 +1408,7 @@ export function App() {
       }
       setExpandedWorkspaceIds((prev) => {
         const next = new Set(prev)
-        next.add(workspaceId)
+        next.add(resolvedId)
         return next
       })
       setActiveId(null)
@@ -1404,19 +1420,27 @@ export function App() {
       msgApi,
       setActiveId,
       setInput,
-      supportsMultiWorkspaceApi
+      supportsMultiWorkspaceApi,
+      workspaces
     ]
   )
 
   const openBlankConversationForActiveWorkspace = useCallback(() => {
     void (async () => {
-      if (activeWorkspaceId) {
-        await openBlankConversationInWorkspace(activeWorkspaceId)
+      const ws = activeWorkspaceId ? workspaces.find((w) => w.id === activeWorkspaceId) : null
+      const targetId =
+        activeWorkspaceId && ws?.path
+          ? activeWorkspaceId
+          : workspaces.some((w) => w.id === HOME_WORKSPACE_ID)
+            ? HOME_WORKSPACE_ID
+            : null
+      if (!targetId) {
+        msgApi.warning('请先添加工作区')
         return
       }
-      msgApi.warning('请先添加工作区')
+      await openBlankConversationInWorkspace(targetId)
     })()
-  }, [activeWorkspaceId, msgApi, openBlankConversationInWorkspace])
+  }, [activeWorkspaceId, msgApi, openBlankConversationInWorkspace, workspaces])
 
   const handleSessionRenameRequest = useCallback((session: SessionInfo) => {
     setRenameId(session.id)
@@ -1438,6 +1462,10 @@ export function App() {
 
   const handleRemoveWorkspaceFromSidebar = useCallback(
     (workspace: WorkspaceInfo) => {
+      if (workspace.id === HOME_WORKSPACE_ID) {
+        msgApi.warning('Home（用户目录）工作区无法从侧栏移除')
+        return
+      }
       const isDefault = Boolean(workspace.isDefault)
       modalApi.confirm({
         title: '从侧边栏移除此工作区？',

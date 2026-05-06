@@ -9,6 +9,7 @@ import {
   defaultRendererUiState,
   defaultWorkspaceUiState,
   defaultSettings,
+  HOME_WORKSPACE_ID,
   parseMcpServersFromUnknown,
   type AppSettings,
   type McpServerEntry,
@@ -173,14 +174,22 @@ function migrateFromLegacyIfNeeded(): void {
   }
 
   if (!store.get('workspaceBootstrapDone')) {
-    const defaultWorkspace = createDefaultWorkspace(Date.now())
-    store.set('workspaces', [defaultWorkspace])
-    store.set('activeWorkspaceId', defaultWorkspace.id)
-    store.set('sessionsMetaByWorkspace', { [defaultWorkspace.id]: [] })
+    const now = Date.now()
+    const homePath = normalizeWorkspacePath(app.getPath('home'))
+    const homeWs: WorkspaceInfo = {
+      id: HOME_WORKSPACE_ID,
+      name: 'Home',
+      path: homePath,
+      createdAt: now,
+      updatedAt: now
+    }
+    store.set('workspaces', [homeWs])
+    store.set('activeWorkspaceId', homeWs.id)
+    store.set('sessionsMetaByWorkspace', { [homeWs.id]: [] })
     store.set('uiState', {
-      activeWorkspaceId: defaultWorkspace.id,
+      activeWorkspaceId: homeWs.id,
       byWorkspace: {
-        [defaultWorkspace.id]: {
+        [homeWs.id]: {
           activeSessionId: null,
           inputDraft: ''
         }
@@ -191,6 +200,40 @@ function migrateFromLegacyIfNeeded(): void {
 }
 
 migrateFromLegacyIfNeeded()
+
+/** 保证存在主目录工作区；若已有同路径工作区则合并会话后改为固定 Home ID */
+export function ensureHomeWorkspaceInList(): void {
+  const homePath = normalizeWorkspacePath(app.getPath('home'))
+  let list = normalizeWorkspaces(store.get('workspaces') || [])
+
+  if (list.some((x) => x.id === HOME_WORKSPACE_ID)) {
+    const idx = list.findIndex((x) => x.id === HOME_WORKSPACE_ID)
+    if (idx >= 0 && list[idx]!.path !== homePath) {
+      const next = [...list]
+      next[idx] = { ...next[idx]!, path: homePath, updatedAt: Date.now() }
+      store.set('workspaces', next)
+    }
+    return
+  }
+
+  const dup = list.find((x) => x.path === homePath)
+  if (dup && dup.id !== HOME_WORKSPACE_ID) {
+    moveWorkspaceSessionData(dup.id, HOME_WORKSPACE_ID)
+    list = list.filter((x) => x.id !== dup.id)
+  }
+
+  const now = Date.now()
+  const homeWs: WorkspaceInfo = {
+    id: HOME_WORKSPACE_ID,
+    name: 'Home',
+    path: homePath,
+    createdAt: dup?.createdAt ?? now,
+    updatedAt: now
+  }
+  store.set('workspaces', [homeWs, ...list])
+}
+
+ensureHomeWorkspaceInList()
 
 type LegacyFlatSettings = {
   apiKey?: string
@@ -373,6 +416,7 @@ export function setWorkspaceUiState(
 }
 
 export function listWorkspaces(): WorkspaceInfo[] {
+  ensureHomeWorkspaceInList()
   return normalizeWorkspaces(store.get('workspaces') || [])
 }
 
@@ -468,6 +512,7 @@ export function reorderWorkspaces(orderIds: string[]): WorkspaceInfo[] {
 }
 
 export function removeWorkspace(workspaceId: string): boolean {
+  if (workspaceId === HOME_WORKSPACE_ID) return false
   const list = listWorkspaces()
   const next = list.filter((x) => x.id !== workspaceId)
   if (next.length === list.length) return false
