@@ -940,9 +940,6 @@ export function App() {
               <div className="app-composer-hero">
                 <div className="app-composer-hero-inner">
                   {composerWorkspaceToolbar}
-                  <Text type="secondary" className="app-empty-tip-inline">
-                    发一条消息开始；务必先选择工作区并配置 API Key。
-                  </Text>
                   {composerInput}
                 </div>
               </div>
