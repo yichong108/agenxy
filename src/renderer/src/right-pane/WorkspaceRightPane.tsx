@@ -14,7 +14,15 @@ import { App as AntdApp, Button, Spin, Tag, Typography } from 'antd'
 import { getClassWithColor } from 'file-icons-js'
 import islandsLightThemeJson from 'islands-theme/themes/Islands_Light-theme.json'
 import * as monaco from 'monaco-editor'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode
+} from 'react'
 import { Tree, type NodeRendererProps } from 'react-arborist'
 
 import type { WorkspaceFileNode } from '@/shared/ipc'
@@ -26,6 +34,32 @@ import 'file-icons-js/css/style.css'
 const { Text } = Typography
 loader.config({ monaco })
 const ISLANDS_LIGHT_THEME_NAME = 'islands-light'
+
+const FILE_TREE_SPLIT_STORAGE_KEY = 'aw.fileTreeSplitFraction'
+const FILE_TREE_SPLITTER_PX = 1
+const FILE_TREE_MIN_TREE_PX = 160
+const FILE_TREE_MIN_PREVIEW_PX = 200
+const FILE_TREE_DEFAULT_FRACTION = 0.42
+
+function readStoredTreeFraction(): number {
+  try {
+    const raw = localStorage.getItem(FILE_TREE_SPLIT_STORAGE_KEY)
+    if (!raw) return FILE_TREE_DEFAULT_FRACTION
+    const n = Number(raw)
+    if (!Number.isFinite(n)) return FILE_TREE_DEFAULT_FRACTION
+    return Math.min(0.82, Math.max(0.18, n))
+  } catch {
+    return FILE_TREE_DEFAULT_FRACTION
+  }
+}
+
+function clampFileTreeSplitFraction(fraction: number, contentWidth: number): number {
+  if (!(contentWidth > 0)) return fraction
+  const minF = FILE_TREE_MIN_TREE_PX / contentWidth
+  const maxF = (contentWidth - FILE_TREE_SPLITTER_PX - FILE_TREE_MIN_PREVIEW_PX) / contentWidth
+  if (maxF < minF) return fraction
+  return Math.min(maxF, Math.max(minF, fraction))
+}
 
 type FileTreeDataNode = {
   id: string
@@ -247,6 +281,10 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
   const [filePreviewTruncated, setFilePreviewTruncated] = useState(false)
   const [filePreviewError, setFilePreviewError] = useState('')
   const [selectedFileKey, setSelectedFileKey] = useState<string | null>(null)
+  const [fileTreeSplitFraction, setFileTreeSplitFraction] = useState(readStoredTreeFraction)
+  const [fileSplitDragging, setFileSplitDragging] = useState(false)
+  const fileTreeSplitFractionRef = useRef(fileTreeSplitFraction)
+  const rightContentRef = useRef<HTMLDivElement | null>(null)
   const treeContainerRef = useRef<HTMLDivElement | null>(null)
   const [treeHeight, setTreeHeight] = useState(0)
   const fileTreeData = useMemo(() => toAntdFileTree(fileTree), [fileTree])
@@ -268,6 +306,26 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
   const terminalHistoryIndexRef = useRef<number | null>(null)
   const terminalHistoryDraftRef = useRef('')
   const filePreviewLanguage = useMemo(() => inferMonacoLanguage(filePreviewPath), [filePreviewPath])
+
+  useEffect(() => {
+    fileTreeSplitFractionRef.current = fileTreeSplitFraction
+  }, [fileTreeSplitFraction])
+
+  useEffect(() => {
+    if (activePanel !== 'file') return
+    const el = rightContentRef.current
+    if (!el) return
+    const clampToWidth = () => {
+      const w = el.getBoundingClientRect().width
+      setFileTreeSplitFraction((prev) => clampFileTreeSplitFraction(prev, w))
+    }
+    clampToWidth()
+    const ro = new ResizeObserver(() => {
+      clampToWidth()
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [activePanel, width, isCollapsed])
 
   useEffect(() => {
     monaco.editor.defineTheme(
@@ -384,6 +442,45 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
       }
     },
     [bridge]
+  )
+
+  const onFileSplitterMouseDown = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      if (activePanel !== 'file') return
+      const content = rightContentRef.current
+      if (!content) return
+      const startFraction = fileTreeSplitFractionRef.current
+      const startX = event.clientX
+      setFileSplitDragging(true)
+      const prevUserSelect = document.body.style.userSelect
+      const prevCursor = document.body.style.cursor
+      document.body.style.userSelect = 'none'
+      document.body.style.cursor = 'col-resize'
+
+      const onMove = (ev: MouseEvent) => {
+        const cw = content.getBoundingClientRect().width
+        if (cw <= 0) return
+        const next = clampFileTreeSplitFraction(startFraction + (ev.clientX - startX) / cw, cw)
+        fileTreeSplitFractionRef.current = next
+        setFileTreeSplitFraction(next)
+      }
+      const onUp = () => {
+        setFileSplitDragging(false)
+        document.body.style.userSelect = prevUserSelect
+        document.body.style.cursor = prevCursor
+        window.removeEventListener('mousemove', onMove)
+        window.removeEventListener('mouseup', onUp)
+        try {
+          localStorage.setItem(FILE_TREE_SPLIT_STORAGE_KEY, String(fileTreeSplitFractionRef.current))
+        } catch {
+          /* ignore */
+        }
+      }
+      window.addEventListener('mousemove', onMove)
+      window.addEventListener('mouseup', onUp)
+    },
+    [activePanel]
   )
 
   const runTerminalCommand = useCallback(
@@ -612,10 +709,13 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
         />
       </div>
       {!isCollapsed ? (
-        <div className="app-right-content">
+        <div className="app-right-content" ref={rightContentRef}>
           {activePanel === 'file' ? (
             <>
-              <div className="app-right-tree-panel">
+              <div
+                className="app-right-tree-panel"
+                style={{ flex: `0 0 ${fileTreeSplitFraction * 100}%` }}
+              >
                 <div className="app-right-tree-wrap" ref={treeContainerRef}>
                   {fileTreeLoading ? (
                     <div className="app-right-tree-loading">
@@ -658,6 +758,13 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
                   )}
                 </div>
               </div>
+              <div
+                className={`app-right-file-split-handle ${fileSplitDragging ? 'is-active' : ''}`}
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="调整文件树与预览区宽度"
+                onMouseDown={onFileSplitterMouseDown}
+              />
               <div className="app-right-preview-wrap">
                 <div className="app-right-preview-header">
                   <Text strong>{filePreviewPath || '文件内容'}</Text>
