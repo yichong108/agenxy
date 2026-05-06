@@ -21,14 +21,12 @@ import {
   deleteSession,
   getSessionWorkspaceId,
   purgeWorkspaceSessions,
-  removeWorkspaceSessions,
   touchSession
 } from '@/main/sessions'
 import { installSkillFromMarketItem } from '@/main/skills-market/install'
 import {
   getActiveWorkspace,
   getActiveWorkspaceId,
-  getDefaultWorkspaceId,
   getSettings,
   getSessionMessages,
   getUiState,
@@ -357,12 +355,7 @@ function registerIpc(): void {
     return next
   })
   ipcMain.handle(IPC.WORKSPACE_REMOVE, (_e, workspaceId: string) => {
-    const defaultWorkspaceId = getDefaultWorkspaceId()
-    if (workspaceId === defaultWorkspaceId) {
-      purgeWorkspaceSessions(defaultWorkspaceId)
-    } else {
-      removeWorkspaceSessions(workspaceId, defaultWorkspaceId)
-    }
+    purgeWorkspaceSessions(workspaceId)
     const ok = removeWorkspace(workspaceId)
     if (ok) {
       broadcastWorkspaces()

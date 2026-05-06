@@ -473,7 +473,9 @@ export function removeWorkspace(workspaceId: string): boolean {
   if (next.length === list.length) return false
 
   const finalList =
-    workspaceId === DEFAULT_WORKSPACE_ID ? next : ensureDefaultWorkspace(next)
+    workspaceId === DEFAULT_WORKSPACE_ID || next.length === 0
+      ? next
+      : ensureDefaultWorkspace(next)
   store.set('workspaces', finalList)
 
   const active = store.get('activeWorkspaceId')
