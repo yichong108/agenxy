@@ -444,11 +444,16 @@ function registerIpc(): void {
    * @returns 发送结果
    */
   ipcMain.handle(IPC.AGENT_SEND, async (_e, sessionId: string, text: string) => {
+    mainLog.info(`[AGENT_SEND] sessionId: ${sessionId}, text: ${text}`)
+    
     if (!text.trim()) return { ok: false as const, error: '空消息' }
     const onQueued = (pos: number) => {
       if (pos > 0) {
+        mainLog.info(`[AGENT_SEND] onQueued: ${pos}`)
         const ev: StreamEvent = { type: 'queued', sessionId, position: pos }
         mainWindow?.webContents.send(EVENTS.AGENT_STREAM, ev)
+      } else {
+        mainLog.info(`[AGENT_SEND] onQueued: ${pos}`)
       }
     }
     try {
@@ -464,6 +469,8 @@ function registerIpc(): void {
       // 返回发送结果
       return { ok: true as const }
     } catch (err) {
+      mainLog.error(`[AGENT_SEND] error: ${err}`)
+
       const message = err instanceof Error ? err.message : String(err)
       mainWindow?.webContents.send(EVENTS.AGENT_STREAM, {
         type: 'error',

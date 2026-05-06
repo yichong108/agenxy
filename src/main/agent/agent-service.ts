@@ -1,4 +1,6 @@
-﻿import { AIMessage, HumanMessage, SystemMessage, type BaseMessage } from '@langchain/core/messages'
+﻿import { inspect } from 'node:util'
+
+import { AIMessage, HumanMessage, SystemMessage, type BaseMessage } from '@langchain/core/messages'
 import { tool } from '@langchain/core/tools'
 import { createReactAgent } from '@langchain/langgraph/prebuilt'
 import { ChatOpenAI } from '@langchain/openai'
@@ -74,6 +76,7 @@ function getQueue(settings: AppSettings): ConcurrencyQueue {
   return agentQueue
 }
 
+// send event to renderer
 function emit(event: StreamEvent): void {
   if (!webContents || webContents.isDestroyed()) return
   webContents.send(EVENTS.AGENT_STREAM, event)
@@ -300,6 +303,16 @@ async function invokeChatOnlyStream(
   return streamedChars
 }
 
+/**
+ * invoke agent with guard
+ *
+ * @param agent - the agent to invoke
+ * @param messages - the messages to invoke the agent with
+ * @param ac - the abort controller
+ * @param onToken - the callback to invoke when a token is received
+ * @param options - the options for the agent invocation
+ * @returns the result of the agent invocation
+ */
 async function invokeAgentWithGuard(
   agent: ReturnType<typeof createReactAgent>,
   messages: BaseMessage[],
@@ -316,7 +329,10 @@ async function invokeAgentWithGuard(
     }, timeoutMs)
   })
   try {
-    return await Promise.race([
+    agentLog.info(`[invokeAgentWithGuard] options: ${JSON.stringify(options, null, 2)}`)
+    agentLog.info(`[invokeAgentWithGuard] messages: ${JSON.stringify(messages, null, 2)}`)
+
+    const result = await Promise.race([
       agent.invoke(
         { messages },
         {
@@ -333,6 +349,18 @@ async function invokeAgentWithGuard(
       ),
       timeoutPromise
     ])
+    let resultStr = inspect(result, {
+      depth: 8,
+      maxArrayLength: 50,
+      colors: false,
+      breakLength: 100
+    })
+    const maxLog = 100_000
+    if (resultStr.length > maxLog) {
+      resultStr = resultStr.slice(0, maxLog) + '\n...[invokeAgentWithGuard result truncated]'
+    }
+    agentLog.info(`[invokeAgentWithGuard] result:\n${resultStr}`)
+    return result
   } finally {
     if (timer) {
       clearTimeout(timer)
@@ -732,12 +760,16 @@ export async function runUserMessage(
   onQueued: (pos: number) => void
 ): Promise<void> {
   const settings = getSettings()
+  agentLog.info(`settings: ${JSON.stringify(settings, null, 2)}`)
+
   const existingSession = sessions.get(sessionId)
   if (!existingSession) {
     emit({ type: 'error', sessionId, message: '会话不存在或已失效' })
     return
   }
   const workspace = getWorkspaceById(existingSession.workspaceId)
+  agentLog.info(`[runUserMessage] workspace: ${workspace?.path}`)
+
   const root = workspace?.path?.trim() || ''
   if (!root) {
     emit({ type: 'error', sessionId, message: '当前会话所属工作区未绑定目录，请先绑定路径' })
@@ -751,6 +783,7 @@ export async function runUserMessage(
     onQueued(0) // 0 = 已获执行权（不展示排队条）
     const session = sessions.get(sessionId)
     if (!session) {
+      agentLog.error(`[runUserMessage] session not found for sessionId: ${sessionId}`)
       emit({ type: 'error', sessionId, message: '会话不存在或已失效' })
       return
     }
@@ -760,12 +793,12 @@ export async function runUserMessage(
     const runStartedAt = Date.now()
     session.controller = ac
 
+    agentLog.info(
+      `[runUserMessage] run-start: ${runId}, traceId: ${traceId}, sessionId: ${sessionId}, timestampMs: ${runStartedAt}`
+    )
     emit({ type: 'run-start', sessionId, runId, traceId, timestampMs: runStartedAt })
 
     const onTool = (e: ToolTimelineEvent) => {
-      if (e.kind === 'tool' && e.status === 'start') {
-        hasToolCall = true
-      }
       emit({
         type: 'tool',
         sessionId,
@@ -780,8 +813,6 @@ export async function runUserMessage(
       })
     }
     const fileToolHint = parseFileToolHint(userText)
-    const mustUseToolFirst = !!fileToolHint
-    let hasToolCall = false
     const recursionLimit = settings.maxAgentLoopSteps
     const invokeTimeoutMs = settings.agentRunTimeoutMs
     const batcher = new StreamBatcher(settings.streamFlushMs, settings.streamFlushChars, (t) => {
@@ -827,17 +858,16 @@ export async function runUserMessage(
 
         const model = createLanguageModel(settings).bindTools(tools as never[])
         const baseSystem = buildSystemPrompt(root, settings)
-        const fileToolInstruction =
-          mustUseToolFirst && fileToolHint
-            ? fileToolHint.type === 'read'
-              ? `当前用户请求属于文件读取。你必须先调用 read_file 工具后再给最终回答。可参考路径: ${fileToolHint.pathHint}`
-              : `当前用户请求属于目录查看。你必须先调用 list_dir 工具后再给最终回答。可参考路径: ${fileToolHint.pathHint}，可参考 depth: ${fileToolHint.depthHint ?? 2}`
-            : ''
+        const fileToolInstruction = fileToolHint
+          ? fileToolHint.type === 'read'
+            ? `（可选上下文）用户消息可能涉及读取文件；需要时请自行调用 read_file，路径可参考: ${fileToolHint.pathHint}。是否调用由你根据意图决定。`
+            : `（可选上下文）用户消息可能涉及浏览目录；需要时请自行调用 list_dir，路径可参考: ${fileToolHint.pathHint}，depth 可参考: ${fileToolHint.depthHint ?? 2}。是否调用由你根据意图决定。`
+          : ''
         const runPrompt = [baseSystem, skillHint, mcpContextHints, fileToolInstruction]
           .filter(Boolean)
           .join('\n\n')
 
-        agentLog.debug('runPrompt', runPrompt)
+        agentLog.info(`[runUserMessage] runPrompt: ${JSON.stringify(runPrompt, null, 2)}`)
 
         // 创建Agent
         const agent = createReactAgent({
@@ -862,26 +892,6 @@ export async function runUserMessage(
         const maybeMessages = (result as { messages?: BaseMessage[] }).messages
         if (Array.isArray(maybeMessages) && maybeMessages.length > 0) {
           session.messages = maybeMessages
-        }
-        if (mustUseToolFirst && !hasToolCall) {
-          session.messages.push(
-            new HumanMessage(
-              fileToolHint?.type === 'read'
-                ? `请先调用 read_file 读取文件后再回答。参考路径: ${fileToolHint.pathHint}`
-                : `请先调用 list_dir 列出目录后再回答。参考路径: ${fileToolHint?.pathHint ?? '.'}`
-            )
-          )
-          const retryResult = await invokeAgentWithGuard(
-            agent,
-            session.messages,
-            ac,
-            onStreamToken,
-            agentInvokeOpts
-          )
-          const retryMessages = (retryResult as { messages?: BaseMessage[] }).messages
-          if (Array.isArray(retryMessages) && retryMessages.length > 0) {
-            session.messages = retryMessages
-          }
         }
       }
 
