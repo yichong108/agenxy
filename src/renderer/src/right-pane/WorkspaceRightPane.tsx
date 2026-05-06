@@ -5,10 +5,12 @@ import {
   FolderOutlined,
   RightOutlined
 } from '@ant-design/icons'
+import Editor, { loader } from '@monaco-editor/react'
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
 import { App as AntdApp, Button, Spin, Tag, Typography } from 'antd'
 import { getClassWithColor } from 'file-icons-js'
+import * as monaco from 'monaco-editor'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Tree, type NodeRendererProps } from 'react-arborist'
 
@@ -19,6 +21,7 @@ import '@xterm/xterm/css/xterm.css'
 import 'file-icons-js/css/style.css'
 
 const { Text } = Typography
+loader.config({ monaco })
 
 type FileTreeDataNode = {
   id: string
@@ -101,6 +104,57 @@ function longestCommonPrefix(values: string[]): string {
   return prefix
 }
 
+function inferMonacoLanguage(filePath: string): string {
+  const lowerPath = filePath.toLowerCase()
+  const fileName = lowerPath.split('/').pop() ?? lowerPath
+  if (fileName === 'dockerfile') return 'dockerfile'
+  if (fileName === '.gitignore') return 'plaintext'
+  if (fileName === '.env' || fileName.startsWith('.env.')) return 'shell'
+  const ext = fileName.includes('.') ? fileName.slice(fileName.lastIndexOf('.') + 1) : ''
+  if (!ext) return 'plaintext'
+  const languageMap: Record<string, string> = {
+    ts: 'typescript',
+    tsx: 'typescript',
+    js: 'javascript',
+    jsx: 'javascript',
+    mjs: 'javascript',
+    cjs: 'javascript',
+    json: 'json',
+    jsonc: 'json',
+    md: 'markdown',
+    markdown: 'markdown',
+    yml: 'yaml',
+    yaml: 'yaml',
+    html: 'html',
+    htm: 'html',
+    css: 'css',
+    scss: 'scss',
+    less: 'less',
+    xml: 'xml',
+    sh: 'shell',
+    bash: 'shell',
+    ps1: 'powershell',
+    py: 'python',
+    go: 'go',
+    rs: 'rust',
+    java: 'java',
+    c: 'c',
+    h: 'cpp',
+    cc: 'cpp',
+    cpp: 'cpp',
+    hpp: 'cpp',
+    cs: 'csharp',
+    php: 'php',
+    sql: 'sql',
+    toml: 'ini',
+    ini: 'ini',
+    conf: 'ini',
+    txt: 'plaintext',
+    log: 'plaintext'
+  }
+  return languageMap[ext] ?? 'plaintext'
+}
+
 type WorkspaceRightPaneProps = {
   bridge: Window['bridge']
   activeWorkspaceId: string | null
@@ -141,6 +195,7 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
   const terminalHistoryRef = useRef<string[]>([])
   const terminalHistoryIndexRef = useRef<number | null>(null)
   const terminalHistoryDraftRef = useRef('')
+  const filePreviewLanguage = useMemo(() => inferMonacoLanguage(filePreviewPath), [filePreviewPath])
 
   const writeTerminalPrompt = useCallback((term: Terminal) => {
     term.write(`\x1b[38;2;102;102;102m${terminalPromptPrefixRef.current}\x1b[0m `)
@@ -520,7 +575,25 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
                 ) : filePreviewError ? (
                   <Text type="danger">{filePreviewError}</Text>
                 ) : filePreviewContent ? (
-                  <pre className="app-right-preview-code">{filePreviewContent}</pre>
+                  <div className="app-right-preview-editor">
+                    <Editor
+                      path={filePreviewPath || undefined}
+                      language={filePreviewLanguage}
+                      value={filePreviewContent}
+                      theme="vs"
+                      options={{
+                        readOnly: true,
+                        automaticLayout: true,
+                        minimap: { enabled: false },
+                        lineNumbers: 'on',
+                        wordWrap: 'on',
+                        renderWhitespace: 'selection',
+                        scrollBeyondLastLine: false,
+                        contextmenu: false,
+                        fontSize: 12
+                      }}
+                    />
+                  </div>
                 ) : (
                   <Text type="secondary" className="app-right-empty-tip">
                     点击文件树中的文件即可预览内容
