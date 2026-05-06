@@ -439,12 +439,12 @@
 
 .app-message-card.is-user {
   border: 1px solid #dddddd;
-  background: #f4f4f4;
+  background: #ffffff;
 }
 
 .app-message-card.is-assistant {
-  border: 1px solid #e4e4e4;
-  background: var(--aw-color-bg-container);
+  border: none;
+  background: transparent;
 }
 
 .app-message-content {
