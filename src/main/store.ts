@@ -39,7 +39,7 @@ type StoreSchema = {
 const DEFAULT_WORKSPACE_ID = 'workspace-default'
 
 const store = new Store<StoreSchema>({
-  name: 'agent-weave',
+  name: 'trou',
   defaults: {
     workspaces: [],
     activeWorkspaceId: null,
