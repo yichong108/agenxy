@@ -1,7 +1,8 @@
-import { Alert, Button, Modal, Table, Tabs, Tag, Tooltip } from 'antd'
+import { Alert, App as AntdApp, Button, Modal, Table, Tabs, Tag, Tooltip } from 'antd'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { SkillsMarketPanel } from '@/renderer/src/skills-market/SkillsMarketPanel'
-import type { SkillUiEntry, SkillsMarketCatalogItem } from '@/shared/ipc'
+import type { SkillUiEntry, SkillsMarketCatalogItem, SkillsRuntimeState } from '@/shared/ipc'
 
 function skillKindLabel(kind: SkillUiEntry['kind']): string {
   switch (kind) {
@@ -18,29 +19,119 @@ function skillKindLabel(kind: SkillUiEntry['kind']): string {
   }
 }
 
-type SkillsHubModalProps = {
+export type SkillsHubModalProps = {
   open: boolean
-  skillsStateLoading: boolean
-  installedSkillRows: SkillUiEntry[]
-  installedMarketFolderIds: Set<string>
-  skillsMarketInstallingId: string | null
   onClose: () => void
-  onReloadSkillsState: () => void
-  onInstallMarketSkill: (item: SkillsMarketCatalogItem) => void
-  onUninstallSkillRow: (row: SkillUiEntry) => void
 }
 
-export function SkillsHubModal({
-  open,
-  skillsStateLoading,
-  installedSkillRows,
-  installedMarketFolderIds,
-  skillsMarketInstallingId,
-  onClose,
-  onReloadSkillsState,
-  onInstallMarketSkill,
-  onUninstallSkillRow
-}: SkillsHubModalProps) {
+export function SkillsHubModal({ open, onClose }: SkillsHubModalProps) {
+  const { message: msgApi, modal: modalApi } = AntdApp.useApp()
+  const bridge = window.bridge
+
+  const [skillsState, setSkillsState] = useState<SkillsRuntimeState | null>(null)
+  const [skillsStateLoading, setSkillsStateLoading] = useState(false)
+  const [skillsMarketInstallingId, setSkillsMarketInstallingId] = useState<string | null>(null)
+
+  const installedSkillRows = useMemo(() => {
+    if (!skillsState) return []
+    return [
+      ...skillsState.builtinCode,
+      ...skillsState.builtinPackaged,
+      ...skillsState.installedMarket,
+      ...skillsState.legacyUser
+    ]
+  }, [skillsState])
+
+  const installedMarketFolderIds = useMemo(() => {
+    const ids = new Set<string>()
+    if (!skillsState) return ids
+    for (const row of skillsState.installedMarket) {
+      if (row.marketFolderId) ids.add(row.marketFolderId)
+    }
+    return ids
+  }, [skillsState])
+
+  const reloadSkillsState = useCallback(async () => {
+    setSkillsStateLoading(true)
+    try {
+      const next = await bridge.getSkillsState()
+      setSkillsState(next)
+    } finally {
+      setSkillsStateLoading(false)
+    }
+  }, [bridge])
+
+  useEffect(() => {
+    if (!open) return
+    void reloadSkillsState()
+  }, [open, reloadSkillsState])
+
+  const installMarketSkill = useCallback(
+    async (item: SkillsMarketCatalogItem) => {
+      setSkillsMarketInstallingId(item.id)
+      try {
+        const r = await bridge.installSkillFromMarket(item)
+        if (r.ok) {
+          msgApi.success(`已安装「${item.name}」`)
+          await reloadSkillsState()
+        } else {
+          msgApi.error(r.error)
+        }
+      } finally {
+        setSkillsMarketInstallingId(null)
+      }
+    },
+    [bridge, msgApi, reloadSkillsState]
+  )
+
+  const uninstallSkillRow = useCallback(
+    async (row: SkillUiEntry) => {
+      if (row.kind === 'market') {
+        const folderId = row.marketFolderId
+        if (!folderId) return
+        modalApi.confirm({
+          title: '卸载市场技能？',
+          content: `将删除目录「market/${folderId}」及其中的文件。`,
+          centered: true,
+          okButtonProps: { danger: true },
+          onOk: async () => {
+            const r = await bridge.uninstallSkill({ kind: 'market', folderId })
+            if (r.ok) {
+              msgApi.success('已卸载')
+              await reloadSkillsState()
+            } else {
+              msgApi.error(r.error)
+            }
+          }
+        })
+        return
+      }
+      if (row.kind === 'legacy') {
+        const rel = row.legacyFolderRelative
+        if (!rel) {
+          msgApi.warning('该条目位于兼容根目录，无法按文件夹卸载；请手动编辑 userData/skills。')
+          return
+        }
+        modalApi.confirm({
+          title: '卸载兼容技能目录？',
+          content: `将删除「skills/${rel}」。`,
+          centered: true,
+          okButtonProps: { danger: true },
+          onOk: async () => {
+            const r = await bridge.uninstallSkill({ kind: 'legacy', legacyFolderRelative: rel })
+            if (r.ok) {
+              msgApi.success('已卸载')
+              await reloadSkillsState()
+            } else {
+              msgApi.error(r.error)
+            }
+          }
+        })
+      }
+    },
+    [bridge, modalApi, msgApi, reloadSkillsState]
+  )
+
   return (
     <Modal
       title="技能与市场"
@@ -53,7 +144,7 @@ export function SkillsHubModal({
         <Button key="close" onClick={onClose}>
           关闭
         </Button>,
-        <Button key="reload-installed" loading={skillsStateLoading} onClick={onReloadSkillsState}>
+        <Button key="reload-installed" loading={skillsStateLoading} onClick={() => void reloadSkillsState()}>
           刷新已安装
         </Button>
       ]}
@@ -131,7 +222,7 @@ export function SkillsHubModal({
                         }
                         if (row.kind === 'market') {
                           return (
-                            <Button size="small" danger onClick={() => onUninstallSkillRow(row)}>
+                            <Button size="small" danger onClick={() => void uninstallSkillRow(row)}>
                               卸载
                             </Button>
                           )
@@ -149,7 +240,7 @@ export function SkillsHubModal({
                               size="small"
                               danger
                               disabled={!canLegacy}
-                              onClick={() => onUninstallSkillRow(row)}
+                              onClick={() => void uninstallSkillRow(row)}
                             >
                               卸载
                             </Button>
@@ -169,7 +260,7 @@ export function SkillsHubModal({
               <SkillsMarketPanel
                 installedMarketFolderIds={installedMarketFolderIds}
                 installingId={skillsMarketInstallingId}
-                onInstall={onInstallMarketSkill}
+                onInstall={(item) => void installMarketSkill(item)}
               />
             )
           }

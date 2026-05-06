@@ -1,36 +1,115 @@
-import { Form, Input, InputNumber, Modal, Select, Switch } from 'antd'
-import type { FormInstance } from 'antd'
+import { App as AntdApp, Form, Input, InputNumber, Modal, Select, Switch } from 'antd'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
-import type { ModelProviderId, SettingsFormValues } from '@/shared/ipc'
+import {
+  applySettingsForm,
+  defaultProviderProfiles,
+  defaultSettings,
+  mergeFormIntoProviderProfiles,
+  settingsToFormValues,
+  type AppSettings,
+  type ModelProviderId,
+  type ProviderProfile,
+  type SettingsFormValues
+} from '@/shared/ipc'
 
-type SettingsModalProps = {
-  open: boolean
-  form: FormInstance<SettingsFormValues>
-  defaultFormValues: SettingsFormValues
-  onSave: () => void
-  onCancel: () => void
-  onProviderChange: (next: ModelProviderId) => void
+const DEFAULT_SETTINGS: AppSettings = JSON.parse(JSON.stringify(defaultSettings))
+const DEFAULT_FORM_VALUES: SettingsFormValues = settingsToFormValues(DEFAULT_SETTINGS)
+
+function cloneProviderProfiles(
+  p: Record<ModelProviderId, ProviderProfile>
+): Record<ModelProviderId, ProviderProfile> {
+  return JSON.parse(JSON.stringify(p)) as Record<ModelProviderId, ProviderProfile>
 }
 
-export function SettingsModal({
-  open,
-  form,
-  defaultFormValues,
-  onSave,
-  onCancel,
-  onProviderChange
-}: SettingsModalProps) {
+export type SettingsModalProps = {
+  open: boolean
+  onClose: () => void
+}
+
+export function SettingsModal({ open, onClose }: SettingsModalProps) {
+  const { message: msgApi } = AntdApp.useApp()
+  const bridge = window.bridge
+
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
+  const [form] = Form.useForm<SettingsFormValues>()
+  const profilesDraftRef =
+    useRef<Record<ModelProviderId, ProviderProfile>>(defaultProviderProfiles())
+  const settingsProviderRef = useRef<ModelProviderId>('deepseek')
+
+  const hydrateFromSettings = useCallback(
+    (s: AppSettings) => {
+      setSettings(s)
+      profilesDraftRef.current = cloneProviderProfiles(s.providerProfiles)
+      settingsProviderRef.current = s.provider
+      form.setFieldsValue(settingsToFormValues(s))
+    },
+    [form]
+  )
+
+  useEffect(() => {
+    if (!open) return
+    void bridge.getSettings().then(hydrateFromSettings)
+  }, [bridge, hydrateFromSettings, open])
+
+  useEffect(() => {
+    if (!open) return
+    return bridge.onSettingsSync((s) => {
+      hydrateFromSettings(s)
+    })
+  }, [bridge, hydrateFromSettings, open])
+
+  const onProviderChange = useCallback(
+    (next: ModelProviderId) => {
+      const prev = settingsProviderRef.current
+      if (prev === next) return
+      const cur = form.getFieldsValue(['baseUrl', 'model', 'apiKey', 'enableTools']) as Pick<
+        ProviderProfile,
+        'baseUrl' | 'model' | 'apiKey' | 'enableTools'
+      >
+      profilesDraftRef.current[prev] = {
+        ...profilesDraftRef.current[prev],
+        baseUrl: String(cur.baseUrl ?? ''),
+        model: String(cur.model ?? ''),
+        apiKey: String(cur.apiKey ?? ''),
+        enableTools: prev === 'deepseek' ? true : Boolean(cur.enableTools)
+      }
+      settingsProviderRef.current = next
+      const nextProf = profilesDraftRef.current[next]
+      form.setFieldsValue({
+        provider: next,
+        baseUrl: nextProf.baseUrl,
+        model: nextProf.model,
+        apiKey: nextProf.apiKey,
+        enableTools: next === 'deepseek' ? true : nextProf.enableTools
+      })
+    },
+    [form]
+  )
+
+  const saveSettings = useCallback(async () => {
+    const v = await form.validateFields()
+    const nextProfiles = mergeFormIntoProviderProfiles(profilesDraftRef.current, v)
+    const next = applySettingsForm(settings, v, nextProfiles)
+    const saved = await bridge.setSettings(next)
+    profilesDraftRef.current = cloneProviderProfiles(saved.providerProfiles)
+    settingsProviderRef.current = saved.provider
+    setSettings(saved)
+    onClose()
+    msgApi.success('已保存（Secret 仅保存在本机主进程）')
+  }, [bridge, form, msgApi, onClose, settings])
+
   return (
     <Modal
       title="设置（模型与密钥）"
       open={open}
-      onOk={onSave}
-      onCancel={onCancel}
+      onOk={() => void saveSettings()}
+      onCancel={onClose}
       width={520}
       destroyOnHidden
       centered
     >
-      <Form form={form} layout="vertical" initialValues={defaultFormValues}>
+      <Form form={form} layout="vertical" initialValues={DEFAULT_FORM_VALUES}>
         <Form.Item name="provider" label="提供方" rules={[{ required: true }]}>
           <Select
             options={[

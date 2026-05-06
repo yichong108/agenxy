@@ -8,347 +8,212 @@ import {
   SettingOutlined,
   ShopOutlined
 } from '@ant-design/icons'
-import { Button, Dropdown, Space, Typography } from 'antd'
-import type { FormInstance } from 'antd'
-import type { DragEvent, MouseEvent } from 'react'
-
-import type {
-  McpServerEntry,
-  McpWarmupReport,
-  ModelProviderId,
-  SessionInfo,
-  SettingsFormValues,
-  SkillUiEntry,
-  SkillsMarketCatalogItem,
-  WorkspaceInfo
-} from '@/shared/ipc'
+import { Button, Dropdown, Input, Modal, Space, Typography } from 'antd'
+import type { DragEvent } from 'react'
 
 import { McpHubModal, SettingsModal, SkillsHubModal } from './modals'
+import { useWorkspaceLeftPane } from './useWorkspaceLeftPane'
 
 const { Text } = Typography
 
-type WorkspaceDropMarker = {
-  workspaceId: string
-  placement: 'before' | 'after'
+export type WorkspaceLeftPaneProps = {
+  /** 从侧栏变更当前会话后，主区域按需强制拉取消息（例如移除侧栏会话时） */
+  ensureSessionMessages?: (sessionId: string, force?: boolean) => void
 }
 
-type WorkspaceLeftPaneProps = {
-  sidebarWidth: number
-  isSidebarCollapsed: boolean
-  isSidebarResizing: boolean
-  activeWorkspaceId: string | null
-  activeSessionId: string | null
-  workspaces: WorkspaceInfo[]
-  /** 工作区树为空时的说明（由上层区分「无任何工作区」与「仅 Home 且无会话」等） */
-  workspaceTreeEmptyMessage: string
-  sessionsByWorkspace: Record<string, SessionInfo[]>
-  expandedWorkspaceIds: Set<string>
-  draggingWorkspaceId: string | null
-  workspaceDropMarker: WorkspaceDropMarker | null
-  onOpenMcpHub: () => void
-  onOpenSkillsHub: () => void
-  onOpenSettings: () => void
-  onOpenBlankConversation: () => void
-  onToggleWorkspace: (workspaceId: string) => void
-  onWorkspaceDragStart: (event: DragEvent<HTMLDivElement>, workspaceId: string) => void
-  onWorkspaceDragOver: (event: DragEvent<HTMLDivElement>, workspaceId: string) => void
-  onWorkspaceDrop: (event: DragEvent<HTMLDivElement>, workspaceId: string) => void
-  onWorkspaceDragEnd: () => void
-  onOpenBlankConversationInWorkspace: (workspaceId: string) => void
-  onSessionClick: (workspaceId: string, sessionId: string) => void
-  onRenameSession: (session: SessionInfo) => void
-  onDeleteSession: (session: SessionInfo) => void
-  /** 从左侧列表隐藏会话（不删除数据） */
-  onRemoveSessionFromSidebar?: (workspaceId: string, session: SessionInfo) => void
-  /** 多工作区模式下：从侧边栏移除工作区（该工作区下会话一律从本机删除，不并入其他工作区） */
-  onRemoveWorkspaceFromSidebar?: (workspace: WorkspaceInfo) => void
-  onPickWorkspace: () => void
-  onSidebarResizeStart: (event: MouseEvent<HTMLDivElement>) => void
-  onSidebarCollapseToggle: () => void
-  mcpOpen: boolean
-  mcpDraft: McpServerEntry[]
-  mcpJsonImportText: string
-  mcpWarmupSummary: string | null
-  mcpWarmup: McpWarmupReport | null
-  mcpWarmupBusy: boolean
-  mcpProbingId: string | null
-  onCloseMcpHub: () => void
-  onSaveMcpServers: () => void
-  onRerunMcpWarmup: () => void
-  onMcpJsonImportTextChange: (text: string) => void
-  onImportMcpFromJsonText: () => void
-  onOpenMcpAdd: () => void
-  onSetMcpEnabled: (id: string, checked: boolean) => void
-  onProbeMcpRow: (row: McpServerEntry) => void
-  onOpenMcpEdit: (row: McpServerEntry) => void
-  onDeleteMcpRow: (id: string) => void
-  onOpenExternalWithConfirm: (url: string) => void
-  settingsOpen: boolean
-  settingsForm: FormInstance<SettingsFormValues>
-  defaultSettingsFormValues: SettingsFormValues
-  onSaveSettings: () => void
-  onCloseSettings: () => void
-  onSettingsProviderChange: (next: ModelProviderId) => void
-  skillsOpen: boolean
-  skillsStateLoading: boolean
-  installedSkillRows: SkillUiEntry[]
-  installedMarketFolderIds: Set<string>
-  skillsMarketInstallingId: string | null
-  onCloseSkillsHub: () => void
-  onReloadSkillsState: () => void
-  onInstallMarketSkill: (item: SkillsMarketCatalogItem) => void
-  onUninstallSkillRow: (row: SkillUiEntry) => void
-}
+export function WorkspaceLeftPane({ ensureSessionMessages }: WorkspaceLeftPaneProps) {
+  const p = useWorkspaceLeftPane({ ensureSessionMessages })
 
-export function WorkspaceLeftPane({
-  sidebarWidth,
-  isSidebarCollapsed,
-  isSidebarResizing,
-  activeWorkspaceId,
-  activeSessionId,
-  workspaces,
-  workspaceTreeEmptyMessage,
-  sessionsByWorkspace,
-  expandedWorkspaceIds,
-  draggingWorkspaceId,
-  workspaceDropMarker,
-  onOpenMcpHub,
-  onOpenSkillsHub,
-  onOpenSettings,
-  onOpenBlankConversation,
-  onToggleWorkspace,
-  onWorkspaceDragStart,
-  onWorkspaceDragOver,
-  onWorkspaceDrop,
-  onWorkspaceDragEnd,
-  onOpenBlankConversationInWorkspace,
-  onSessionClick,
-  onRenameSession,
-  onDeleteSession,
-  onRemoveSessionFromSidebar,
-  onRemoveWorkspaceFromSidebar,
-  onPickWorkspace,
-  onSidebarResizeStart,
-  onSidebarCollapseToggle,
-  mcpOpen,
-  mcpDraft,
-  mcpJsonImportText,
-  mcpWarmupSummary,
-  mcpWarmup,
-  mcpWarmupBusy,
-  mcpProbingId,
-  onCloseMcpHub,
-  onSaveMcpServers,
-  onRerunMcpWarmup,
-  onMcpJsonImportTextChange,
-  onImportMcpFromJsonText,
-  onOpenMcpAdd,
-  onSetMcpEnabled,
-  onProbeMcpRow,
-  onOpenMcpEdit,
-  onDeleteMcpRow,
-  onOpenExternalWithConfirm,
-  settingsOpen,
-  settingsForm,
-  defaultSettingsFormValues,
-  onSaveSettings,
-  onCloseSettings,
-  onSettingsProviderChange,
-  skillsOpen,
-  skillsStateLoading,
-  installedSkillRows,
-  installedMarketFolderIds,
-  skillsMarketInstallingId,
-  onCloseSkillsHub,
-  onReloadSkillsState,
-  onInstallMarketSkill,
-  onUninstallSkillRow
-}: WorkspaceLeftPaneProps) {
   return (
     <>
-      <div className="app-sidebar" style={{ width: `${sidebarWidth}px` }}>
-        <div className={`app-sidebar-inner ${isSidebarCollapsed ? 'is-collapsed' : ''}`}>
+      <div className="app-sidebar" style={{ width: `${p.sidebarWidth}px` }}>
+        <div className={`app-sidebar-inner ${p.isSidebarCollapsed ? 'is-collapsed' : ''}`}>
           <div className="app-sidebar-header">
             <Button
               type="text"
-              icon={isSidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-              onClick={onSidebarCollapseToggle}
+              icon={p.isSidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              onClick={p.handleSidebarCollapseToggle}
               className="app-settings-btn app-sidebar-collapse-btn"
-              title={isSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
-              aria-label={isSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
+              title={p.isSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
+              aria-label={p.isSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
             />
-            {!isSidebarCollapsed && (
+            {!p.isSidebarCollapsed && (
               <Space size={0}>
                 <Button
                   type="text"
                   icon={<ApiOutlined />}
-                  onClick={onOpenMcpHub}
+                  onClick={p.openMcpHub}
                   className="app-settings-btn"
                   title="MCP 与扩展"
                 />
                 <Button
                   type="text"
                   icon={<ShopOutlined />}
-                  onClick={onOpenSkillsHub}
+                  onClick={p.openSkillsHub}
                   className="app-settings-btn"
                   title="技能与市场"
                 />
                 <Button
                   type="text"
                   icon={<SettingOutlined />}
-                  onClick={onOpenSettings}
+                  onClick={p.openSettings}
                   className="app-settings-btn"
                   title="设置"
                 />
               </Space>
             )}
           </div>
-          {!isSidebarCollapsed && (
+          {!p.isSidebarCollapsed && (
             <div className="app-new-session-wrap">
               <Button
                 block
                 type="primary"
                 icon={<PlusOutlined />}
                 className="app-new-session-btn"
-                onClick={onOpenBlankConversation}
+                onClick={p.openBlankConversationForActiveWorkspace}
               >
                 新会话
               </Button>
             </div>
           )}
-          {!isSidebarCollapsed && (
+          {!p.isSidebarCollapsed && (
             <div className="app-workspace-tree">
-              {workspaces.length === 0 ? (
+              {p.workspacesForSidebar.length === 0 ? (
                 <div className="app-workspace-tree-empty" role="status">
-                  <Text type="secondary">{workspaceTreeEmptyMessage}</Text>
+                  <Text type="secondary">{p.workspaceTreeEmptyMessage}</Text>
                 </div>
               ) : (
-                workspaces.map((workspace) => {
-                  const isActiveWorkspace = workspace.id === activeWorkspaceId
-                  const isExpanded = expandedWorkspaceIds.has(workspace.id)
+                p.workspacesForSidebar.map((workspace) => {
+                  const isActiveWorkspace = workspace.id === p.activeWorkspaceId
+                  const isExpanded = p.expandedWorkspaceIds.has(workspace.id)
                   const dropMarkerPlacement =
-                    !!draggingWorkspaceId &&
-                    draggingWorkspaceId !== workspace.id &&
-                    workspaceDropMarker?.workspaceId === workspace.id
-                      ? workspaceDropMarker.placement
+                    !!p.draggingWorkspaceId &&
+                    p.draggingWorkspaceId !== workspace.id &&
+                    p.workspaceDropMarker?.workspaceId === workspace.id
+                      ? p.workspaceDropMarker.placement
                       : null
-                  const workspaceSessions = sessionsByWorkspace[workspace.id] || []
+                  const workspaceSessions = p.sessionsByWorkspaceForSidebar[workspace.id] || []
                   return (
                     <div
                       key={workspace.id}
                       className={`app-workspace-node ${isActiveWorkspace ? 'is-active' : ''} ${dropMarkerPlacement === 'before' ? 'is-drop-before' : ''} ${dropMarkerPlacement === 'after' ? 'is-drop-after' : ''}`}
                     >
-                    <div
-                      className="app-workspace-node-header is-draggable"
-                      draggable
-                      onDragStart={(event) => onWorkspaceDragStart(event, workspace.id)}
-                      onDragOver={(event) => onWorkspaceDragOver(event, workspace.id)}
-                      onDrop={(event) => void onWorkspaceDrop(event, workspace.id)}
-                      onDragEnd={onWorkspaceDragEnd}
-                    >
-                      <button
-                        type="button"
-                        className="app-workspace-chevron-btn"
-                        aria-label={isExpanded ? '收起工作区会话' : '展开工作区会话'}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          onToggleWorkspace(workspace.id)
-                        }}
+                      <div
+                        className="app-workspace-node-header is-draggable"
+                        draggable
+                        onDragStart={(event: DragEvent<HTMLDivElement>) =>
+                          p.handleWorkspaceDragStart(event, workspace.id)
+                        }
+                        onDragOver={(event: DragEvent<HTMLDivElement>) =>
+                          p.handleWorkspaceDragOver(event, workspace.id)
+                        }
+                        onDrop={(event: DragEvent<HTMLDivElement>) =>
+                          void p.handleWorkspaceDrop(event, workspace.id)
+                        }
+                        onDragEnd={p.handleWorkspaceDragEnd}
                       >
-                        <RightOutlined
-                          className={`app-workspace-chevron ${isExpanded ? 'is-open' : ''}`}
-                          aria-hidden="true"
-                        />
-                      </button>
-                      {onRemoveWorkspaceFromSidebar ? (
-                        <Dropdown
-                          menu={{
-                            items: [
-                              {
-                                key: 'remove-from-sidebar',
-                                label: '从侧边栏移除',
-                                onClick: () => onRemoveWorkspaceFromSidebar(workspace)
-                              }
-                            ]
+                        <button
+                          type="button"
+                          className="app-workspace-chevron-btn"
+                          aria-label={isExpanded ? '收起工作区会话' : '展开工作区会话'}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            p.handleWorkspaceToggle(workspace.id)
                           }}
-                          trigger={['contextMenu']}
                         >
-                          <span className="app-workspace-name-btn" role="presentation">
-                            <Text className="app-workspace-name">{workspace.name}</Text>
-                          </span>
-                        </Dropdown>
-                      ) : (
-                        <span className="app-workspace-name-btn">
-                          <Text className="app-workspace-name">{workspace.name}</Text>
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        className="app-workspace-add-session-btn"
-                        aria-label={`在${workspace.name}下打开空白对话`}
-                        title="空白对话"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          onOpenBlankConversationInWorkspace(workspace.id)
-                        }}
-                      >
-                        <PlusOutlined />
-                      </button>
-                    </div>
-                    {isExpanded && (
-                      <div className="app-session-sublist">
-                        {workspaceSessions.map((session) => (
+                          <RightOutlined
+                            className={`app-workspace-chevron ${isExpanded ? 'is-open' : ''}`}
+                            aria-hidden="true"
+                          />
+                        </button>
+                        {p.handleRemoveWorkspaceFromSidebar ? (
                           <Dropdown
-                            key={session.id}
                             menu={{
                               items: [
                                 {
-                                  key: 'rename',
-                                  label: '重命名',
-                                  onClick: () => onRenameSession(session)
-                                },
-                                ...(onRemoveSessionFromSidebar
-                                  ? [
-                                      {
-                                        key: 'remove-from-sidebar',
-                                        label: '从侧边栏移除',
-                                        onClick: () =>
-                                          onRemoveSessionFromSidebar(workspace.id, session)
-                                      }
-                                    ]
-                                  : []),
-                                {
-                                  key: 'del',
-                                  danger: true,
-                                  label: '删除',
-                                  onClick: () => onDeleteSession(session)
+                                  key: 'remove-from-sidebar',
+                                  label: '从侧边栏移除',
+                                  onClick: () =>
+                                    void p.handleRemoveWorkspaceFromSidebar?.(workspace)
                                 }
                               ]
                             }}
                             trigger={['contextMenu']}
                           >
-                            <div
-                              className={`app-session-item app-session-item-sub ${session.id === activeSessionId ? 'is-active' : ''}`}
-                              onClick={() => onSessionClick(workspace.id, session.id)}
-                            >
-                              <div className="app-session-title">{session.name}</div>
-                            </div>
+                            <span className="app-workspace-name-btn" role="presentation">
+                              <Text className="app-workspace-name">{workspace.name}</Text>
+                            </span>
                           </Dropdown>
-                        ))}
-                        {workspaceSessions.length === 0 && (
-                          <div className="app-session-placeholder">当前工作区暂无会话</div>
+                        ) : (
+                          <span className="app-workspace-name-btn">
+                            <Text className="app-workspace-name">{workspace.name}</Text>
+                          </span>
                         )}
+                        <button
+                          type="button"
+                          className="app-workspace-add-session-btn"
+                          aria-label={`在${workspace.name}下打开空白对话`}
+                          title="空白对话"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            void p.openBlankConversationInWorkspace(workspace.id)
+                          }}
+                        >
+                          <PlusOutlined />
+                        </button>
                       </div>
-                    )}
+                      {isExpanded && (
+                        <div className="app-session-sublist">
+                          {workspaceSessions.map((session) => (
+                            <Dropdown
+                              key={session.id}
+                              menu={{
+                                items: [
+                                  {
+                                    key: 'rename',
+                                    label: '重命名',
+                                    onClick: () => p.handleSessionRenameRequest(session)
+                                  },
+                                  {
+                                    key: 'remove-from-sidebar',
+                                    label: '从侧边栏移除',
+                                    onClick: () =>
+                                      p.handleRemoveSessionFromSidebar(workspace.id, session)
+                                  },
+                                  {
+                                    key: 'del',
+                                    danger: true,
+                                    label: '删除',
+                                    onClick: () => p.handleSessionDeleteRequest(session)
+                                  }
+                                ]
+                              }}
+                              trigger={['contextMenu']}
+                            >
+                              <div
+                                className={`app-session-item app-session-item-sub ${session.id === p.activeSessionId ? 'is-active' : ''}`}
+                                onClick={() =>
+                                  void p.handleSessionClick(workspace.id, session.id)
+                                }
+                              >
+                                <div className="app-session-title">{session.name}</div>
+                              </div>
+                            </Dropdown>
+                          ))}
+                          {workspaceSessions.length === 0 && (
+                            <div className="app-session-placeholder">当前工作区暂无会话</div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )
                 })
               )}
             </div>
           )}
-          {!isSidebarCollapsed && (
+          {!p.isSidebarCollapsed && (
             <div className="app-workspace-btn-wrap">
-              <Button block icon={<FolderOpenOutlined />} onClick={onPickWorkspace}>
+              <Button block icon={<FolderOpenOutlined />} onClick={() => void p.pickWorkspace()}>
                 添加并切换工作区
               </Button>
             </div>
@@ -356,51 +221,31 @@ export function WorkspaceLeftPane({
         </div>
       </div>
       <div
-        className={`app-sidebar-resizer ${isSidebarResizing ? 'is-dragging' : ''} ${isSidebarCollapsed ? 'is-hidden' : ''}`}
+        className={`app-sidebar-resizer ${p.isSidebarResizing ? 'is-dragging' : ''} ${p.isSidebarCollapsed ? 'is-hidden' : ''}`}
         role="separator"
         aria-orientation="vertical"
         aria-label="调整侧边栏宽度"
-        onMouseDown={isSidebarCollapsed ? undefined : onSidebarResizeStart}
+        onMouseDown={p.isSidebarCollapsed ? undefined : p.handleSidebarResizeStart}
       />
-      <McpHubModal
-        open={mcpOpen}
-        mcpDraft={mcpDraft}
-        mcpJsonImportText={mcpJsonImportText}
-        mcpWarmupSummary={mcpWarmupSummary}
-        mcpWarmup={mcpWarmup}
-        mcpWarmupBusy={mcpWarmupBusy}
-        mcpProbingId={mcpProbingId}
-        onClose={onCloseMcpHub}
-        onSave={onSaveMcpServers}
-        onRerunWarmup={onRerunMcpWarmup}
-        onMcpJsonImportTextChange={onMcpJsonImportTextChange}
-        onImportFromJsonText={onImportMcpFromJsonText}
-        onOpenMcpAdd={onOpenMcpAdd}
-        onSetMcpEnabled={onSetMcpEnabled}
-        onProbeMcpRow={onProbeMcpRow}
-        onOpenMcpEdit={onOpenMcpEdit}
-        onDeleteMcpRow={onDeleteMcpRow}
-        onOpenExternalWithConfirm={onOpenExternalWithConfirm}
-      />
-      <SettingsModal
-        open={settingsOpen}
-        form={settingsForm}
-        defaultFormValues={defaultSettingsFormValues}
-        onSave={onSaveSettings}
-        onCancel={onCloseSettings}
-        onProviderChange={onSettingsProviderChange}
-      />
-      <SkillsHubModal
-        open={skillsOpen}
-        skillsStateLoading={skillsStateLoading}
-        installedSkillRows={installedSkillRows}
-        installedMarketFolderIds={installedMarketFolderIds}
-        skillsMarketInstallingId={skillsMarketInstallingId}
-        onClose={onCloseSkillsHub}
-        onReloadSkillsState={onReloadSkillsState}
-        onInstallMarketSkill={onInstallMarketSkill}
-        onUninstallSkillRow={onUninstallSkillRow}
-      />
+      <McpHubModal open={p.mcpOpen} onClose={p.closeMcpHub} />
+      <SettingsModal open={p.settingsOpen} onClose={p.closeSettings} />
+      <SkillsHubModal open={p.skillsOpen} onClose={p.closeSkillsHub} />
+
+      <Modal
+        title="重命名会话"
+        open={!!p.renameModal.renameId}
+        onOk={p.renameModal.confirmRename}
+        onCancel={p.renameModal.closeRename}
+        okText="保存"
+        destroyOnHidden
+        centered
+      >
+        <Input
+          value={p.renameModal.renameName}
+          onChange={(e) => p.renameModal.setRenameName(e.target.value)}
+          placeholder="名称"
+        />
+      </Modal>
     </>
   )
 }

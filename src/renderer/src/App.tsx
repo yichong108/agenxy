@@ -5,19 +5,16 @@ import {
   Button,
   Card,
   Dropdown,
-  Form,
   FloatButton,
   Input,
   Menu,
-  Modal,
   Space,
-  Switch,
   Tag,
   Typography,
   MenuProps
 } from 'antd'
 import { findAndReplace } from 'mdast-util-find-and-replace'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import ReactMarkdown from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
@@ -27,6 +24,15 @@ import 'highlight.js/styles/github.css'
 import { WorkspaceLeftPane } from '@/renderer/src/left-pane'
 import { WorkspaceRightPane } from '@/renderer/src/right-pane/WorkspaceRightPane'
 import { useUiStore } from '@/renderer/src/store/ui-store'
+import { useWorkspaceStore } from '@/renderer/src/store/workspace-store'
+import {
+  type ChatMessage,
+  type SessionInfo,
+  type StreamEvent,
+  type ToolTimelineEvent,
+  HOME_WORKSPACE_ID,
+  type WorkspaceInfo
+} from '@/shared/ipc'
 
 function filterSessionsForSidebar(
   list: SessionInfo[] | undefined,
@@ -35,32 +41,6 @@ function filterSessionsForSidebar(
   const hidden = new Set(hiddenIds ?? [])
   return (list ?? []).filter((s) => !hidden.has(s.id))
 }
-import {
-  applySettingsForm,
-  defaultProviderProfiles,
-  defaultSettings,
-  MAX_MCP_SERVERS,
-  mergeFormIntoProviderProfiles,
-  parseMcpServersFromUnknown,
-  settingsToFormValues,
-  type AppSettings,
-  type ChatMessage,
-  type McpServerEntry,
-  type McpWarmupReport,
-  type ModelProviderId,
-  type ProviderProfile,
-  type SessionInfo,
-  type SettingsFormValues,
-  type SkillUiEntry,
-  type SkillsMarketCatalogItem,
-  type SkillsRuntimeState,
-  type StreamEvent,
-  type ToolTimelineEvent,
-  defaultWorkspaceUiState,
-  HOME_WORKSPACE_ID,
-  type WorkspaceInfo,
-  type WorkspaceUiState
-} from '@/shared/ipc'
 
 import '@/renderer/src/App.scss'
 
@@ -69,24 +49,8 @@ const { TextArea } = Input
 
 const PRELOAD_MISSING_ERROR = '未检测到 preload 注入（window.bridge 不存在）'
 
-const DEFAULT_SETTINGS: AppSettings = JSON.parse(JSON.stringify(defaultSettings))
-const DEFAULT_FORM_VALUES: SettingsFormValues = settingsToFormValues(DEFAULT_SETTINGS)
-
-function cloneProviderProfiles(
-  p: Record<ModelProviderId, ProviderProfile>
-): Record<ModelProviderId, ProviderProfile> {
-  return JSON.parse(JSON.stringify(p)) as Record<ModelProviderId, ProviderProfile>
-}
-
 function randomId() {
   return `m-${Date.now()}-${Math.random().toString(16).slice(2)}`
-}
-
-/** MCP env 存为对象，编辑弹窗用多行 JSON 展示 */
-function stringifyMcpEnvForForm(env: McpServerEntry['env']): string {
-  if (env == null) return ''
-  if (typeof env !== 'object' || Array.isArray(env)) return ''
-  return JSON.stringify(env, null, 2)
 }
 
 function appendAssistantText(list: ChatMessage[], text: string, forceNew = false): ChatMessage[] {
@@ -139,15 +103,7 @@ type RunStats = {
   status: 'running' | 'done' | 'error'
 }
 
-type WorkspaceDropMarker = {
-  workspaceId: string
-  placement: 'before' | 'after'
-}
-
 export function App() {
-  const SIDEBAR_MIN_WIDTH = 240
-  const SIDEBAR_MAX_WIDTH = 560
-  const SIDEBAR_DEFAULT_WIDTH = 300
   const RIGHT_PANE_MIN_WIDTH = 420
   const RIGHT_PANE_MAX_WIDTH = 860
   const RIGHT_PANE_DEFAULT_WIDTH = 560
@@ -171,9 +127,12 @@ export function App() {
     typeof bridgeCompat.onWorkspacesSync === 'function' &&
     typeof bridgeCompat.activateWorkspace === 'function'
   const legacyWorkspaceId = 'legacy-single-workspace'
-  const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([])
-  const [sessions, setSessions] = useState<SessionInfo[]>([])
-  const [sessionsByWorkspace, setSessionsByWorkspace] = useState<Record<string, SessionInfo[]>>({})
+  const workspaces = useWorkspaceStore((s) => s.workspaces)
+  const setWorkspaces = useWorkspaceStore((s) => s.setWorkspaces)
+  const sessionsByWorkspace = useWorkspaceStore((s) => s.sessionsByWorkspace)
+  const setSessionsByWorkspace = useWorkspaceStore((s) => s.setSessionsByWorkspace)
+  const updateSessionsForWorkspace = useWorkspaceStore((s) => s.updateSessionsForWorkspace)
+  const setExpandedWorkspaceIds = useWorkspaceStore((s) => s.setExpandedWorkspaceIds)
   const activeWorkspaceId = useUiStore((s) => s.activeWorkspaceId)
   const setActiveWorkspaceId = useUiStore((s) => s.setActiveWorkspaceId)
   const activeId = useUiStore((s) => s.activeSessionId)
@@ -181,30 +140,6 @@ export function App() {
   const input = useUiStore((s) => s.inputDraft)
   const setInput = useUiStore((s) => s.setInputDraft)
   const hydrateUiStore = useUiStore((s) => s.hydrateFromMain)
-  const byWorkspaceUi = useUiStore((s) => s.byWorkspace)
-  const sessionsByWorkspaceForSidebar = useMemo(() => {
-    const out: Record<string, SessionInfo[]> = {}
-    for (const [wid, list] of Object.entries(sessionsByWorkspace)) {
-      out[wid] = filterSessionsForSidebar(list, byWorkspaceUi[wid]?.sidebarHiddenSessionIds)
-    }
-    return out
-  }, [sessionsByWorkspace, byWorkspaceUi])
-
-  /** 侧栏不鼓励使用 Home：仅当 Home 存在可见会话时才列出该项 */
-  const workspacesForSidebar = useMemo(() => {
-    const homeHasSessions =
-      (sessionsByWorkspaceForSidebar[HOME_WORKSPACE_ID] ?? []).length > 0
-    if (homeHasSessions) return workspaces
-    return workspaces.filter((w) => w.id !== HOME_WORKSPACE_ID)
-  }, [workspaces, sessionsByWorkspaceForSidebar])
-
-  const workspaceTreeEmptyMessage = useMemo(() => {
-    if (workspacesForSidebar.length > 0) return ''
-    if (workspaces.length === 0) {
-      return '暂无工作区。请点击下方「添加并切换工作区」选择项目文件夹。'
-    }
-    return '请添加项目文件夹作为工作区；用户目录（Home）仅在已有会话记录时显示在侧栏。'
-  }, [workspaces.length, workspacesForSidebar.length])
 
   /** 顶栏工作区下拉始终含 Home；侧栏移除 Home 后主进程同步列表可能不含该项 */
   const workspacesWithComposerHomeStub = useMemo(() => {
@@ -225,44 +160,8 @@ export function App() {
     [activeWorkspaceId]
   )
 
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [mcpOpen, setMcpOpen] = useState(false)
-  const [mcpDraft, setMcpDraft] = useState<McpServerEntry[]>([])
-  const [mcpEditorOpen, setMcpEditorOpen] = useState(false)
-  const [mcpEditorRecord, setMcpEditorRecord] = useState<McpServerEntry | null>(null)
-  /** 每次打开编辑/添加弹窗递增，保证 Form remount 从而应用 initialValues（解决编辑不回显） */
-  const [mcpEditorNonce, setMcpEditorNonce] = useState(0)
-  /** 环境变量 JSON 不用 Form 托管，避免 TextArea 与共享 form 实例不同步导致无法回显 */
-  const [mcpEnvTextLocal, setMcpEnvTextLocal] = useState('')
-  const [mcpProbingId, setMcpProbingId] = useState<string | null>(null)
-  /** 主进程池化预热结果（启动 / 保存 MCP / 手动重检） */
-  const [mcpWarmup, setMcpWarmup] = useState<McpWarmupReport | null>(null)
-  const [mcpWarmupBusy, setMcpWarmupBusy] = useState(false)
-  /** Cursor 风格 `{ "mcpServers": { ... } }` 或本应用数组 JSON 粘贴导入 */
-  const [mcpJsonImportText, setMcpJsonImportText] = useState('')
-  const [skillsOpen, setSkillsOpen] = useState(false)
-  const [skillsState, setSkillsState] = useState<SkillsRuntimeState | null>(null)
-  const [skillsStateLoading, setSkillsStateLoading] = useState(false)
-  const [skillsMarketInstallingId, setSkillsMarketInstallingId] = useState<string | null>(null)
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
-  const [form] = Form.useForm<SettingsFormValues>()
-  const [mcpForm] = Form.useForm<{
-    name: string
-    command: string
-    argsText: string
-    cwd: string
-    enabled: boolean
-  }>()
-  const profilesDraftRef =
-    useRef<Record<ModelProviderId, ProviderProfile>>(defaultProviderProfiles())
-  const settingsProviderRef = useRef<ModelProviderId>('deepseek')
   /** 避免首屏 load 完成前把「无选中」误判为需要强制回到 Home */
   const didInitialWorkspaceLoadRef = useRef(false)
-  const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState<Set<string>>(new Set())
-  const [draggingWorkspaceId, setDraggingWorkspaceId] = useState<string | null>(null)
-  const [workspaceDropMarker, setWorkspaceDropMarker] = useState<WorkspaceDropMarker | null>(null)
-  const [renameId, setRenameId] = useState<string | null>(null)
-  const [renameName, setRenameName] = useState('')
   const isDevEnv = import.meta.env.DEV
 
   const isWinCustomChrome = preloadOk && bridge.platform === 'win32'
@@ -356,45 +255,11 @@ export function App() {
   const [running, setRunning] = useState<Record<string, boolean>>({})
   const [queued, setQueued] = useState<Record<string, number | undefined>>({})
   const [runStats, setRunStats] = useState<Record<string, RunStats | undefined>>({})
-  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH)
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
-  const [isSidebarResizing, setIsSidebarResizing] = useState(false)
-  const sidebarResizeStartRef = useRef<{ startX: number; startWidth: number } | null>(null)
-  const sidebarExpandedWidthRef = useRef(SIDEBAR_DEFAULT_WIDTH)
   const [rightPaneWidth, setRightPaneWidth] = useState(RIGHT_PANE_DEFAULT_WIDTH)
   const [isRightPaneCollapsed, setIsRightPaneCollapsed] = useState(false)
   const [isRightPaneResizing, setIsRightPaneResizing] = useState(false)
   const rightPaneResizeStartRef = useRef<{ startX: number; startWidth: number } | null>(null)
   const rightPaneExpandedWidthRef = useRef(RIGHT_PANE_DEFAULT_WIDTH)
-
-  const mcpWarmupSummary = useMemo(() => {
-    if (!mcpWarmup) return null
-    if (!mcpWarmup.servers.length) {
-      return '当前没有已启用且 command 非空的 MCP 参与预检。'
-    }
-    const ok = mcpWarmup.servers.filter((x) => x.ok).length
-    const bad = mcpWarmup.servers.length - ok
-    return `已检查 ${mcpWarmup.servers.length} 台：成功 ${ok}，失败 ${bad}。成功项的连接会留在主进程池中，Agent 调用工具时复用，空闲一段时间后自动断开。`
-  }, [mcpWarmup])
-
-  const installedSkillRows = useMemo(() => {
-    if (!skillsState) return []
-    return [
-      ...skillsState.builtinCode,
-      ...skillsState.builtinPackaged,
-      ...skillsState.installedMarket,
-      ...skillsState.legacyUser
-    ]
-  }, [skillsState])
-
-  const installedMarketFolderIds = useMemo(() => {
-    const ids = new Set<string>()
-    if (!skillsState) return ids
-    for (const row of skillsState.installedMarket) {
-      if (row.marketFolderId) ids.add(row.marketFolderId)
-    }
-    return ids
-  }, [skillsState])
 
   const streamBuf = useRef<Record<string, string>>({})
   const assistantMsgId = useRef<Record<string, string | null>>({})
@@ -430,12 +295,6 @@ export function App() {
   )
 
   const load = useCallback(async () => {
-    const settingsResult = await bridge.getSettings()
-    setSettings(settingsResult)
-    profilesDraftRef.current = cloneProviderProfiles(settingsResult.providerProfiles)
-    settingsProviderRef.current = settingsResult.provider
-    form.setFieldsValue(settingsToFormValues(settingsResult))
-
     if (supportsMultiWorkspaceApi) {
       const workspacePayload = await bridgeCompat.listWorkspaces!()
       const workspaceList = workspacePayload.list
@@ -467,7 +326,6 @@ export function App() {
         useUiStore.getState().byWorkspace[activeWsId]?.sidebarHiddenSessionIds ?? []
       const activeListRaw = sessionsMap[activeWsId] ?? []
       const activeList = filterSessionsForSidebar(activeListRaw, hidden)
-      setSessions(activeList)
       const currentActiveId = useUiStore.getState().activeSessionId
       const nextActiveId =
         currentActiveId && activeList.some((x) => x.id === currentActiveId)
@@ -499,7 +357,6 @@ export function App() {
     const legacyHidden =
       useUiStore.getState().byWorkspace[legacyWorkspace.id]?.sidebarHiddenSessionIds ?? []
     const legacyVisible = filterSessionsForSidebar(legacySessions, legacyHidden)
-    setSessions(legacyVisible)
     const currentActiveId = useUiStore.getState().activeSessionId
     const nextActiveId =
       currentActiveId && legacyVisible.some((x) => x.id === currentActiveId)
@@ -514,9 +371,11 @@ export function App() {
     bridge,
     bridgeCompat,
     ensureSessionMessages,
-    form,
     setActiveId,
     setActiveWorkspaceId,
+    setExpandedWorkspaceIds,
+    setSessionsByWorkspace,
+    setWorkspaces,
     supportsMultiWorkspaceApi
   ])
 
@@ -657,62 +516,16 @@ export function App() {
     void (async () => {
       await hydrateUiStore()
       await load()
-      const w = await bridge.getMcpWarmupStatus()
-      if (w.report) setMcpWarmup(w.report)
-      setMcpWarmupBusy(w.inFlight)
     })()
     const unSub = [
-      supportsMultiWorkspaceApi
-        ? bridgeCompat.onWorkspacesSync!((payload) => {
-            flushSync(() => {
-              setWorkspaces(payload.list)
-              setExpandedWorkspaceIds(new Set(payload.list.map((workspace) => workspace.id)))
-            })
-            setActiveWorkspaceId(payload.activeWorkspaceId)
-            const listByWorkspace = bridgeCompat.listSessionsByWorkspace
-            if (!listByWorkspace) return
-            void Promise.all(
-              payload.list.map(async (workspace) => {
-                const list = await listByWorkspace(workspace.id)
-                return [workspace.id, list] as const
-              })
-            ).then((entries) => {
-              setSessionsByWorkspace((prev) => {
-                const next = { ...prev }
-                for (const [workspaceId, list] of entries) {
-                  next[workspaceId] = list
-                }
-                return next
-              })
-            })
-          })
-        : bridge.onWorkspaceChange((p) => {
-            const legacyWorkspace: WorkspaceInfo = {
-              id: legacyWorkspaceId,
-              name: p.path ? '当前工作区' : '默认工作区',
-              path: p.path || null,
-              createdAt: Date.now(),
-              updatedAt: Date.now()
-            }
-            setWorkspaces([legacyWorkspace])
-            setActiveWorkspaceId(legacyWorkspace.id)
-            setExpandedWorkspaceIds(new Set([legacyWorkspace.id]))
-          }),
-      bridge.onSettingsSync((s) => {
-        setSettings(s)
-        profilesDraftRef.current = cloneProviderProfiles(s.providerProfiles)
-        settingsProviderRef.current = s.provider
-        form.setFieldsValue(settingsToFormValues(s))
-      }),
       bridge.onSessionsSync((list) => {
         const workspaceId = useUiStore.getState().activeWorkspaceId
         const hidden = workspaceId
           ? (useUiStore.getState().byWorkspace[workspaceId]?.sidebarHiddenSessionIds ?? [])
           : []
         const visible = filterSessionsForSidebar(list, hidden)
-        setSessions(visible)
         if (workspaceId) {
-          setSessionsByWorkspace((prev) => ({ ...prev, [workspaceId]: list }))
+          updateSessionsForWorkspace(workspaceId, list)
         }
         const validIds = new Set(list.map((x) => x.id))
         for (const id of hydratedMessageSessions.current) {
@@ -724,25 +537,18 @@ export function App() {
         if (currentActiveId === null) return
         setActiveId(visible[0]?.id ?? null)
       }),
-      bridge.onStream(handleStream),
-      bridge.onMcpWarmup((r) => {
-        setMcpWarmup(r)
-        setMcpWarmupBusy(false)
-      })
+      bridge.onStream(handleStream)
     ]
     return () => unSub.forEach((f) => f())
   }, [
     bridge,
-    form,
     handleStream,
     hydrateUiStore,
     load,
     msgApi,
     preloadOk,
     setActiveId,
-    setActiveWorkspaceId,
-    supportsMultiWorkspaceApi,
-    bridgeCompat
+    updateSessionsForWorkspace
   ])
 
   useEffect(() => {
@@ -848,327 +654,6 @@ export function App() {
       })
     }
   }
-
-  const openSettings = () => {
-    profilesDraftRef.current = cloneProviderProfiles(settings.providerProfiles)
-    settingsProviderRef.current = settings.provider
-    form.setFieldsValue(settingsToFormValues(settings))
-    setSettingsOpen(true)
-  }
-
-  const onSettingsProviderChange = (next: ModelProviderId) => {
-    const prev = settingsProviderRef.current
-    if (prev === next) return
-    const cur = form.getFieldsValue(['baseUrl', 'model', 'apiKey', 'enableTools']) as Pick<
-      ProviderProfile,
-      'baseUrl' | 'model' | 'apiKey' | 'enableTools'
-    >
-    profilesDraftRef.current[prev] = {
-      ...profilesDraftRef.current[prev],
-      baseUrl: String(cur.baseUrl ?? ''),
-      model: String(cur.model ?? ''),
-      apiKey: String(cur.apiKey ?? ''),
-      enableTools: prev === 'deepseek' ? true : Boolean(cur.enableTools)
-    }
-    settingsProviderRef.current = next
-    const nextProf = profilesDraftRef.current[next]
-    form.setFieldsValue({
-      provider: next,
-      baseUrl: nextProf.baseUrl,
-      model: nextProf.model,
-      apiKey: nextProf.apiKey,
-      enableTools: next === 'deepseek' ? true : nextProf.enableTools
-    })
-  }
-
-  const saveSettings = async () => {
-    const v = await form.validateFields()
-    const nextProfiles = mergeFormIntoProviderProfiles(profilesDraftRef.current, v)
-    const next = applySettingsForm(settings, v, nextProfiles)
-    const saved = await bridge.setSettings(next)
-    profilesDraftRef.current = cloneProviderProfiles(saved.providerProfiles)
-    settingsProviderRef.current = saved.provider
-    setSettings(saved)
-    setSettingsOpen(false)
-    msgApi.success('已保存（Secret 仅保存在本机主进程）')
-  }
-
-  const openMcpHub = useCallback(() => {
-    setMcpDraft(JSON.parse(JSON.stringify(settings.mcpServers ?? [])))
-    setMcpJsonImportText('')
-    setMcpOpen(true)
-  }, [settings.mcpServers])
-
-  const reloadSkillsState = useCallback(async () => {
-    setSkillsStateLoading(true)
-    try {
-      const next = await bridge.getSkillsState()
-      setSkillsState(next)
-    } finally {
-      setSkillsStateLoading(false)
-    }
-  }, [bridge])
-
-  const openSkillsHub = useCallback(() => {
-    setSkillsOpen(true)
-    void reloadSkillsState()
-  }, [reloadSkillsState])
-
-  const installMarketSkill = useCallback(
-    async (item: SkillsMarketCatalogItem) => {
-      setSkillsMarketInstallingId(item.id)
-      try {
-        const r = await bridge.installSkillFromMarket(item)
-        if (r.ok) {
-          msgApi.success(`已安装「${item.name}」`)
-          await reloadSkillsState()
-        } else {
-          msgApi.error(r.error)
-        }
-      } finally {
-        setSkillsMarketInstallingId(null)
-      }
-    },
-    [bridge, msgApi, reloadSkillsState]
-  )
-
-  const uninstallSkillRow = useCallback(
-    async (row: SkillUiEntry) => {
-      if (row.kind === 'market') {
-        const folderId = row.marketFolderId
-        if (!folderId) return
-        modalApi.confirm({
-          title: '卸载市场技能？',
-          content: `将删除目录「market/${folderId}」及其中的文件。`,
-          centered: true,
-          okButtonProps: { danger: true },
-          onOk: async () => {
-            const r = await bridge.uninstallSkill({ kind: 'market', folderId })
-            if (r.ok) {
-              msgApi.success('已卸载')
-              await reloadSkillsState()
-            } else {
-              msgApi.error(r.error)
-            }
-          }
-        })
-        return
-      }
-      if (row.kind === 'legacy') {
-        const rel = row.legacyFolderRelative
-        if (!rel) {
-          msgApi.warning('该条目位于兼容根目录，无法按文件夹卸载；请手动编辑 userData/skills。')
-          return
-        }
-        modalApi.confirm({
-          title: '卸载兼容技能目录？',
-          content: `将删除「skills/${rel}」。`,
-          centered: true,
-          okButtonProps: { danger: true },
-          onOk: async () => {
-            const r = await bridge.uninstallSkill({ kind: 'legacy', legacyFolderRelative: rel })
-            if (r.ok) {
-              msgApi.success('已卸载')
-              await reloadSkillsState()
-            } else {
-              msgApi.error(r.error)
-            }
-          }
-        })
-      }
-    },
-    [bridge, modalApi, msgApi, reloadSkillsState]
-  )
-
-  const saveMcpServers = useCallback(async () => {
-    const payload = JSON.parse(JSON.stringify(mcpDraft)) as McpServerEntry[]
-    const saved = await bridge.setSettings({ mcpServers: payload })
-    setSettings(saved)
-    setMcpDraft(JSON.parse(JSON.stringify(saved.mcpServers ?? [])) as McpServerEntry[])
-    setMcpJsonImportText('')
-    setMcpOpen(false)
-    msgApi.success('MCP 配置已保存')
-  }, [bridge, mcpDraft, msgApi])
-
-  const importMcpFromJsonText = useCallback(() => {
-    const t = mcpJsonImportText.trim()
-    if (!t) {
-      msgApi.error('请粘贴 JSON')
-      return
-    }
-    try {
-      const parsed = JSON.parse(t) as unknown
-      const entries = parseMcpServersFromUnknown(parsed)
-      if (entries.length === 0) {
-        msgApi.error(
-          '未解析到任何 MCP。支持：① Cursor 形态 { "mcpServers": { "名称": { "command", "args", "env" } } }；② 本应用使用的服务器对象数组。'
-        )
-        return
-      }
-      const mergedLen = mcpDraft.length + entries.length
-      const dropped = mergedLen > MAX_MCP_SERVERS ? mergedLen - MAX_MCP_SERVERS : 0
-      setMcpDraft((prev) => [...prev, ...entries].slice(0, MAX_MCP_SERVERS))
-      if (dropped > 0) {
-        msgApi.warning(`最多共 ${MAX_MCP_SERVERS} 条，已截断 ${dropped} 条导入项`)
-      }
-      setMcpJsonImportText('')
-      msgApi.success(`已加入列表 ${entries.length} 条（请点击「保存 MCP」持久化）`)
-    } catch {
-      msgApi.error('JSON 解析失败')
-    }
-  }, [mcpDraft, mcpJsonImportText, msgApi])
-
-  const openMcpAdd = useCallback(() => {
-    setMcpEditorNonce((n) => n + 1)
-    setMcpEnvTextLocal('')
-    setMcpEditorRecord({
-      id: randomId(),
-      name: '新 MCP 服务器',
-      enabled: true,
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-filesystem', '.']
-    })
-    setMcpEditorOpen(true)
-  }, [])
-
-  const openMcpEdit = useCallback(
-    (row: McpServerEntry) => {
-      setMcpEditorNonce((n) => n + 1)
-      const merged = mcpDraft.find((x) => x.id === row.id) ?? row
-      setMcpEditorRecord({ ...merged })
-      setMcpEnvTextLocal(stringifyMcpEnvForForm(merged.env))
-      setMcpEditorOpen(true)
-    },
-    [mcpDraft]
-  )
-
-  // 共享 mcpForm 在子表单重挂载后可能仍保留旧字段，打开后强制同步（环境变量见 mcpEnvTextLocal）
-  useLayoutEffect(() => {
-    if (!mcpEditorOpen || !mcpEditorRecord) return
-    mcpForm.setFieldsValue({
-      name: mcpEditorRecord.name,
-      command: mcpEditorRecord.command,
-      argsText: (mcpEditorRecord.args ?? []).join('\n'),
-      cwd: mcpEditorRecord.cwd ?? '',
-      enabled: mcpEditorRecord.enabled
-    })
-    setMcpEnvTextLocal(stringifyMcpEnvForForm(mcpEditorRecord.env))
-  }, [mcpEditorOpen, mcpEditorRecord, mcpEditorNonce, mcpForm])
-
-  /**
-   * 编辑暂存MCP服务器配置
-   */
-  const submitMcpEditor = useCallback(async () => {
-    if (!mcpEditorRecord) {
-      return Promise.reject(new Error('未选择编辑项'))
-    }
-    const v = await mcpForm.validateFields()
-    const argsTextRaw = String(v.argsText ?? '')
-    const args = argsTextRaw
-      .split(/\r?\n/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-    if (args.length === 0) {
-      msgApi.error('参数至少填写一行（每行一个参数）')
-      return Promise.reject(new Error('args empty'))
-    }
-    let env: Record<string, unknown> | undefined
-    const trimmedEnv = mcpEnvTextLocal.trim()
-    if (trimmedEnv) {
-      try {
-        const parsed = JSON.parse(trimmedEnv) as unknown
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-          msgApi.error('环境变量须为 JSON 对象，例如 {"KEY":"value"} 或含嵌套对象')
-          return Promise.reject(new Error('env shape'))
-        }
-        const o: Record<string, unknown> = {}
-        for (const [k, val] of Object.entries(parsed as Record<string, unknown>)) {
-          if (val === undefined) continue
-          o[k] = val
-        }
-        if (Object.keys(o).length) env = o
-      } catch {
-        msgApi.error('环境变量 JSON 解析失败')
-        return Promise.reject(new Error('env json'))
-      }
-    }
-    const cwdTrim = String(v.cwd ?? '').trim()
-    const nextRow: McpServerEntry = {
-      id: mcpEditorRecord.id,
-      name: v.name.trim() || mcpEditorRecord.id,
-      enabled: v.enabled,
-      command: v.command.trim(),
-      args,
-      ...(cwdTrim ? { cwd: cwdTrim } : {}),
-      ...(env ? { env } : {})
-    }
-    setMcpDraft((prev) => {
-      const i = prev.findIndex((x) => x.id === nextRow.id)
-      if (i >= 0) {
-        const copy = [...prev]
-        copy[i] = nextRow
-        return copy
-      }
-      return [...prev, nextRow]
-    })
-    setMcpEditorOpen(false)
-    setMcpEditorRecord(null)
-    setMcpEnvTextLocal('')
-    msgApi.success('已写入列表（请点击主窗口底部「保存 MCP」持久化）')
-  }, [mcpEditorRecord, mcpEnvTextLocal, mcpForm, msgApi])
-
-  const probeMcpRow = useCallback(
-    async (row: McpServerEntry) => {
-      setMcpProbingId(row.id)
-      try {
-        const r = await bridge.mcpProbeServer(row)
-        if (r.ok) {
-          modalApi.info({
-            title: `「${row.name}」连接成功`,
-            width: 600,
-            centered: true,
-            content: (
-              <div>
-                <Text>共 {r.tools.length} 个工具：</Text>
-                <ul style={{ marginTop: 8, paddingLeft: 18, maxHeight: 360, overflow: 'auto' }}>
-                  {r.tools.map((t) => (
-                    <li key={t.name} style={{ marginBottom: 6 }}>
-                      <Text code>{t.name}</Text>
-                      {t.description ? (
-                        <Text type="secondary">
-                          {' '}
-                          {t.description.length > 160
-                            ? `${t.description.slice(0, 160)}…`
-                            : t.description}
-                        </Text>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )
-          })
-        } else {
-          msgApi.error(r.error)
-        }
-      } finally {
-        setMcpProbingId(null)
-      }
-    },
-    [bridge, modalApi, msgApi]
-  )
-
-  const rerunMcpWarmup = useCallback(async () => {
-    setMcpWarmupBusy(true)
-    try {
-      const r = await bridge.mcpRunWarmup()
-      setMcpWarmup(r)
-    } catch {
-      msgApi.error('MCP 预检失败')
-    } finally {
-      setMcpWarmupBusy(false)
-    }
-  }, [bridge, msgApi])
 
   // 检查 React DevTools 是否已加载完成
   const checkDevToolsReady = (): boolean => {
@@ -1283,85 +768,6 @@ export function App() {
     return () => window.cancelAnimationFrame(rafId)
   }, [currentMessages, currentTimeline, scrollMessagesToBottom])
 
-  useEffect(() => {
-    setExpandedWorkspaceIds((prev) => {
-      const next = new Set(prev)
-      next.add(composerSelectedWorkspaceId)
-      return next
-    })
-  }, [composerSelectedWorkspaceId])
-
-  const handleWorkspaceToggle = useCallback((workspaceId: string) => {
-    setExpandedWorkspaceIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(workspaceId)) next.delete(workspaceId)
-      else next.add(workspaceId)
-      return next
-    })
-  }, [])
-
-  const handleSidebarResizeStart = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      if (isSidebarCollapsed) return
-      if (event.button !== 0) return
-      event.preventDefault()
-      sidebarResizeStartRef.current = {
-        startX: event.clientX,
-        startWidth: sidebarWidth
-      }
-      setIsSidebarResizing(true)
-    },
-    [isSidebarCollapsed, sidebarWidth]
-  )
-
-  const handleSidebarCollapseToggle = useCallback(() => {
-    setIsSidebarCollapsed((prev) => {
-      if (prev) {
-        setSidebarWidth(sidebarExpandedWidthRef.current)
-        return false
-      }
-      sidebarExpandedWidthRef.current = sidebarWidth
-      setSidebarWidth(56)
-      return true
-    })
-  }, [sidebarWidth])
-
-  useEffect(() => {
-    if (!isSidebarResizing) return
-    const previousCursor = document.body.style.cursor
-    const previousUserSelect = document.body.style.userSelect
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-
-    const handleMouseMove = (event: MouseEvent) => {
-      const dragState = sidebarResizeStartRef.current
-      if (!dragState) return
-      const delta = event.clientX - dragState.startX
-      const nextWidth = Math.min(
-        SIDEBAR_MAX_WIDTH,
-        Math.max(SIDEBAR_MIN_WIDTH, dragState.startWidth + delta)
-      )
-      setSidebarWidth(nextWidth)
-      sidebarExpandedWidthRef.current = nextWidth
-    }
-
-    const handleMouseUp = () => {
-      sidebarResizeStartRef.current = null
-      setIsSidebarResizing(false)
-    }
-
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', handleMouseUp)
-    window.addEventListener('blur', handleMouseUp)
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', handleMouseUp)
-      window.removeEventListener('blur', handleMouseUp)
-      document.body.style.cursor = previousCursor
-      document.body.style.userSelect = previousUserSelect
-    }
-  }, [isSidebarResizing])
-
   const handleRightPaneResizeStart = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       if (isRightPaneCollapsed) return
@@ -1422,222 +828,6 @@ export function App() {
       document.body.style.userSelect = previousUserSelect
     }
   }, [isRightPaneResizing, RIGHT_PANE_MAX_WIDTH, RIGHT_PANE_MIN_WIDTH])
-
-  const handleSessionClick = useCallback(
-    async (workspaceId: string, sessionId: string) => {
-      if (workspaceId !== activeWorkspaceId && supportsMultiWorkspaceApi) {
-        const workspace = await bridgeCompat.activateWorkspace!(workspaceId)
-        if (!workspace) {
-          msgApi.error('切换工作区失败')
-          return
-        }
-      }
-      setActiveId(sessionId)
-    },
-    [activeWorkspaceId, bridgeCompat, msgApi, setActiveId, supportsMultiWorkspaceApi]
-  )
-
-  /** 打开空白对话界面（不创建会话记录，直至用户发送第一条消息） */
-  const openBlankConversationInWorkspace = useCallback(
-    async (workspaceId: string) => {
-      if (!workspaceId) return
-      const ws = workspacesWithComposerHomeStub.find((w) => w.id === workspaceId)
-      let resolvedId = workspaceId
-      if (!ws?.path) {
-        const hasHome = workspacesWithComposerHomeStub.some((w) => w.id === HOME_WORKSPACE_ID)
-        if (!hasHome) {
-          msgApi.warning('请先添加工作区')
-          return
-        }
-        resolvedId = HOME_WORKSPACE_ID
-      }
-      if (resolvedId !== activeWorkspaceId && supportsMultiWorkspaceApi) {
-        const workspace = await bridgeCompat.activateWorkspace!(resolvedId)
-        if (!workspace) {
-          msgApi.error('切换工作区失败')
-          return
-        }
-      }
-      setExpandedWorkspaceIds((prev) => {
-        const next = new Set(prev)
-        next.add(resolvedId)
-        return next
-      })
-      setActiveId(null)
-      setInput('')
-    },
-    [
-      activeWorkspaceId,
-      bridgeCompat,
-      msgApi,
-      setActiveId,
-      setInput,
-      supportsMultiWorkspaceApi,
-      workspacesWithComposerHomeStub
-    ]
-  )
-
-  const openBlankConversationForActiveWorkspace = useCallback(() => {
-    void (async () => {
-      const cid = composerSelectedWorkspaceId
-      const ws = workspacesWithComposerHomeStub.find((w) => w.id === cid)
-      const targetId =
-        ws?.path && cid !== HOME_WORKSPACE_ID
-          ? cid
-          : workspacesWithComposerHomeStub.some((w) => w.id === HOME_WORKSPACE_ID)
-            ? HOME_WORKSPACE_ID
-            : null
-      if (!targetId) {
-        msgApi.warning('请先添加工作区')
-        return
-      }
-      await openBlankConversationInWorkspace(targetId)
-    })()
-  }, [
-    composerSelectedWorkspaceId,
-    msgApi,
-    openBlankConversationInWorkspace,
-    workspacesWithComposerHomeStub
-  ])
-
-  const handleSessionRenameRequest = useCallback((session: SessionInfo) => {
-    setRenameId(session.id)
-    setRenameName(session.name)
-  }, [])
-
-  const handleSessionDeleteRequest = useCallback(
-    (session: SessionInfo) => {
-      modalApi.confirm({
-        title: '删除此会话？',
-        centered: true,
-        onOk: () => {
-          void bridge.deleteSession(session.id).then(() => msgApi.success('已删除'))
-        }
-      })
-    },
-    [bridge, modalApi, msgApi]
-  )
-
-  const handleRemoveWorkspaceFromSidebar = useCallback(
-    (workspace: WorkspaceInfo) => {
-      const isDefault = Boolean(workspace.isDefault)
-      const isHome = workspace.id === HOME_WORKSPACE_ID
-      modalApi.confirm({
-        title: '从侧边栏移除此工作区？',
-        content: isHome
-          ? 'Home（用户目录）工作区下的全部会话将从本机永久删除，不会并入其他工作区。移除后不会再自动显示 Home；若需该路径仍可通过「添加并切换工作区」选择用户目录。'
-          : isDefault
-            ? '默认工作区下的全部会话将从本机永久删除，不会并入其他工作区。移除后侧栏可为空，可通过下方按钮重新添加工作区。'
-            : '该工作区下的全部会话将从本机永久删除，不会并入其他工作区。之后可通过「添加并切换工作区」重新选择该文件夹。',
-        centered: true,
-        okText: '移除',
-        okButtonProps: { danger: true },
-        cancelText: '取消',
-        onOk: async () => {
-          const { ok } = await bridge.removeWorkspace(workspace.id)
-          if (ok) {
-            msgApi.success('已从侧边栏移除')
-          } else {
-            msgApi.error('移除失败')
-          }
-        }
-      })
-    },
-    [bridge, modalApi, msgApi]
-  )
-
-  const handleRemoveSessionFromSidebar = useCallback(
-    (workspaceId: string, session: SessionInfo) => {
-      const { byWorkspace, activeSessionId } = useUiStore.getState()
-      const prev: WorkspaceUiState = byWorkspace[workspaceId] ?? { ...defaultWorkspaceUiState }
-      const prevHidden = prev.sidebarHiddenSessionIds ?? []
-      if (prevHidden.includes(session.id)) return
-      const sidebarHiddenSessionIds = [...prevHidden, session.id]
-      const nextWs: WorkspaceUiState = { ...prev, sidebarHiddenSessionIds }
-      const nextByWorkspace = { ...byWorkspace, [workspaceId]: nextWs }
-      useUiStore.setState({ byWorkspace: nextByWorkspace })
-      void window.bridge.setUiState({ byWorkspace: { [workspaceId]: nextWs } })
-
-      const list = sessionsByWorkspace[workspaceId] ?? []
-      const hiddenSet = new Set(sidebarHiddenSessionIds)
-      const visible = list.filter((s) => !hiddenSet.has(s.id))
-      if (activeSessionId === session.id) {
-        const nextId = visible[0]?.id ?? null
-        setActiveId(nextId)
-        if (nextId) void ensureSessionMessages(nextId, true)
-      }
-      msgApi.success('已从侧边栏移除')
-    },
-    [ensureSessionMessages, msgApi, sessionsByWorkspace, setActiveId]
-  )
-
-  const handleWorkspaceDragStart = useCallback(
-    (event: React.DragEvent<HTMLDivElement>, workspaceId: string) => {
-      setDraggingWorkspaceId(workspaceId)
-      setWorkspaceDropMarker(null)
-      event.dataTransfer.effectAllowed = 'move'
-      event.dataTransfer.setData('text/plain', workspaceId)
-    },
-    []
-  )
-
-  const handleWorkspaceDragEnd = useCallback(() => {
-    setDraggingWorkspaceId(null)
-    setWorkspaceDropMarker(null)
-  }, [])
-
-  const handleWorkspaceDragOver = useCallback(
-    (event: React.DragEvent<HTMLDivElement>, workspaceId: string) => {
-      if (!draggingWorkspaceId || draggingWorkspaceId === workspaceId) return
-      event.preventDefault()
-      event.dataTransfer.dropEffect = 'move'
-      const rect = event.currentTarget.getBoundingClientRect()
-      const midpoint = rect.top + rect.height / 2
-      const placement: WorkspaceDropMarker['placement'] =
-        event.clientY < midpoint ? 'before' : 'after'
-      setWorkspaceDropMarker((prev) => {
-        if (prev?.workspaceId === workspaceId && prev.placement === placement) return prev
-        return { workspaceId, placement }
-      })
-    },
-    [draggingWorkspaceId]
-  )
-
-  const handleWorkspaceDrop = useCallback(
-    async (event: React.DragEvent<HTMLDivElement>, targetWorkspaceId: string) => {
-      event.preventDefault()
-      const sourceWorkspaceId =
-        draggingWorkspaceId || event.dataTransfer.getData('text/plain') || null
-
-      const placement: WorkspaceDropMarker['placement'] =
-        workspaceDropMarker?.workspaceId === targetWorkspaceId
-          ? workspaceDropMarker.placement
-          : 'before'
-
-      setWorkspaceDropMarker(null)
-      setDraggingWorkspaceId(null)
-
-      if (!sourceWorkspaceId || sourceWorkspaceId === targetWorkspaceId) return
-      const sourceIndex = workspaces.findIndex((x) => x.id === sourceWorkspaceId)
-      const targetIndex = workspaces.findIndex((x) => x.id === targetWorkspaceId)
-      if (sourceIndex < 0 || targetIndex < 0) return
-
-      const next = [...workspaces]
-      const [dragged] = next.splice(sourceIndex, 1)
-      if (!dragged) return
-      const normalizedTargetIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex
-      const insertIndex = placement === 'after' ? normalizedTargetIndex + 1 : normalizedTargetIndex
-      next.splice(insertIndex, 0, dragged)
-      const nextIds = next.map((x) => x.id)
-
-      setWorkspaces(next)
-      if (typeof bridgeCompat.reorderWorkspaces === 'function') {
-        const payload = await bridgeCompat.reorderWorkspaces(nextIds)
-        setWorkspaces(payload.list)
-      }
-    },
-    [bridgeCompat, draggingWorkspaceId, workspaceDropMarker, workspaces]
-  )
 
   const composerWorkspaceToolbar = (
     <div className="app-composer-toolbar">
@@ -1709,104 +899,8 @@ export function App() {
           />
         </div>
       ) : null}
-      <div
-        className={`app-body ${isSidebarResizing ? 'is-sidebar-resizing' : ''} ${isRightPaneResizing ? 'is-right-resizing' : ''}`}
-      >
-        <WorkspaceLeftPane
-          sidebarWidth={sidebarWidth}
-          isSidebarCollapsed={isSidebarCollapsed}
-          isSidebarResizing={isSidebarResizing}
-          activeWorkspaceId={activeWorkspaceId}
-          activeSessionId={activeId}
-          workspaces={workspacesForSidebar}
-          workspaceTreeEmptyMessage={workspaceTreeEmptyMessage}
-          sessionsByWorkspace={sessionsByWorkspaceForSidebar}
-          expandedWorkspaceIds={expandedWorkspaceIds}
-          draggingWorkspaceId={draggingWorkspaceId}
-          workspaceDropMarker={workspaceDropMarker}
-          onOpenMcpHub={openMcpHub}
-          onOpenSkillsHub={openSkillsHub}
-          onOpenSettings={openSettings}
-          onOpenBlankConversation={openBlankConversationForActiveWorkspace}
-          onToggleWorkspace={handleWorkspaceToggle}
-          onWorkspaceDragStart={handleWorkspaceDragStart}
-          onWorkspaceDragOver={handleWorkspaceDragOver}
-          onWorkspaceDrop={(event, workspaceId) => {
-            void handleWorkspaceDrop(event, workspaceId)
-          }}
-          onWorkspaceDragEnd={handleWorkspaceDragEnd}
-          onOpenBlankConversationInWorkspace={(workspaceId) => {
-            void openBlankConversationInWorkspace(workspaceId)
-          }}
-          onSessionClick={(workspaceId, sessionId) => {
-            void handleSessionClick(workspaceId, sessionId)
-          }}
-          onRenameSession={handleSessionRenameRequest}
-          onDeleteSession={handleSessionDeleteRequest}
-          onRemoveSessionFromSidebar={handleRemoveSessionFromSidebar}
-          onRemoveWorkspaceFromSidebar={
-            supportsMultiWorkspaceApi ? handleRemoveWorkspaceFromSidebar : undefined
-          }
-          onPickWorkspace={() => {
-            void pickWorkspace()
-          }}
-          onSidebarResizeStart={handleSidebarResizeStart}
-          onSidebarCollapseToggle={handleSidebarCollapseToggle}
-          mcpOpen={mcpOpen}
-          mcpDraft={mcpDraft}
-          mcpJsonImportText={mcpJsonImportText}
-          mcpWarmupSummary={mcpWarmupSummary}
-          mcpWarmup={mcpWarmup}
-          mcpWarmupBusy={mcpWarmupBusy}
-          mcpProbingId={mcpProbingId}
-          onCloseMcpHub={() => {
-            setMcpOpen(false)
-            setMcpJsonImportText('')
-          }}
-          onSaveMcpServers={() => {
-            void saveMcpServers()
-          }}
-          onRerunMcpWarmup={() => {
-            void rerunMcpWarmup()
-          }}
-          onMcpJsonImportTextChange={setMcpJsonImportText}
-          onImportMcpFromJsonText={importMcpFromJsonText}
-          onOpenMcpAdd={openMcpAdd}
-          onSetMcpEnabled={(id, checked) => {
-            setMcpDraft((prev) => prev.map((x) => (x.id === id ? { ...x, enabled: checked } : x)))
-          }}
-          onProbeMcpRow={(row) => {
-            void probeMcpRow(row)
-          }}
-          onOpenMcpEdit={openMcpEdit}
-          onDeleteMcpRow={(id) => {
-            setMcpDraft((prev) => prev.filter((x) => x.id !== id))
-          }}
-          onOpenExternalWithConfirm={openExternalWithConfirm}
-          settingsOpen={settingsOpen}
-          settingsForm={form}
-          defaultSettingsFormValues={DEFAULT_FORM_VALUES}
-          onSaveSettings={() => {
-            void saveSettings()
-          }}
-          onCloseSettings={() => setSettingsOpen(false)}
-          onSettingsProviderChange={onSettingsProviderChange}
-          skillsOpen={skillsOpen}
-          skillsStateLoading={skillsStateLoading}
-          installedSkillRows={installedSkillRows}
-          installedMarketFolderIds={installedMarketFolderIds}
-          skillsMarketInstallingId={skillsMarketInstallingId}
-          onCloseSkillsHub={() => setSkillsOpen(false)}
-          onReloadSkillsState={() => {
-            void reloadSkillsState()
-          }}
-          onInstallMarketSkill={(item) => {
-            void installMarketSkill(item)
-          }}
-          onUninstallSkillRow={(row) => {
-            void uninstallSkillRow(row)
-          }}
-        />
+      <div className={`app-body ${isRightPaneResizing ? 'is-right-resizing' : ''}`}>
+        <WorkspaceLeftPane ensureSessionMessages={ensureSessionMessages} />
         <div className="app-main-pane">
           <div className="app-topbar">
             {activeId && (
@@ -1942,106 +1036,6 @@ export function App() {
           onToggleCollapse={handleRightPaneCollapseToggle}
         />
       </div>
-
-      <Modal
-        title={
-          mcpDraft.some((x) => x.id === mcpEditorRecord?.id) ? '编辑 MCP 服务器' : '添加 MCP 服务器'
-        }
-        open={mcpEditorOpen}
-        onOk={() => submitMcpEditor()}
-        onCancel={() => {
-          setMcpEditorOpen(false)
-          setMcpEditorRecord(null)
-          setMcpEnvTextLocal('')
-        }}
-        okText="写入列表"
-        destroyOnHidden
-        width={520}
-        centered
-      >
-        {mcpEditorRecord ? (
-          <Form
-            key={`mcp-editor-${mcpEditorRecord.id}-${mcpEditorNonce}`}
-            form={mcpForm}
-            layout="vertical"
-            preserve={false}
-            initialValues={{
-              name: mcpEditorRecord.name,
-              command: mcpEditorRecord.command,
-              argsText: (mcpEditorRecord.args ?? []).join('\n'),
-              cwd: mcpEditorRecord.cwd ?? '',
-              enabled: mcpEditorRecord.enabled
-            }}
-          >
-            <Form.Item
-              name="name"
-              label="显示名称"
-              rules={[{ required: true, message: '请填写名称' }]}
-            >
-              <Input placeholder="例如 Filesystem MCP" />
-            </Form.Item>
-            <Form.Item
-              name="command"
-              label="可执行文件"
-              rules={[{ required: true, message: '请填写命令' }]}
-            >
-              <Input placeholder="如 npx、uvx、node" />
-            </Form.Item>
-            <Form.Item
-              name="argsText"
-              label="参数（每行一个）"
-              rules={[{ required: true, message: '至少填写一行参数' }]}
-              extra="示例：-y 换行 @modelcontextprotocol/server-filesystem 换行 工作区绝对路径"
-            >
-              <TextArea
-                rows={5}
-                placeholder={['-y', '@modelcontextprotocol/server-filesystem', '.'].join('\n')}
-              />
-            </Form.Item>
-            <Form.Item name="cwd" label="工作目录 cwd（可选）">
-              <Input placeholder="子进程启动目录，默认可留空" />
-            </Form.Item>
-            <Form.Item
-              label="环境变量 JSON（可选）"
-              extra="支持嵌套对象/数组，会原样写入配置；启动 MCP 子进程时非字符串会 JSON.stringify 后作为环境变量值传入。"
-            >
-              <TextArea
-                rows={3}
-                placeholder="{}"
-                value={mcpEnvTextLocal}
-                onChange={(e) => setMcpEnvTextLocal(e.target.value)}
-              />
-            </Form.Item>
-            <Form.Item name="enabled" label="添加后立即启用" valuePropName="checked">
-              <Switch />
-            </Form.Item>
-          </Form>
-        ) : null}
-      </Modal>
-
-      <Modal
-        title="重命名会话"
-        open={!!renameId}
-        onOk={() => {
-          const v = renameName.trim()
-          if (renameId && v) {
-            void bridge.renameSession(renameId, v).then(() => {
-              msgApi.success('已重命名')
-              setRenameId(null)
-            })
-          }
-        }}
-        onCancel={() => setRenameId(null)}
-        okText="保存"
-        destroyOnHidden
-        centered
-      >
-        <Input
-          value={renameName}
-          onChange={(e) => setRenameName(e.target.value)}
-          placeholder="名称"
-        />
-      </Modal>
 
       {isDevEnv && (
         <FloatButton
