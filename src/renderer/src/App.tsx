@@ -674,6 +674,8 @@ export function App() {
         }
         const currentActiveId = useUiStore.getState().activeSessionId
         if (currentActiveId && visible.some((x) => x.id === currentActiveId)) return
+        // 空白新对话（未落库的会话）下保持 null，避免把列表首条强行选为当前会话
+        if (currentActiveId === null) return
         setActiveId(visible[0]?.id ?? null)
       }),
       bridge.onStream(handleStream),
@@ -749,9 +751,8 @@ export function App() {
     ]
   }, [workspaces, activeWorkspaceId, supportsMultiWorkspaceApi])
 
-  // 发送当前输入消息，并立即在本地追加用户消息
+  // 发送当前输入消息，并立即在本地追加用户消息（尚无会话时先创建再发送）
   const send = async () => {
-    if (!activeId) return
     const t = input.trim()
     if (!t) return
     const activeWorkspace = workspaces.find((x) => x.id === activeWorkspaceId)
@@ -759,22 +760,37 @@ export function App() {
       msgApi.warning('请先为当前工作区绑定路径')
       return
     }
+    let sessionId: string
+    if (activeId) {
+      sessionId = activeId
+    } else {
+      const created = await bridge.createSession()
+      if (!created) {
+        msgApi.warning('请先创建或选择工作区')
+        return
+      }
+      sessionId = created.id
+      setActiveId(sessionId)
+    }
+    // activeId 变更会触发 ensureSessionMessages；新会话此时主进程可能尚未持久化消息，
+    // 若拉取到空列表会覆盖本地用户消息与 run-start 的 assistant 占位，导致流式增量全部丢弃。
+    hydratedMessageSessions.current.add(sessionId)
     setInput('')
     setMessages((m) => {
-      const cur = m[activeId] ?? []
+      const cur = m[sessionId] ?? []
       return {
         ...m,
-        [activeId]: [...cur, { id: randomId(), role: 'user' as const, content: t }]
+        [sessionId]: [...cur, { id: randomId(), role: 'user' as const, content: t }]
       }
     })
-    const r = await bridge.sendAgentMessage(activeId, t)
+    const r = await bridge.sendAgentMessage(sessionId, t)
     if (!r.ok) {
       msgApi.error('发送失败: ' + r.error)
       setMessages((m) => {
-        const cur = m[activeId] ?? []
+        const cur = m[sessionId] ?? []
         return {
           ...m,
-          [activeId]: appendAssistantText(cur, `发送失败：${r.error}`, true)
+          [sessionId]: appendAssistantText(cur, `发送失败：${r.error}`, true)
         }
       })
     }
@@ -1363,7 +1379,8 @@ export function App() {
     [activeWorkspaceId, bridgeCompat, msgApi, setActiveId, supportsMultiWorkspaceApi]
   )
 
-  const createSessionInWorkspace = useCallback(
+  /** 打开空白对话界面（不创建会话记录，直至用户发送第一条消息） */
+  const openBlankConversationInWorkspace = useCallback(
     async (workspaceId: string) => {
       if (!workspaceId) return
       if (workspaceId !== activeWorkspaceId && supportsMultiWorkspaceApi) {
@@ -1373,35 +1390,33 @@ export function App() {
           return
         }
       }
-      const session = await bridge.createSession()
-      if (!session) {
-        msgApi.warning('请先创建或选择工作区')
-        return
-      }
       setExpandedWorkspaceIds((prev) => {
         const next = new Set(prev)
         next.add(workspaceId)
         return next
       })
-      setActiveId(session.id)
+      setActiveId(null)
+      setInput('')
     },
-    [activeWorkspaceId, bridge, bridgeCompat, msgApi, setActiveId, supportsMultiWorkspaceApi]
+    [
+      activeWorkspaceId,
+      bridgeCompat,
+      msgApi,
+      setActiveId,
+      setInput,
+      supportsMultiWorkspaceApi
+    ]
   )
 
-  const createSessionForActiveWorkspace = useCallback(() => {
+  const openBlankConversationForActiveWorkspace = useCallback(() => {
     void (async () => {
       if (activeWorkspaceId) {
-        await createSessionInWorkspace(activeWorkspaceId)
+        await openBlankConversationInWorkspace(activeWorkspaceId)
         return
       }
-      const session = await bridge.createSession()
-      if (!session) {
-        msgApi.warning('创建会话失败')
-        return
-      }
-      setActiveId(session.id)
+      msgApi.warning('请先添加工作区')
     })()
-  }, [activeWorkspaceId, bridge, createSessionInWorkspace, msgApi, setActiveId])
+  }, [activeWorkspaceId, msgApi, openBlankConversationInWorkspace])
 
   const handleSessionRenameRequest = useCallback((session: SessionInfo) => {
     setRenameId(session.id)
@@ -1576,7 +1591,7 @@ export function App() {
             type="primary"
             icon={<SendOutlined />}
             onClick={() => void send()}
-            disabled={!activeId}
+            disabled={!activeWorkspace?.path || !input.trim()}
             className="app-send-btn"
           >
             发送
@@ -1626,7 +1641,7 @@ export function App() {
           onOpenMcpHub={openMcpHub}
           onOpenSkillsHub={openSkillsHub}
           onOpenSettings={openSettings}
-          onCreateSessionForActiveWorkspace={createSessionForActiveWorkspace}
+          onOpenBlankConversation={openBlankConversationForActiveWorkspace}
           onToggleWorkspace={handleWorkspaceToggle}
           onWorkspaceDragStart={handleWorkspaceDragStart}
           onWorkspaceDragOver={handleWorkspaceDragOver}
@@ -1634,8 +1649,8 @@ export function App() {
             void handleWorkspaceDrop(event, workspaceId)
           }}
           onWorkspaceDragEnd={handleWorkspaceDragEnd}
-          onCreateSessionInWorkspace={(workspaceId) => {
-            void createSessionInWorkspace(workspaceId)
+          onOpenBlankConversationInWorkspace={(workspaceId) => {
+            void openBlankConversationInWorkspace(workspaceId)
           }}
           onSessionClick={(workspaceId, sessionId) => {
             void handleSessionClick(workspaceId, sessionId)

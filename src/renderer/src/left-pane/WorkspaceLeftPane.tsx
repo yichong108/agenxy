@@ -46,13 +46,13 @@ type WorkspaceLeftPaneProps = {
   onOpenMcpHub: () => void
   onOpenSkillsHub: () => void
   onOpenSettings: () => void
-  onCreateSessionForActiveWorkspace: () => void
+  onOpenBlankConversation: () => void
   onToggleWorkspace: (workspaceId: string) => void
   onWorkspaceDragStart: (event: DragEvent<HTMLDivElement>, workspaceId: string) => void
   onWorkspaceDragOver: (event: DragEvent<HTMLDivElement>, workspaceId: string) => void
   onWorkspaceDrop: (event: DragEvent<HTMLDivElement>, workspaceId: string) => void
   onWorkspaceDragEnd: () => void
-  onCreateSessionInWorkspace: (workspaceId: string) => void
+  onOpenBlankConversationInWorkspace: (workspaceId: string) => void
   onSessionClick: (workspaceId: string, sessionId: string) => void
   onRenameSession: (session: SessionInfo) => void
   onDeleteSession: (session: SessionInfo) => void
@@ -112,13 +112,13 @@ export function WorkspaceLeftPane({
   onOpenMcpHub,
   onOpenSkillsHub,
   onOpenSettings,
-  onCreateSessionForActiveWorkspace,
+  onOpenBlankConversation,
   onToggleWorkspace,
   onWorkspaceDragStart,
   onWorkspaceDragOver,
   onWorkspaceDrop,
   onWorkspaceDragEnd,
-  onCreateSessionInWorkspace,
+  onOpenBlankConversationInWorkspace,
   onSessionClick,
   onRenameSession,
   onDeleteSession,
@@ -207,7 +207,7 @@ export function WorkspaceLeftPane({
                 type="primary"
                 icon={<PlusOutlined />}
                 className="app-new-session-btn"
-                onClick={onCreateSessionForActiveWorkspace}
+                onClick={onOpenBlankConversation}
               >
                 新会话
               </Button>
@@ -284,11 +284,11 @@ export function WorkspaceLeftPane({
                       <button
                         type="button"
                         className="app-workspace-add-session-btn"
-                        aria-label={`在${workspace.name}下添加会话`}
-                        title="添加会话"
+                        aria-label={`在${workspace.name}下打开空白对话`}
+                        title="空白对话"
                         onClick={(event) => {
                           event.stopPropagation()
-                          onCreateSessionInWorkspace(workspace.id)
+                          onOpenBlankConversationInWorkspace(workspace.id)
                         }}
                       >
                         <PlusOutlined />
