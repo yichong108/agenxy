@@ -402,8 +402,14 @@ function registerIpc(): void {
     return getSessionMessages(workspaceId, sessionId)
   })
   ipcMain.handle(IPC.SESSIONS_CREATE, (_e, name?: string) => {
-    const workspaceId = getActiveWorkspaceId()
-    if (!workspaceId) return null
+    let workspaceId = getActiveWorkspaceId()
+    if (!workspaceId) {
+      const homeDir = app.getPath('home')
+      const workspace = upsertWorkspaceByPath(homeDir)
+      setActiveWorkspace(workspace.id)
+      workspaceId = workspace.id
+      broadcastWorkspaces()
+    }
     const s = createSession(workspaceId, name)
     broadcastSessions()
     return s

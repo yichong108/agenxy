@@ -1,9 +1,10 @@
-import { BugOutlined, SendOutlined, StopOutlined } from '@ant-design/icons'
+import { BugOutlined, DownOutlined, FolderOpenOutlined, SendOutlined, StopOutlined } from '@ant-design/icons'
 import {
   App as AntdApp,
   Alert,
   Button,
   Card,
+  Dropdown,
   Form,
   FloatButton,
   Input,
@@ -701,12 +702,52 @@ export function App() {
     void ensureSessionMessages(activeId)
   }, [activeId, ensureSessionMessages, preloadOk])
 
-  const pickWorkspace = async () => {
+  const pickWorkspace = useCallback(async () => {
     const r = await bridge.selectWorkspace()
     if (r.path) {
       msgApi.success('已选择工作区')
     }
-  }
+  }, [bridge, msgApi])
+
+  const switchComposerWorkspace = useCallback(
+    async (workspaceId: string) => {
+      if (!workspaceId || workspaceId === activeWorkspaceId) return
+      if (!supportsMultiWorkspaceApi) return
+      const workspace = await bridge.activateWorkspace(workspaceId)
+      if (!workspace) {
+        msgApi.error('切换工作区失败')
+      }
+    },
+    [activeWorkspaceId, bridge, msgApi, supportsMultiWorkspaceApi]
+  )
+
+  const handleComposerWorkspaceMenuClick = useCallback<NonNullable<MenuProps['onClick']>>(
+    ({ key }) => {
+      if (key === '__pick__') {
+        void pickWorkspace()
+        return
+      }
+      void switchComposerWorkspace(String(key))
+    },
+    [pickWorkspace, switchComposerWorkspace]
+  )
+
+  const composerWorkspaceMenuItems = useMemo<MenuProps['items']>(() => {
+    const rows: MenuProps['items'] = workspaces.map((w) => ({
+      key: w.id,
+      label: w.name,
+      disabled: w.id === activeWorkspaceId
+    }))
+    return [
+      ...(rows ?? []),
+      { type: 'divider' },
+      {
+        key: '__pick__',
+        label: supportsMultiWorkspaceApi ? '添加工作区…' : '选择工作区目录…',
+        icon: <FolderOpenOutlined />
+      }
+    ]
+  }, [workspaces, activeWorkspaceId, supportsMultiWorkspaceApi])
 
   // 发送当前输入消息，并立即在本地追加用户消息
   const send = async () => {
@@ -1104,6 +1145,11 @@ export function App() {
   const hasInput = input.trim().length > 0
   const showSendButton = !isRun || hasInput
   const showStopButton = Boolean(activeId && isRun && !hasInput)
+  const activeWorkspace = useMemo(
+    () => workspaces.find((w) => w.id === activeWorkspaceId),
+    [workspaces, activeWorkspaceId]
+  )
+  const isEmptyConversation = currentMessages.length === 0
   const openExternalWithConfirm = useCallback(
     (href: string) => {
       const target = (() => {
@@ -1343,12 +1389,19 @@ export function App() {
   )
 
   const createSessionForActiveWorkspace = useCallback(() => {
-    if (!activeWorkspaceId) {
-      msgApi.warning('请先创建或选择工作区')
-      return
-    }
-    void createSessionInWorkspace(activeWorkspaceId)
-  }, [activeWorkspaceId, createSessionInWorkspace, msgApi])
+    void (async () => {
+      if (activeWorkspaceId) {
+        await createSessionInWorkspace(activeWorkspaceId)
+        return
+      }
+      const session = await bridge.createSession()
+      if (!session) {
+        msgApi.warning('创建会话失败')
+        return
+      }
+      setActiveId(session.id)
+    })()
+  }, [activeWorkspaceId, bridge, createSessionInWorkspace, msgApi, setActiveId])
 
   const handleSessionRenameRequest = useCallback((session: SessionInfo) => {
     setRenameId(session.id)
@@ -1486,6 +1539,63 @@ export function App() {
     [bridgeCompat, draggingWorkspaceId, workspaceDropMarker, workspaces]
   )
 
+  const composerWorkspaceToolbar = (
+    <div className="app-composer-toolbar">
+      <Dropdown
+        menu={{ items: composerWorkspaceMenuItems, onClick: handleComposerWorkspaceMenuClick }}
+        trigger={['click']}
+      >
+        <Button type="default" className="app-composer-workspace-trigger">
+          <span className="app-composer-workspace-name">
+            {activeWorkspace?.name ?? '未选择工作区'}
+          </span>
+          <DownOutlined />
+        </Button>
+      </Dropdown>
+    </div>
+  )
+
+  const composerInput = (
+    <div className="app-composer">
+      <TextArea
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        autoSize={{ minRows: 1, maxRows: 6 }}
+        placeholder="输入消息… (Enter 发送，Shift+Enter 换行)"
+        className="app-composer-input"
+        onPressEnter={(e) => {
+          if (!e.shiftKey) {
+            e.preventDefault()
+            void send()
+          }
+        }}
+      />
+      <div className="app-composer-actions">
+        {showSendButton && (
+          <Button
+            type="primary"
+            icon={<SendOutlined />}
+            onClick={() => void send()}
+            disabled={!activeId}
+            className="app-send-btn"
+          >
+            发送
+          </Button>
+        )}
+        {showStopButton && (
+          <Button
+            danger
+            icon={<StopOutlined />}
+            onClick={() => void bridge.cancelAgent(activeId!)}
+            className="app-stop-btn"
+          >
+            停止
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+
   return (
     <div className="app-shell">
       {isWinCustomChrome ? (
@@ -1619,7 +1729,7 @@ export function App() {
               </Space>
             )}
           </div>
-          <div className="app-content">
+          <div className={`app-content ${isEmptyConversation ? 'is-empty-conversation' : ''}`}>
             {!preloadOk && (
               <div className="app-preload-alert-wrap">
                 <Alert
@@ -1630,110 +1740,83 @@ export function App() {
                 />
               </div>
             )}
-            <div className="app-messages-shell">
-              <div
-                className="app-messages-scroll"
-                ref={messagesScrollRef}
-                onScroll={(e) => {
-                  autoScrollRef.current = isNearBottom(e.currentTarget)
-                }}
-              >
-                {currentMessages.map((m) => (
-                  <Card
-                    key={m.id}
-                    size="small"
-                    className={`app-message-card ${m.role === 'user' ? 'is-user' : 'is-assistant'}`}
+            {isEmptyConversation ? (
+              <div className="app-composer-hero">
+                <div className="app-composer-hero-inner">
+                  {composerWorkspaceToolbar}
+                  <Text type="secondary" className="app-empty-tip-inline">
+                    发一条消息开始；务必先选择工作区并配置 API Key。
+                  </Text>
+                  {composerInput}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="app-messages-shell">
+                  <div
+                    className="app-messages-scroll"
+                    ref={messagesScrollRef}
+                    onScroll={(e) => {
+                      autoScrollRef.current = isNearBottom(e.currentTarget)
+                    }}
                   >
-                    <div className="app-message-content">
-                      {m.role === 'assistant' ? (
-                        <div className="app-message-markdown" onClick={onMarkdownClick}>
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm, remarkLinkifyBareUrls]}
-                            rehypePlugins={[rehypeHighlight]}
-                          >
-                            {m.content || (isRun ? '…' : '')}
-                          </ReactMarkdown>
-                        </div>
-                      ) : (
-                        m.content
-                      )}
-                    </div>
-                    {m.role === 'assistant' &&
-                      m.id === latestAssistantMessageId &&
-                      currentTimeline.length > 0 && (
-                        <div className="app-timeline-wrap">
-                          {currentTimeline.map((e, idx) => (
-                            <div
-                              key={`${e.kind}-${'id' in e ? e.id : idx}-${idx}`}
-                              className="app-timeline-item"
-                            >
-                              {e.kind === 'error' ? (
-                                <Text type="danger">{e.message}</Text>
-                              ) : (
-                                <>
-                                  <Text code>
-                                    {e.name} {e.status === 'start' ? '…' : '✓'}
-                                  </Text>
-                                  {e.args && <Text type="secondary"> {e.args}</Text>}
-                                  {e.status === 'end' && e.result && (
-                                    <pre className="app-timeline-result">{e.result}</pre>
-                                  )}
-                                </>
-                              )}
+                    {currentMessages.map((m) => (
+                      <Card
+                        key={m.id}
+                        size="small"
+                        className={`app-message-card ${m.role === 'user' ? 'is-user' : 'is-assistant'}`}
+                      >
+                        <div className="app-message-content">
+                          {m.role === 'assistant' ? (
+                            <div className="app-message-markdown" onClick={onMarkdownClick}>
+                              <ReactMarkdown
+                                remarkPlugins={[remarkGfm, remarkLinkifyBareUrls]}
+                                rehypePlugins={[rehypeHighlight]}
+                              >
+                                {m.content || (isRun ? '…' : '')}
+                              </ReactMarkdown>
                             </div>
-                          ))}
+                          ) : (
+                            m.content
+                          )}
                         </div>
-                      )}
-                  </Card>
-                ))}
-                {!currentMessages.length && (
-                  <Card size="small" className="app-empty-card">
-                    <Text type="secondary" className="app-empty-tip">
-                      发一条消息开始；务必先选择工作区并配置 API Key。
-                    </Text>
-                  </Card>
-                )}
-                <div ref={messagesBottomRef} />
-              </div>
-            </div>
-            <div className="app-composer">
-              <TextArea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                autoSize={{ minRows: 1, maxRows: 6 }}
-                placeholder="输入消息… (Enter 发送，Shift+Enter 换行)"
-                className="app-composer-input"
-                onPressEnter={(e) => {
-                  if (!e.shiftKey) {
-                    e.preventDefault()
-                    void send()
-                  }
-                }}
-              />
-              <div className="app-composer-actions">
-                {showSendButton && (
-                  <Button
-                    type="primary"
-                    icon={<SendOutlined />}
-                    onClick={() => void send()}
-                    disabled={!activeId}
-                    className="app-send-btn"
-                  >
-                    发送
-                  </Button>
-                )}
-                {showStopButton && (
-                  <Button
-                    danger
-                    icon={<StopOutlined />}
-                    onClick={() => void bridge.cancelAgent(activeId!)}
-                    className="app-stop-btn"
-                  >
-                    停止
-                  </Button>
-                )}
-              </div>
-            </div>
+                        {m.role === 'assistant' &&
+                          m.id === latestAssistantMessageId &&
+                          currentTimeline.length > 0 && (
+                            <div className="app-timeline-wrap">
+                              {currentTimeline.map((e, idx) => (
+                                <div
+                                  key={`${e.kind}-${'id' in e ? e.id : idx}-${idx}`}
+                                  className="app-timeline-item"
+                                >
+                                  {e.kind === 'error' ? (
+                                    <Text type="danger">{e.message}</Text>
+                                  ) : (
+                                    <>
+                                      <Text code>
+                                        {e.name} {e.status === 'start' ? '…' : '✓'}
+                                      </Text>
+                                      {e.args && <Text type="secondary"> {e.args}</Text>}
+                                      {e.status === 'end' && e.result && (
+                                        <pre className="app-timeline-result">{e.result}</pre>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                      </Card>
+                    ))}
+                    <div ref={messagesBottomRef} />
+                  </div>
+                </div>
+                <div className="app-composer-stack">
+                  {composerWorkspaceToolbar}
+                  {composerInput}
+                </div>
+              </>
+            )}
           </div>
         </div>
         {!isRightPaneCollapsed ? (
