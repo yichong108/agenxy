@@ -900,6 +900,7 @@ export function App() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           autoSize={{ minRows: 1, maxRows: 6 }}
+          variant="borderless"
           placeholder="Plan / Build，/ 命令，@ 上下文（Enter 发送，Shift+Enter 换行）"
           className="app-composer-input"
           onPressEnter={(e) => {
