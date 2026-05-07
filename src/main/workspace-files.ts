@@ -1,5 +1,5 @@
-import fs from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
+import fs from 'node:fs/promises'
 import path from 'node:path'
 
 import { ensureWorkspaceExists, resolveSafePath } from '@/main/path-guard'
@@ -33,7 +33,9 @@ function isLikelyBinary(buf: Buffer): boolean {
   return false
 }
 
-export async function listWorkspaceFileTree(workspacePath: string): Promise<WorkspaceFileTreePayload> {
+export async function listWorkspaceFileTree(
+  workspacePath: string
+): Promise<WorkspaceFileTreePayload> {
   const root = ensureWorkspaceExists(workspacePath)
   let nodeCount = 0
 

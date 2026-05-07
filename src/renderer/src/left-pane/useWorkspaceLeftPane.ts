@@ -78,8 +78,7 @@ export function useWorkspaceLeftPane({ ensureSessionMessages }: UseWorkspaceLeft
   }, [sessionsByWorkspace, byWorkspaceUi])
 
   const workspacesForSidebar = useMemo(() => {
-    const homeHasSessions =
-      (sessionsByWorkspaceForSidebar[HOME_WORKSPACE_ID] ?? []).length > 0
+    const homeHasSessions = (sessionsByWorkspaceForSidebar[HOME_WORKSPACE_ID] ?? []).length > 0
     if (homeHasSessions) return workspaces
     return workspaces.filter((w) => w.id !== HOME_WORKSPACE_ID)
   }, [workspaces, sessionsByWorkspaceForSidebar])
@@ -528,8 +527,9 @@ export function useWorkspaceLeftPane({ ensureSessionMessages }: UseWorkspaceLeft
     handleSessionRenameRequest,
     handleSessionDeleteRequest,
     handleRemoveSessionFromSidebar,
-    handleRemoveWorkspaceFromSidebar:
-      supportsMultiWorkspaceApi ? handleRemoveWorkspaceFromSidebar : undefined,
+    handleRemoveWorkspaceFromSidebar: supportsMultiWorkspaceApi
+      ? handleRemoveWorkspaceFromSidebar
+      : undefined,
     mcpOpen,
     closeMcpHub: () => setMcpOpen(false),
     settingsOpen,

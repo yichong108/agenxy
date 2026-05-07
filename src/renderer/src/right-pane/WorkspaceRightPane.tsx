@@ -480,7 +480,10 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
         window.removeEventListener('mousemove', onMove)
         window.removeEventListener('mouseup', onUp)
         try {
-          localStorage.setItem(FILE_TREE_SPLIT_STORAGE_KEY, String(fileTreeSplitFractionRef.current))
+          localStorage.setItem(
+            FILE_TREE_SPLIT_STORAGE_KEY,
+            String(fileTreeSplitFractionRef.current)
+          )
         } catch {
           /* ignore */
         }

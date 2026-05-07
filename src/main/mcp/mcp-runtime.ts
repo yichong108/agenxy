@@ -1,13 +1,12 @@
 ﻿import { tool } from '@langchain/core/tools'
-/* eslint-disable import/no-unresolved -- @modelcontextprotocol/sdk 使用 package exports 子路径 */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import {
   StdioClientTransport,
   getDefaultEnvironment
 } from '@modelcontextprotocol/sdk/client/stdio.js'
-/* eslint-enable import/no-unresolved */
 import { z } from 'zod'
 
+import { logScope } from '@/main/logger'
 import type {
   AppSettings,
   McpProbeResult,
@@ -15,7 +14,6 @@ import type {
   McpWarmupServerResult,
   ToolTimelineEvent
 } from '@/shared/ipc'
-import { logScope } from '@/main/logger'
 
 const mcpLog = logScope('mcp')
 

@@ -99,8 +99,7 @@ export async function tavilyWebSearch(
         : data.detail != null
           ? JSON.stringify(data.detail).slice(0, 400)
           : ''
-    const msg =
-      (typeof data.error === 'string' && data.error) || detailStr || text.slice(0, 500)
+    const msg = (typeof data.error === 'string' && data.error) || detailStr || text.slice(0, 500)
     return `Tavily HTTP ${res.status}: ${msg}`
   }
 

@@ -7,15 +7,9 @@ import { ChatOpenAI } from '@langchain/openai'
 import type { WebContents } from 'electron'
 import { z } from 'zod'
 
-import {
-  EVENTS,
-  type AppSettings,
-  type ChatMessage,
-  type ModelProviderId,
-  type StreamEvent,
-  type ToolTimelineEvent,
-  getActiveProviderProfile
-} from '@/shared/ipc'
+import { StreamBatcher } from '@/main/agent/batcher'
+import { ConcurrencyQueue } from '@/main/agent/queue'
+import { buildSkillBundle } from '@/main/agent/skills/index'
 import { logScope } from '@/main/logger'
 import { buildMcpLangChainTools, collectMcpServerContextHints } from '@/main/mcp/mcp-runtime'
 import {
@@ -35,10 +29,15 @@ import {
 } from '@/main/tools/fs-tools'
 import { runCommand, killCommand } from '@/main/tools/terminal'
 import { isTavilyConfigured, tavilyWebSearch } from '@/main/tools/web-search'
-
-import { StreamBatcher } from '@/main/agent/batcher'
-import { ConcurrencyQueue } from '@/main/agent/queue'
-import { buildSkillBundle } from '@/main/agent/skills/index'
+import {
+  EVENTS,
+  type AppSettings,
+  type ChatMessage,
+  type ModelProviderId,
+  type StreamEvent,
+  type ToolTimelineEvent,
+  getActiveProviderProfile
+} from '@/shared/ipc'
 
 const agentLog = logScope('agent')
 

@@ -192,9 +192,7 @@ export function WorkspaceLeftPane({ ensureSessionMessages }: WorkspaceLeftPanePr
                             >
                               <div
                                 className={`app-session-item app-session-item-sub ${session.id === p.activeSessionId ? 'is-active' : ''}`}
-                                onClick={() =>
-                                  void p.handleSessionClick(workspace.id, session.id)
-                                }
+                                onClick={() => void p.handleSessionClick(workspace.id, session.id)}
                               >
                                 <div className="app-session-title">{session.name}</div>
                               </div>

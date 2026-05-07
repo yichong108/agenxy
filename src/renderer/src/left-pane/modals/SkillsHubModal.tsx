@@ -144,7 +144,11 @@ export function SkillsHubModal({ open, onClose }: SkillsHubModalProps) {
         <Button key="close" onClick={onClose}>
           关闭
         </Button>,
-        <Button key="reload-installed" loading={skillsStateLoading} onClick={() => void reloadSkillsState()}>
+        <Button
+          key="reload-installed"
+          loading={skillsStateLoading}
+          onClick={() => void reloadSkillsState()}
+        >
           刷新已安装
         </Button>
       ]}

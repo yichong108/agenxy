@@ -402,7 +402,11 @@ export function McpHubModal({ open, onClose }: McpHubModalProps) {
                     }
                   />
                   <Space style={{ marginBottom: 12 }}>
-                    <Button size="small" loading={mcpWarmupBusy} onClick={() => void rerunMcpWarmup()}>
+                    <Button
+                      size="small"
+                      loading={mcpWarmupBusy}
+                      onClick={() => void rerunMcpWarmup()}
+                    >
                       重新预检全部 MCP
                     </Button>
                   </Space>

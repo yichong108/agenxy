@@ -147,7 +147,9 @@ function migrateFromLegacyIfNeeded(): void {
     }
 
     const activeSessionId =
-      typeof legacyUiStateRaw?.activeSessionId === 'string' ? legacyUiStateRaw.activeSessionId : null
+      typeof legacyUiStateRaw?.activeSessionId === 'string'
+        ? legacyUiStateRaw.activeSessionId
+        : null
     const inputDraft =
       typeof legacyUiStateRaw?.inputDraft === 'string' ? legacyUiStateRaw.inputDraft : ''
 
@@ -413,8 +415,7 @@ export function setWorkspaceUiState(
       [workspaceId]: {
         activeSessionId: patch.activeSessionId ?? prev.activeSessionId,
         inputDraft: patch.inputDraft ?? prev.inputDraft,
-        sidebarHiddenSessionIds:
-          patch.sidebarHiddenSessionIds ?? prev.sidebarHiddenSessionIds ?? []
+        sidebarHiddenSessionIds: patch.sidebarHiddenSessionIds ?? prev.sidebarHiddenSessionIds ?? []
       }
     }
   })
@@ -470,7 +471,8 @@ export function upsertWorkspaceByPath(dir: string): WorkspaceInfo {
   const next = [...list, workspace]
   store.set('workspaces', next)
   if (listWasEmpty && getSessionsMeta(DEFAULT_WORKSPACE_ID).length > 0) {
-    const { removeWorkspaceSessions } = require('@/main/sessions') as typeof import('@/main/sessions')
+    const { removeWorkspaceSessions } =
+      require('@/main/sessions') as typeof import('@/main/sessions')
     removeWorkspaceSessions(DEFAULT_WORKSPACE_ID, workspace.id)
   }
   return workspace

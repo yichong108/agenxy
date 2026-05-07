@@ -1,4 +1,10 @@
-import { BugOutlined, DownOutlined, FolderOpenOutlined, SendOutlined, StopOutlined } from '@ant-design/icons'
+import {
+  BugOutlined,
+  DownOutlined,
+  FolderOpenOutlined,
+  SendOutlined,
+  StopOutlined
+} from '@ant-design/icons'
 import {
   App as AntdApp,
   Alert,
@@ -43,7 +49,7 @@ function filterSessionsForSidebar(
 }
 
 import '@/renderer/src/App.scss'
-import { renderLog } from './logger';
+import { renderLog } from './logger'
 
 const { Text } = Typography
 const { TextArea } = Input
@@ -323,8 +329,7 @@ export function App() {
       }
       setSessionsByWorkspace(sessionsMap)
       const activeWsId = workspacePayload.activeWorkspaceId ?? ''
-      const hidden =
-        useUiStore.getState().byWorkspace[activeWsId]?.sidebarHiddenSessionIds ?? []
+      const hidden = useUiStore.getState().byWorkspace[activeWsId]?.sidebarHiddenSessionIds ?? []
       const activeListRaw = sessionsMap[activeWsId] ?? []
       const activeList = filterSessionsForSidebar(activeListRaw, hidden)
       const currentActiveId = useUiStore.getState().activeSessionId
@@ -912,9 +917,11 @@ export function App() {
               <Space>
                 <Text type="secondary">会话</Text>
                 <Text>
-                  {(sessionsByWorkspace[composerSelectedWorkspaceId] ?? []).find(
-                    (s) => s.id === activeId
-                  )?.name}
+                  {
+                    (sessionsByWorkspace[composerSelectedWorkspaceId] ?? []).find(
+                      (s) => s.id === activeId
+                    )?.name
+                  }
                 </Text>
                 {isRun && <Tag color="processing">执行中</Tag>}
                 {isQueued && isQueued > 0 && <Tag color="warning">排队 #{isQueued}</Tag>}
@@ -1030,8 +1037,8 @@ export function App() {
           bridge={bridge}
           activeWorkspaceId={composerSelectedWorkspaceId}
           activeWorkspacePath={
-            workspacesWithComposerHomeStub.find((x) => x.id === composerSelectedWorkspaceId)?.path ??
-            null
+            workspacesWithComposerHomeStub.find((x) => x.id === composerSelectedWorkspaceId)
+              ?.path ?? null
           }
           width={isRightPaneCollapsed ? RIGHT_PANE_COLLAPSED_WIDTH : rightPaneWidth}
           isCollapsed={isRightPaneCollapsed}
