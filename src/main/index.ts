@@ -193,7 +193,8 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 600,
     webPreferences,
-    show: true,
+    /** 等首屏 did-finish-load 再 show + maximize，避免 ready-to-show 未触发时无法最大化 */
+    show: false,
     ...win32Chrome
   })
 
@@ -206,10 +207,6 @@ function createWindow(): void {
   } else {
     void mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
-  mainWindow.once('ready-to-show', () => {
-    mainWindow?.maximize()
-    mainWindow?.show()
-  })
   mainWindow.webContents.on(
     'did-fail-load',
     (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
@@ -224,7 +221,8 @@ function createWindow(): void {
   })
   bindAgentIpc(mainWindow.webContents)
   mainWindow.webContents.on('did-finish-load', () => {
-    mainLog.info(`[renderer] did-finish-load: ${mainWindow?.webContents.getURL() || '(unknown)'}`)
+    mainWindow?.maximize()
+    mainWindow?.show()
     broadcastWorkspaces()
     broadcastSessions()
   })
@@ -437,7 +435,7 @@ function registerIpc(): void {
    */
   ipcMain.handle(IPC.AGENT_SEND, async (_e, sessionId: string, text: string) => {
     mainLog.info(`[AGENT_SEND] sessionId: ${sessionId}, text: ${text}`)
-    
+
     if (!text.trim()) return { ok: false as const, error: '空消息' }
     const onQueued = (pos: number) => {
       if (pos > 0) {
