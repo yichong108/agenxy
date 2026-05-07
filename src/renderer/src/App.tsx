@@ -1,7 +1,9 @@
 import {
   BugOutlined,
+  CheckOutlined,
   DownOutlined,
   FolderOpenOutlined,
+  PlusOutlined,
   SendOutlined,
   StopOutlined
 } from '@ant-design/icons'
@@ -147,6 +149,9 @@ export function App() {
   const input = useUiStore((s) => s.inputDraft)
   const setInput = useUiStore((s) => s.setInputDraft)
   const hydrateUiStore = useUiStore((s) => s.hydrateFromMain)
+
+  /** 未开启时为 Cursor 风格的 Build（可写可执行）；开启后为 Ask 只读问答 */
+  const [composerAskOn, setComposerAskOn] = useState(false)
 
   /** 顶栏工作区下拉始终含 Home；侧栏移除 Home 后主进程同步列表可能不含该项 */
   const workspacesWithComposerHomeStub = useMemo(() => {
@@ -592,6 +597,37 @@ export function App() {
     [pickWorkspace, switchComposerWorkspace]
   )
 
+  const handleComposerPlusMenuClick = useCallback<NonNullable<MenuProps['onClick']>>(
+    ({ key }) => {
+      if (key === 'ask') setComposerAskOn((v) => !v)
+    },
+    []
+  )
+
+  const composerPlusMenuItems = useMemo<MenuProps['items']>(
+    () => [
+      {
+        key: 'ask',
+        label: (
+          <div className="app-composer-plus-menu-label">
+            <span className="app-composer-plus-menu-title">
+              {composerAskOn ? (
+                <CheckOutlined style={{ marginRight: 8 }} />
+              ) : (
+                <span style={{ display: 'inline-block', width: 22 }} aria-hidden />
+              )}
+              Ask
+            </span>
+            <span className="app-composer-plus-menu-desc">
+              只读问答与讲解；改代码、跑终端请用默认 Build（不勾选此项）
+            </span>
+          </div>
+        )
+      }
+    ],
+    [composerAskOn]
+  )
+
   const composerWorkspaceMenuItems = useMemo<MenuProps['items']>(() => {
     const ordered = [...workspacesWithComposerHomeStub].sort((a, b) => {
       if (a.id === HOME_WORKSPACE_ID) return -1
@@ -648,7 +684,9 @@ export function App() {
         [sessionId]: [...cur, { id: randomId(), role: 'user' as const, content: t }]
       }
     })
-    const r = await bridge.sendAgentMessage(sessionId, t)
+    const r = await bridge.sendAgentMessage(sessionId, t, {
+      mode: composerAskOn ? 'ask' : 'build'
+    })
     if (!r.ok) {
       msgApi.error('发送失败: ' + r.error)
       setMessages((m) => {
@@ -857,41 +895,60 @@ export function App() {
 
   const composerInput = (
     <div className="app-composer">
-      <TextArea
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        autoSize={{ minRows: 1, maxRows: 6 }}
-        placeholder="输入消息… (Enter 发送，Shift+Enter 换行)"
-        className="app-composer-input"
-        onPressEnter={(e) => {
-          if (!e.shiftKey) {
-            e.preventDefault()
-            void send()
-          }
-        }}
-      />
-      <div className="app-composer-actions">
-        {showSendButton && (
-          <Button
-            type="primary"
-            icon={<SendOutlined />}
-            onClick={() => void send()}
-            disabled={!activeWorkspace?.path || !input.trim()}
-            className="app-send-btn"
-          >
-            发送
-          </Button>
-        )}
-        {showStopButton && (
-          <Button
-            danger
-            icon={<StopOutlined />}
-            onClick={() => void bridge.cancelAgent(activeId!)}
-            className="app-stop-btn"
-          >
-            停止
-          </Button>
-        )}
+      <div className="app-composer-inner">
+        <TextArea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          autoSize={{ minRows: 1, maxRows: 6 }}
+          placeholder="Plan / Build，/ 命令，@ 上下文（Enter 发送，Shift+Enter 换行）"
+          className="app-composer-input"
+          onPressEnter={(e) => {
+            if (!e.shiftKey) {
+              e.preventDefault()
+              void send()
+            }
+          }}
+        />
+        <div className="app-composer-footer">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Dropdown
+              menu={{ items: composerPlusMenuItems, onClick: handleComposerPlusMenuClick }}
+              trigger={['click']}
+              placement="topLeft"
+            >
+              <Button
+                type="default"
+                className="app-composer-plus-btn"
+                icon={<PlusOutlined />}
+                aria-label="对话模式"
+              />
+            </Dropdown>
+            {composerAskOn ? <span className="app-composer-mode-hint">Ask</span> : null}
+          </div>
+          <div className="app-composer-actions">
+            {showSendButton && (
+              <Button
+                type="primary"
+                icon={<SendOutlined />}
+                onClick={() => void send()}
+                disabled={!activeWorkspace?.path || !input.trim()}
+                className="app-send-btn"
+              >
+                发送
+              </Button>
+            )}
+            {showStopButton && (
+              <Button
+                danger
+                icon={<StopOutlined />}
+                onClick={() => void bridge.cancelAgent(activeId!)}
+                className="app-stop-btn"
+              >
+                停止
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )

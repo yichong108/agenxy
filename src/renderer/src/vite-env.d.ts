@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import type {
+  AgentSendOptions,
   AppSettings,
   ChatMessage,
   McpProbeResult,
@@ -58,7 +59,8 @@ type Api = {
   deleteSession: (id: string) => Promise<{ ok: true }>
   sendAgentMessage: (
     sessionId: string,
-    text: string
+    text: string,
+    opts?: AgentSendOptions
   ) => Promise<{ ok: true } | { ok: false; error: string }>
   cancelAgent: (sessionId: string) => Promise<{ ok: true }>
   toggleDevtools: () => Promise<{ open: boolean }>

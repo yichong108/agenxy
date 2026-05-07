@@ -4,6 +4,7 @@ import { installElectronLogBridge } from '@/preload/electron-log-bridge'
 import {
   EVENTS,
   IPC,
+  type AgentSendOptions,
   type AppSettings,
   type ChatMessage,
   type McpProbeResult,
@@ -81,8 +82,8 @@ const api = {
     ipcRenderer.invoke(IPC.SESSIONS_RENAME, id, name) as Promise<SessionInfo | null>,
   deleteSession: (id: string) =>
     ipcRenderer.invoke(IPC.SESSIONS_DELETE, id) as Promise<{ ok: true }>,
-  sendAgentMessage: (sessionId: string, text: string) =>
-    ipcRenderer.invoke(IPC.AGENT_SEND, sessionId, text) as Promise<
+  sendAgentMessage: (sessionId: string, text: string, opts?: AgentSendOptions) =>
+    ipcRenderer.invoke(IPC.AGENT_SEND, sessionId, text, opts ?? {}) as Promise<
       { ok: true } | { ok: false; error: string }
     >,
   cancelAgent: (sessionId: string) =>

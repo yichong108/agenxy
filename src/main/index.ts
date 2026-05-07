@@ -49,6 +49,7 @@ import {
   HOME_WORKSPACE_ID,
   IPC,
   EVENTS,
+  type AgentComposerMode,
   type AppSettings,
   type McpServerEntry,
   type McpWarmupReport,
@@ -433,43 +434,48 @@ function registerIpc(): void {
    * @param text 消息内容
    * @returns 发送结果
    */
-  ipcMain.handle(IPC.AGENT_SEND, async (_e, sessionId: string, text: string) => {
-    mainLog.info(`[AGENT_SEND] sessionId: ${sessionId}, text: ${text}`)
+  ipcMain.handle(
+    IPC.AGENT_SEND,
+    async (
+      _e,
+      sessionId: string,
+      text: string,
+      opts?: { mode?: AgentComposerMode }
+    ) => {
+      const mode = opts?.mode === 'ask' ? 'ask' : 'build'
+      mainLog.info(`[AGENT_SEND] sessionId: ${sessionId}, mode: ${mode}, text: ${text}`)
 
-    if (!text.trim()) return { ok: false as const, error: '空消息' }
-    const onQueued = (pos: number) => {
-      if (pos > 0) {
-        mainLog.info(`[AGENT_SEND] onQueued: ${pos}`)
-        const ev: StreamEvent = { type: 'queued', sessionId, position: pos }
-        mainWindow?.webContents.send(EVENTS.AGENT_STREAM, ev)
-      } else {
-        mainLog.info(`[AGENT_SEND] onQueued: ${pos}`)
+      if (!text.trim()) return { ok: false as const, error: '空消息' }
+      const onQueued = (pos: number) => {
+        if (pos > 0) {
+          mainLog.info(`[AGENT_SEND] onQueued: ${pos}`)
+          const ev: StreamEvent = { type: 'queued', sessionId, position: pos }
+          mainWindow?.webContents.send(EVENTS.AGENT_STREAM, ev)
+        } else {
+          mainLog.info(`[AGENT_SEND] onQueued: ${pos}`)
+        }
+      }
+      try {
+        await runUserMessage(sessionId, text.trim(), onQueued, { mode })
+        const workspaceId = getSessionWorkspaceId(sessionId)
+        if (workspaceId) {
+          touchSession(workspaceId, sessionId)
+        }
+        broadcastSessions()
+        return { ok: true as const }
+      } catch (err) {
+        mainLog.error(`[AGENT_SEND] error: ${err}`)
+
+        const message = err instanceof Error ? err.message : String(err)
+        mainWindow?.webContents.send(EVENTS.AGENT_STREAM, {
+          type: 'error',
+          sessionId,
+          message
+        } as StreamEvent)
+        return { ok: false as const, error: message }
       }
     }
-    try {
-      // 发送消息到 Agent
-      await runUserMessage(sessionId, text.trim(), onQueued)
-      // 更新会话时间
-      const workspaceId = getSessionWorkspaceId(sessionId)
-      if (workspaceId) {
-        touchSession(workspaceId, sessionId)
-      }
-      // 广播会话列表
-      broadcastSessions()
-      // 返回发送结果
-      return { ok: true as const }
-    } catch (err) {
-      mainLog.error(`[AGENT_SEND] error: ${err}`)
-
-      const message = err instanceof Error ? err.message : String(err)
-      mainWindow?.webContents.send(EVENTS.AGENT_STREAM, {
-        type: 'error',
-        sessionId,
-        message
-      } as StreamEvent)
-      return { ok: false as const, error: message }
-    }
-  })
+  )
   ipcMain.handle(IPC.AGENT_CANCEL, (_e, sessionId: string) => {
     cancelRun(sessionId)
     return { ok: true as const }

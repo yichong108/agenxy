@@ -67,6 +67,16 @@ export const EVENTS = {
 
 export type ModelProviderId = 'deepseek' | 'ollama'
 
+/**
+ * 主输入区发送模式（对齐 Cursor：Ask 只读问答，Build 可写文件、跑终端与技能/MCP）。
+ * 渲染层「未勾选 Ask」时按 build 发送。
+ */
+export type AgentComposerMode = 'build' | 'ask'
+
+export type AgentSendOptions = {
+  mode?: AgentComposerMode
+}
+
 /** 用户配置的 stdio MCP 服务器（与 Cursor MCP 配置形态相近） */
 export type McpServerEntry = {
   id: string

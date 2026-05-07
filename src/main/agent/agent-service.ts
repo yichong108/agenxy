@@ -31,6 +31,7 @@ import { runCommand, killCommand } from '@/main/tools/terminal'
 import { isTavilyConfigured, tavilyWebSearch } from '@/main/tools/web-search'
 import {
   EVENTS,
+  type AgentComposerMode,
   type AppSettings,
   type ChatMessage,
   type ModelProviderId,
@@ -210,6 +211,22 @@ ${webRule}
 - 回答简洁、可执行；修改代码前先 read/list。`
 }
 
+function buildAskSystemPrompt(root: string, settings: AppSettings): string {
+  const web = isTavilyConfigured(settings.tavilyApiKey)
+  const toolLine = web
+    ? 'read_file, list_dir, glob, search_workspace, web_search（Tavily）'
+    : 'read_file, list_dir, glob, search_workspace（未配置 Tavily 时无 web_search）'
+  const webRule = web
+    ? '- 需要站外最新信息时可调用 **web_search**；不得编造检索结果。'
+    : '- 当前未配置 Tavily：若用户要实时资讯，请如实说明并建议在「设置」中配置 Tavily。'
+  return `你是协助理解与讲解代码、架构与命令的助手（**Ask / 问答模式**）。工作区根目录: ${root}。
+- **不得**修改工作区文件、删除文件、执行 shell、调用 skill_* 或任何 mcp_*；本模式下这些工具不可用。
+- 仅可使用只读工具: ${toolLine}。路径均为相对工作区根。
+- 用户若要求「直接改代码 / 运行命令 / 应用补丁」，请说明这在 Ask 模式下无法自动执行，并给出可复制片段或步骤；需要自动落地时请切换到 **Build**（关闭 Ask）。
+${webRule}
+- 回答清晰、可验证：需要引用仓库内容时先 read/list/search，再下结论。`
+}
+
 type FileToolHint =
   | { type: 'read'; pathHint: string }
   | { type: 'list'; pathHint: string; depthHint?: number }
@@ -256,7 +273,8 @@ async function invokeChatOnlyStream(
   mcpContextHints: string,
   ac: AbortController,
   batcher: StreamBatcher,
-  timeoutMs: number
+  timeoutMs: number,
+  composerMode: AgentComposerMode = 'build'
 ): Promise<number> {
   const model = createLanguageModel(settings)
   const webHint =
@@ -265,7 +283,13 @@ async function invokeChatOnlyStream(
     '【运行模式】当前未启用工作区工具（模型不支持 function calling 或未在设置中打开）：不得调用 read_file、write_file、delete_file、list_dir、glob、search_workspace、shell、web_search、任何 skill_* 及任何 mcp_* 工具；请用纯文本协助用户（可做步骤说明、命令示例与代码片段）。' +
     ' 勿编造「网络搜索不可用」「搜索引擎故障」等理由；应如实说明是未开启工具或未配置 Tavily。' +
     webHint
-  const systemText = [buildSystemPrompt(root, settings), skillHint, mcpContextHints, chatNotice]
+  const askNotice =
+    composerMode === 'ask'
+      ? '【Ask 模式】以讲解与可复制的代码/命令建议为主，勿假定已写入磁盘或已执行命令；需要自动改仓库时请用户在界面关闭 Ask（Build）。'
+      : ''
+  const basePrompt =
+    composerMode === 'ask' ? buildAskSystemPrompt(root, settings) : buildSystemPrompt(root, settings)
+  const systemText = [basePrompt, skillHint, mcpContextHints, chatNotice, askNotice]
     .filter(Boolean)
     .join('\n\n')
   const llmMessages = [new SystemMessage(systemText), ...session.messages]
@@ -370,12 +394,21 @@ async function invokeAgentWithGuard(
 /**
  * 创建工具
  */
+const ASK_MODE_TOOL_NAMES = new Set([
+  'read_file',
+  'list_dir',
+  'glob',
+  'search_workspace',
+  'web_search'
+])
+
 async function makeTools(
   sessionId: string,
   root: string,
   settings: AppSettings,
   runCtx: { runId: string; traceId: string },
-  onTool: (e: ToolTimelineEvent) => void
+  onTool: (e: ToolTimelineEvent) => void,
+  composerMode: AgentComposerMode = 'build'
 ) {
   const termKey = `term:${sessionId}`
   const baseTools = [
@@ -689,14 +722,22 @@ async function makeTools(
     runCtx,
     onTool
   )
-  const tools = [
+  let tools = [
     ...skillBundle.tools,
     ...baseTools,
     ...webSearchTools,
     ...mcpTools
   ] as unknown as NamedTool[]
+  if (composerMode === 'ask') {
+    tools = tools.filter((t) => ASK_MODE_TOOL_NAMES.has((t as NamedTool).name))
+  }
   const byName = new Map<string, NamedTool>(tools.map((x) => [x.name, x as NamedTool]))
-  return { tools, byName, skillHint: skillBundle.hint, mcpContextHints }
+  return {
+    tools,
+    byName,
+    skillHint: composerMode === 'ask' ? '' : skillBundle.hint,
+    mcpContextHints: composerMode === 'ask' ? '' : mcpContextHints
+  }
 }
 
 function contentToText(content: unknown): string {
@@ -756,10 +797,12 @@ export function cancelRun(sessionId: string): void {
 export async function runUserMessage(
   sessionId: string,
   userText: string,
-  onQueued: (pos: number) => void
+  onQueued: (pos: number) => void,
+  options?: { mode?: AgentComposerMode }
 ): Promise<void> {
+  const composerMode: AgentComposerMode = options?.mode === 'ask' ? 'ask' : 'build'
   const settings = getSettings()
-  agentLog.info(`settings: ${JSON.stringify(settings, null, 2)}`)
+  agentLog.info(`settings: ${JSON.stringify(settings, null, 2)}, composerMode: ${composerMode}`)
 
   const existingSession = sessions.get(sessionId)
   if (!existingSession) {
@@ -840,11 +883,12 @@ export async function runUserMessage(
           settings,
           session,
           root,
-          skillBundle.hint,
-          mcpContextHints,
+          composerMode === 'ask' ? '' : skillBundle.hint,
+          composerMode === 'ask' ? '' : mcpContextHints,
           ac,
           batcher,
-          invokeTimeoutMs
+          invokeTimeoutMs,
+          composerMode
         )
       } else {
         const { tools, skillHint, mcpContextHints } = await makeTools(
@@ -852,11 +896,15 @@ export async function runUserMessage(
           root,
           settings,
           { runId, traceId },
-          onTool
+          onTool,
+          composerMode
         )
 
         const model = createLanguageModel(settings).bindTools(tools as never[])
-        const baseSystem = buildSystemPrompt(root, settings)
+        const baseSystem =
+          composerMode === 'ask'
+            ? buildAskSystemPrompt(root, settings)
+            : buildSystemPrompt(root, settings)
         const fileToolInstruction = fileToolHint
           ? fileToolHint.type === 'read'
             ? `（可选上下文）用户消息可能涉及读取文件；需要时请自行调用 read_file，路径可参考: ${fileToolHint.pathHint}。是否调用由你根据意图决定。`
