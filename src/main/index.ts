@@ -486,7 +486,7 @@ function registerIpc(): void {
       mainWindow.webContents.closeDevTools()
       return { open: false }
     }
-    mainWindow.webContents.openDevTools({ mode: 'detach' })
+    mainWindow.webContents.openDevTools({ mode: 'bottom' })
     return { open: true }
   })
   ipcMain.handle(IPC.EXTERNAL_OPEN, async (_e, url: string) => {
