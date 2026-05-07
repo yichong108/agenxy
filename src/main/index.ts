@@ -193,7 +193,7 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 600,
     webPreferences,
-    show: false,
+    show: true,
     ...win32Chrome
   })
 
