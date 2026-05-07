@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron'
 
-import { bindAgentIpc, cancelRun, runUserMessage, resetQueue } from '@/main/agent/agent-service'
+import { bindAgentIpc, cancelRun, runUserMessage } from '@/main/agent/agent-service'
 import {
   ensureUserSkillsLayout,
   gatherSkillsRuntimeState,
@@ -363,9 +363,6 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.SETTINGS_GET, () => getSettings())
   ipcMain.handle(IPC.SETTINGS_SET, (_e, patch: Partial<AppSettings>) => {
-    if (typeof patch.maxConcurrentStreams === 'number') {
-      resetQueue()
-    }
     if (patch.mcpServers !== undefined) {
       mcpWarmupGen++
       mcpWarmupPromise = null

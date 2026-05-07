@@ -37,7 +37,8 @@ import {
   type ModelProviderId,
   type StreamEvent,
   type ToolTimelineEvent,
-  getActiveProviderProfile
+  getActiveProviderProfile,
+  MAX_CONCURRENT_AGENT_STREAMS
 } from '@/shared/ipc'
 
 const agentLog = logScope('agent')
@@ -69,9 +70,9 @@ function makeTraceId(sessionId: string, runId: string): string {
   return `${sessionId}:${runId}`
 }
 
-function getQueue(settings: AppSettings): ConcurrencyQueue {
+function getQueue(): ConcurrencyQueue {
   if (!agentQueue) {
-    agentQueue = new ConcurrencyQueue(Math.max(1, settings.maxConcurrentStreams))
+    agentQueue = new ConcurrencyQueue(Math.max(1, MAX_CONCURRENT_AGENT_STREAMS))
   }
   return agentQueue
 }
@@ -817,7 +818,7 @@ export async function runUserMessage(
     emit({ type: 'error', sessionId, message: '当前会话所属工作区未绑定目录，请先绑定路径' })
     return
   }
-  const queue = getQueue(settings)
+  const queue = getQueue()
   if (queue.willBlock()) {
     onQueued(queue.waiting + 1)
   }
@@ -987,9 +988,4 @@ export async function runUserMessage(
       batcher.flush()
     }
   })
-}
-
-/** 重建队列并发上限时调用 */
-export function resetQueue(): void {
-  agentQueue = null
 }

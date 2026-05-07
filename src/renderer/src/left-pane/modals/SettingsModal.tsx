@@ -155,9 +155,6 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
             ) : null
           }
         </Form.Item>
-        <Form.Item name="maxConcurrentStreams" label="最大并行流">
-          <InputNumber min={1} max={8} className="app-settings-number" />
-        </Form.Item>
         <Form.Item name="streamFlushMs" label="流式合并间隔 (ms)">
           <InputNumber min={8} max={200} className="app-settings-number" />
         </Form.Item>

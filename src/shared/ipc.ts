@@ -230,8 +230,6 @@ export type AppSettings = {
   provider: ModelProviderId
   /** 各提供方独立配置；切换提供方时从对应项回显 */
   providerProfiles: Record<ModelProviderId, ProviderProfile>
-  /** 最大并行 Agent 流 */
-  maxConcurrentStreams: number
   /** 流式 IPC 合并：毫秒 */
   streamFlushMs: number
   /** 流式 IPC 合并：字符数 */
@@ -295,6 +293,9 @@ export type SkillsUninstallPayload =
   | { kind: 'market'; folderId: string }
   | { kind: 'legacy'; legacyFolderRelative: string }
 
+/** 主进程全局 Agent 流并发上限（代码固定，不写入用户设置） */
+export const MAX_CONCURRENT_AGENT_STREAMS = 3
+
 export const defaultProviderProfiles = (): Record<ModelProviderId, ProviderProfile> => ({
   deepseek: {
     baseUrl: 'https://api.deepseek.com',
@@ -313,7 +314,6 @@ export const defaultProviderProfiles = (): Record<ModelProviderId, ProviderProfi
 export const defaultSettings: AppSettings = {
   provider: 'deepseek',
   providerProfiles: defaultProviderProfiles(),
-  maxConcurrentStreams: 2,
   streamFlushMs: 32,
   streamFlushChars: 320,
   maxTerminalOutputChars: 1_000,
@@ -331,7 +331,6 @@ export function getActiveProviderProfile(s: AppSettings): ProviderProfile {
 /** 设置弹窗表单用的扁平字段（含当前提供方的 baseUrl/model/apiKey） */
 export type SettingsFormValues = Pick<
   AppSettings,
-  | 'maxConcurrentStreams'
   | 'streamFlushMs'
   | 'streamFlushChars'
   | 'maxTerminalOutputChars'
@@ -355,7 +354,6 @@ export function settingsToFormValues(s: AppSettings): SettingsFormValues {
     model: p.model,
     apiKey: p.apiKey,
     enableTools: s.provider === 'deepseek' ? true : p.enableTools,
-    maxConcurrentStreams: s.maxConcurrentStreams,
     streamFlushMs: s.streamFlushMs,
     streamFlushChars: s.streamFlushChars,
     maxTerminalOutputChars: s.maxTerminalOutputChars,
@@ -392,7 +390,6 @@ export function applySettingsForm(
     ...prev,
     provider: form.provider,
     providerProfiles,
-    maxConcurrentStreams: form.maxConcurrentStreams,
     streamFlushMs: form.streamFlushMs,
     streamFlushChars: form.streamFlushChars,
     maxTerminalOutputChars: form.maxTerminalOutputChars,

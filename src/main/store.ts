@@ -257,6 +257,8 @@ function normalizeSettings(
     LegacyFlatSettings & {
       skillsMarketCatalogUrl?: unknown
       skillsMarketCatalogRefreshHours?: unknown
+      /** 旧版持久化字段，忽略 */
+      maxConcurrentStreams?: unknown
     }
 ): AppSettings {
   const defaults = defaultSettings
@@ -267,10 +269,12 @@ function normalizeSettings(
     apiKey: legacyApiKey,
     skillsMarketCatalogUrl: legacySkillsMarketCatalogUrl,
     skillsMarketCatalogRefreshHours: legacySkillsMarketCatalogRefreshHours,
+    maxConcurrentStreams: _legacyMaxConcurrentStreams,
     ...inputRest
   } = input
   void legacySkillsMarketCatalogUrl
   void legacySkillsMarketCatalogRefreshHours
+  void _legacyMaxConcurrentStreams
   const legacy: LegacyFlatSettings = {
     baseUrl: legacyBaseUrl,
     model: legacyModel,
@@ -321,7 +325,6 @@ function normalizeSettings(
     ...inputRest,
     provider,
     providerProfiles,
-    maxConcurrentStreams: inputRest.maxConcurrentStreams ?? defaults.maxConcurrentStreams,
     streamFlushMs: inputRest.streamFlushMs ?? defaults.streamFlushMs,
     streamFlushChars: inputRest.streamFlushChars ?? defaults.streamFlushChars,
     maxTerminalOutputChars: inputRest.maxTerminalOutputChars ?? defaults.maxTerminalOutputChars,
