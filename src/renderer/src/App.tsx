@@ -43,6 +43,7 @@ function filterSessionsForSidebar(
 }
 
 import '@/renderer/src/App.scss'
+import { renderLog } from './logger';
 
 const { Text } = Typography
 const { TextArea } = Input
@@ -659,7 +660,9 @@ export function App() {
   const checkDevToolsReady = (): boolean => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const hook = (window as any).__REACT_DEVTOOLS_GLOBAL_HOOK__
-    return !!(hook && (hook.renderers?.size > 0 || hook._renderers))
+    const ready = !!(hook && (hook.renderers?.size > 0 || hook._renderers))
+    renderLog.info('checkDevToolsReady', ready)
+    return ready
   }
 
   const toggleDevtools = async () => {
@@ -671,7 +674,9 @@ export function App() {
         } else {
           console.log('[devtool]⏳ 正在等待 React DevTools 加载完成...')
         }
-        window.location.reload()
+        setTimeout(() => {
+          window.location.reload()
+        }, 1000)
       })
       .catch((err: Error) => {
         console.error('打开 DevTools 失败:', err)

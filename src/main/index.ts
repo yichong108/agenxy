@@ -65,7 +65,6 @@ mainLog.info('Electron 主进程启动')
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const isDev = !app.isPackaged
-const enableReactDevtoolsExt = process.env['ENABLE_REACT_DEVTOOLS_EXT'] === '1'
 let mainWindow: BrowserWindow | null = null
 
 let lastMcpWarmupReport: McpWarmupReport | null = null
@@ -109,12 +108,8 @@ function setupConsoleUtf8(): void {
 
 setupConsoleUtf8()
 
-async function loadReactDevtoolsExtension(): Promise<void> {
+async function loadDevtoolsExtension(): Promise<void> {
   if (!isDev) return
-  if (!enableReactDevtoolsExt) {
-    mainLog.info('[react-devtools] 扩展自动注入已关闭（设置 ENABLE_REACT_DEVTOOLS_EXT=1 可开启）')
-    return
-  }
 
   const extensionPath = path.resolve(__dirname, '../../src/extensions/react-devtools')
 
@@ -147,6 +142,7 @@ async function loadReactDevtoolsExtension(): Promise<void> {
     mainLog.warn(`[react-devtools] 本地扩展目录不存在: ${extensionPath}`)
   }
 
+  // log the extensions
   try {
     const exts = session.defaultSession.getAllExtensions()
     const extNames = exts.map((ext) => ext.name).join(', ')
@@ -613,7 +609,7 @@ app.whenReady().then(() => {
     Menu.setApplicationMenu(null)
   }
   void (async () => {
-    await loadReactDevtoolsExtension()
+    await loadDevtoolsExtension()
     await ensureUserSkillsLayout()
     loadSessionList()
     registerIpc()
