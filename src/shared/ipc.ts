@@ -230,12 +230,6 @@ export type AppSettings = {
   provider: ModelProviderId
   /** 各提供方独立配置；切换提供方时从对应项回显 */
   providerProfiles: Record<ModelProviderId, ProviderProfile>
-  /** 流式 IPC 合并：毫秒 */
-  streamFlushMs: number
-  /** 流式 IPC 合并：字符数 */
-  streamFlushChars: number
-  /** 终端/命令输出单条结果最大字符 */
-  maxTerminalOutputChars: number
   /** ReAct 模型-工具循环最大步数（LangGraph recursionLimit） */
   maxAgentLoopSteps: number
   /** 单次 agent 运行超时（毫秒） */
@@ -296,6 +290,13 @@ export type SkillsUninstallPayload =
 /** 主进程全局 Agent 流并发上限（代码固定，不写入用户设置） */
 export const MAX_CONCURRENT_AGENT_STREAMS = 3
 
+/** 流式 IPC 合并间隔（内置，不暴露设置） */
+export const STREAM_FLUSH_MS = 32
+/** 流式 IPC 合并字符数（内置） */
+export const STREAM_FLUSH_CHARS = 320
+/** 终端/命令单条输出最大字符（内置） */
+export const MAX_TERMINAL_OUTPUT_CHARS = 2_0000
+
 export const defaultProviderProfiles = (): Record<ModelProviderId, ProviderProfile> => ({
   deepseek: {
     baseUrl: 'https://api.deepseek.com',
@@ -314,9 +315,6 @@ export const defaultProviderProfiles = (): Record<ModelProviderId, ProviderProfi
 export const defaultSettings: AppSettings = {
   provider: 'deepseek',
   providerProfiles: defaultProviderProfiles(),
-  streamFlushMs: 32,
-  streamFlushChars: 320,
-  maxTerminalOutputChars: 1_000,
   maxAgentLoopSteps: 24,
   agentRunTimeoutMs: 120_000,
   tavilyApiKey: '',
@@ -331,12 +329,7 @@ export function getActiveProviderProfile(s: AppSettings): ProviderProfile {
 /** 设置弹窗表单用的扁平字段（含当前提供方的 baseUrl/model/apiKey） */
 export type SettingsFormValues = Pick<
   AppSettings,
-  | 'streamFlushMs'
-  | 'streamFlushChars'
-  | 'maxTerminalOutputChars'
-  | 'maxAgentLoopSteps'
-  | 'agentRunTimeoutMs'
-  | 'tavilyApiKey'
+  'maxAgentLoopSteps' | 'agentRunTimeoutMs' | 'tavilyApiKey'
 > & {
   provider: ModelProviderId
   baseUrl: string
@@ -354,9 +347,6 @@ export function settingsToFormValues(s: AppSettings): SettingsFormValues {
     model: p.model,
     apiKey: p.apiKey,
     enableTools: s.provider === 'deepseek' ? true : p.enableTools,
-    streamFlushMs: s.streamFlushMs,
-    streamFlushChars: s.streamFlushChars,
-    maxTerminalOutputChars: s.maxTerminalOutputChars,
     maxAgentLoopSteps: s.maxAgentLoopSteps,
     agentRunTimeoutMs: s.agentRunTimeoutMs,
     tavilyApiKey: s.tavilyApiKey ?? ''
@@ -390,9 +380,6 @@ export function applySettingsForm(
     ...prev,
     provider: form.provider,
     providerProfiles,
-    streamFlushMs: form.streamFlushMs,
-    streamFlushChars: form.streamFlushChars,
-    maxTerminalOutputChars: form.maxTerminalOutputChars,
     maxAgentLoopSteps: form.maxAgentLoopSteps,
     agentRunTimeoutMs: form.agentRunTimeoutMs,
     tavilyApiKey: (form.tavilyApiKey ?? '').trim()

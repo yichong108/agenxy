@@ -1,4 +1,4 @@
-import { App as AntdApp, Form, Input, InputNumber, Modal, Select, Switch } from 'antd'
+import { App as AntdApp, Form, Input, Modal, Select, Switch } from 'antd'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import {
@@ -154,15 +154,6 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
               </Form.Item>
             ) : null
           }
-        </Form.Item>
-        <Form.Item name="streamFlushMs" label="流式合并间隔 (ms)">
-          <InputNumber min={8} max={200} className="app-settings-number" />
-        </Form.Item>
-        <Form.Item name="streamFlushChars" label="流式合并字符数">
-          <InputNumber min={32} max={2000} className="app-settings-number" />
-        </Form.Item>
-        <Form.Item name="maxTerminalOutputChars" label="终端输出最大字符">
-          <InputNumber min={1} max={1000} className="app-settings-number" />
         </Form.Item>
         <Form.Item
           name="tavilyApiKey"

@@ -38,7 +38,10 @@ import {
   type StreamEvent,
   type ToolTimelineEvent,
   getActiveProviderProfile,
-  MAX_CONCURRENT_AGENT_STREAMS
+  MAX_CONCURRENT_AGENT_STREAMS,
+  MAX_TERMINAL_OUTPUT_CHARS,
+  STREAM_FLUSH_CHARS,
+  STREAM_FLUSH_MS
 } from '@/shared/ipc'
 
 const agentLog = logScope('agent')
@@ -642,7 +645,7 @@ async function makeTools(
           traceId: runCtx.traceId,
           timestampMs: startedAt
         })
-        const r = await runCommand(termKey, root, command, settings.maxTerminalOutputChars)
+        const r = await runCommand(termKey, root, command, MAX_TERMINAL_OUTPUT_CHARS)
         onTool({
           kind: 'tool',
           id,
@@ -858,7 +861,7 @@ export async function runUserMessage(
     const fileToolHint = parseFileToolHint(userText)
     const recursionLimit = settings.maxAgentLoopSteps
     const invokeTimeoutMs = settings.agentRunTimeoutMs
-    const batcher = new StreamBatcher(settings.streamFlushMs, settings.streamFlushChars, (t) => {
+    const batcher = new StreamBatcher(STREAM_FLUSH_MS, STREAM_FLUSH_CHARS, (t) => {
       emit({ type: 'text-delta', sessionId, text: t, runId, traceId })
     })
     const profile = getActiveProviderProfile(settings)

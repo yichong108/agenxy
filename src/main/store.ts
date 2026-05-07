@@ -259,6 +259,10 @@ function normalizeSettings(
       skillsMarketCatalogRefreshHours?: unknown
       /** 旧版持久化字段，忽略 */
       maxConcurrentStreams?: unknown
+      /** 已改为内置常量，忽略旧持久化 */
+      streamFlushMs?: unknown
+      streamFlushChars?: unknown
+      maxTerminalOutputChars?: unknown
     }
 ): AppSettings {
   const defaults = defaultSettings
@@ -270,11 +274,17 @@ function normalizeSettings(
     skillsMarketCatalogUrl: legacySkillsMarketCatalogUrl,
     skillsMarketCatalogRefreshHours: legacySkillsMarketCatalogRefreshHours,
     maxConcurrentStreams: _legacyMaxConcurrentStreams,
+    streamFlushMs: _legacyStreamFlushMs,
+    streamFlushChars: _legacyStreamFlushChars,
+    maxTerminalOutputChars: _legacyMaxTerminalOutputChars,
     ...inputRest
   } = input
   void legacySkillsMarketCatalogUrl
   void legacySkillsMarketCatalogRefreshHours
   void _legacyMaxConcurrentStreams
+  void _legacyStreamFlushMs
+  void _legacyStreamFlushChars
+  void _legacyMaxTerminalOutputChars
   const legacy: LegacyFlatSettings = {
     baseUrl: legacyBaseUrl,
     model: legacyModel,
@@ -325,9 +335,6 @@ function normalizeSettings(
     ...inputRest,
     provider,
     providerProfiles,
-    streamFlushMs: inputRest.streamFlushMs ?? defaults.streamFlushMs,
-    streamFlushChars: inputRest.streamFlushChars ?? defaults.streamFlushChars,
-    maxTerminalOutputChars: inputRest.maxTerminalOutputChars ?? defaults.maxTerminalOutputChars,
     maxAgentLoopSteps: inputRest.maxAgentLoopSteps ?? defaults.maxAgentLoopSteps,
     agentRunTimeoutMs: inputRest.agentRunTimeoutMs ?? defaults.agentRunTimeoutMs,
     tavilyApiKey:
@@ -339,7 +346,6 @@ function normalizeSettings(
 
   return {
     ...merged,
-    maxTerminalOutputChars: Math.min(1000, Math.max(1, merged.maxTerminalOutputChars)),
     maxAgentLoopSteps: Math.min(64, Math.max(4, Math.floor(merged.maxAgentLoopSteps))),
     agentRunTimeoutMs: Math.min(600_000, Math.max(5_000, Math.floor(merged.agentRunTimeoutMs)))
   }

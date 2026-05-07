@@ -20,7 +20,7 @@ import type {
   ToolCallEvent,
   ToolTimelineEvent
 } from '@/shared/ipc'
-import { defaultSettings } from '@/shared/ipc'
+import { defaultSettings, MAX_TERMINAL_OUTPUT_CHARS } from '@/shared/ipc'
 
 export {
   ensureUserSkillsLayout,
@@ -249,7 +249,7 @@ export function makeBuiltinSkillDefinitions(ctx: SkillToolContext): SkillDefinit
       execute: async (args) => {
         const command = String(args.command || '').trim()
         if (!command) throw new Error('command 不能为空')
-        return await runCommand(ctx.termKey, ctx.root, command, ctx.settings.maxTerminalOutputChars)
+        return await runCommand(ctx.termKey, ctx.root, command, MAX_TERMINAL_OUTPUT_CHARS)
       }
     }
   ]

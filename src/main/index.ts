@@ -49,6 +49,7 @@ import {
   HOME_WORKSPACE_ID,
   IPC,
   EVENTS,
+  MAX_TERMINAL_OUTPUT_CHARS,
   type AgentComposerMode,
   type AppSettings,
   type McpServerEntry,
@@ -293,12 +294,7 @@ function registerIpc(): void {
       return { output: '当前工作区未绑定目录，无法执行命令。' }
     }
     const sessionKey = `right-pane:${workspaceId}`
-    const output = await runCommand(
-      sessionKey,
-      workspacePath,
-      trimmed,
-      getSettings().maxTerminalOutputChars
-    )
+    const output = await runCommand(sessionKey, workspacePath, trimmed, MAX_TERMINAL_OUTPUT_CHARS)
     return { output }
   })
   ipcMain.handle(IPC.TERMINAL_CANCEL, async (_e, workspaceId: string) => {
