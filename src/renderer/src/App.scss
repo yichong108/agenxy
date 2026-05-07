@@ -608,23 +608,11 @@
   cursor: pointer;
 }
 
-.app-intent-thinking {
+.app-intent-preamble {
   margin-bottom: 12px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--aw-color-bg-elevated);
-  border: 1px solid var(--aw-color-border-secondary);
-}
-
-.app-intent-label {
-  display: block;
-  font-size: 12px;
-  margin-bottom: 6px;
-}
-
-.app-intent-body {
-  font-size: 13px;
-  line-height: 1.55;
+  color: var(--aw-color-text);
+  line-height: 1.65;
+  word-break: break-word;
   white-space: pre-wrap;
 }
 

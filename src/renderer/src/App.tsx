@@ -1095,14 +1095,7 @@ export function App() {
                             {m.role === 'assistant' ? (
                               <>
                                 {intentText ? (
-                                  <div className="app-intent-thinking">
-                                    <Text type="secondary" className="app-intent-label">
-                                      意图思考
-                                    </Text>
-                                    <div className="app-intent-body">
-                                      <Text>{intentText}</Text>
-                                    </div>
-                                  </div>
+                                  <div className="app-intent-preamble">{intentText}</div>
                                 ) : null}
                                 {showTimelineAccordion ? (
                                   <div className="app-timeline-accordion">
