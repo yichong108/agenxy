@@ -608,6 +608,74 @@
   cursor: pointer;
 }
 
+.app-intent-thinking {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--aw-color-bg-elevated);
+  border: 1px solid var(--aw-color-border-secondary);
+}
+
+.app-intent-label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.app-intent-body {
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.app-timeline-accordion {
+  margin-bottom: 10px;
+}
+
+.app-timeline-accordion-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--aw-color-text-secondary);
+}
+
+.app-timeline-accordion-head:hover {
+  color: var(--aw-color-text);
+}
+
+.app-timeline-chevron {
+  font-size: 10px;
+  transition: transform 0.15s ease;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.app-timeline-chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.app-timeline-accordion-title {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.app-timeline-accordion .app-timeline-wrap {
+  margin-top: 4px;
+  margin-bottom: 0;
+  padding-top: 6px;
+  padding-left: 14px;
+  margin-left: 4px;
+  border-top: none;
+  border-left: 2px solid var(--aw-color-border-secondary);
+}
+
 .app-timeline-wrap {
   margin-top: 10px;
   border-top: 1px solid var(--aw-color-border-secondary);

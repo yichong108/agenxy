@@ -4,6 +4,7 @@ import {
   DownOutlined,
   FolderOpenOutlined,
   PlusOutlined,
+  RightOutlined,
   SendOutlined,
   StopOutlined
 } from '@ant-design/icons'
@@ -48,6 +49,24 @@ function filterSessionsForSidebar(
 ): SessionInfo[] {
   const hidden = new Set(hiddenIds ?? [])
   return (list ?? []).filter((s) => !hidden.has(s.id))
+}
+
+/** Cursor 风格时间线标题用：Worked for 1m 2.3s */
+function formatWorkedDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return '0s'
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  const sec = ms / 1000
+  if (sec < 60) {
+    const t = sec.toFixed(1)
+    return t.endsWith('.0') ? `${Math.round(sec)}s` : `${t}s`
+  }
+  const s = Math.floor(sec)
+  const m = Math.floor(s / 60)
+  const rs = s % 60
+  if (m < 60) return `${m}m ${rs}s`
+  const h = Math.floor(m / 60)
+  const rm = m % 60
+  return `${h}h ${rm}m`
 }
 
 import '@/renderer/src/App.scss'
@@ -267,6 +286,8 @@ export function App() {
   const [running, setRunning] = useState<Record<string, boolean>>({})
   const [queued, setQueued] = useState<Record<string, number | undefined>>({})
   const [runStats, setRunStats] = useState<Record<string, RunStats | undefined>>({})
+  /** 工具时间线手风琴：key 为 assistant message id，未设置时由 isRun 推导默认展开/收起 */
+  const [timelineOpenOverride, setTimelineOpenOverride] = useState<Record<string, boolean>>({})
   const [rightPaneWidth, setRightPaneWidth] = useState(RIGHT_PANE_DEFAULT_WIDTH)
   const [isRightPaneCollapsed, setIsRightPaneCollapsed] = useState(false)
   const [isRightPaneResizing, setIsRightPaneResizing] = useState(false)
@@ -274,6 +295,7 @@ export function App() {
   const rightPaneExpandedWidthRef = useRef(RIGHT_PANE_DEFAULT_WIDTH)
 
   const streamBuf = useRef<Record<string, string>>({})
+  const intentBuf = useRef<Record<string, string>>({})
   const assistantMsgId = useRef<Record<string, string | null>>({})
   const hydratedMessageSessions = useRef<Set<string>>(new Set())
   const messagesScrollRef = useRef<HTMLDivElement | null>(null)
@@ -392,7 +414,6 @@ export function App() {
 
   const handleStream = useCallback(
     (e: StreamEvent) => {
-      console.log(e)
       if (e.type === 'run-start') {
         const startedAt = e.timestampMs ?? Date.now()
         setRunning((r) => ({ ...r, [e.sessionId]: true }))
@@ -410,6 +431,7 @@ export function App() {
           }
         }))
         streamBuf.current[e.sessionId] = ''
+        intentBuf.current[e.sessionId] = ''
         const aid = randomId()
         assistantMsgId.current[e.sessionId] = aid
         setMessages((m) => {
@@ -424,6 +446,24 @@ export function App() {
       }
       if (e.type === 'queued') {
         setQueued((q) => ({ ...q, [e.sessionId]: e.position }))
+        return
+      }
+      if (e.type === 'intent-delta') {
+        intentBuf.current[e.sessionId] = (intentBuf.current[e.sessionId] ?? '') + e.text
+        const buf = intentBuf.current[e.sessionId]!
+        const amId = assistantMsgId.current[e.sessionId]
+        if (!amId) return
+        setMessages((m) => {
+          const cur = [...(m[e.sessionId] ?? [])]
+          const idx = cur.findIndex((c) => c.id === amId)
+          if (idx < 0) return m
+          const next = { ...cur[idx]!, intentThinking: buf }
+          cur[idx] = next
+          return { ...m, [e.sessionId]: cur }
+        })
+        return
+      }
+      if (e.type === 'intent-end') {
         return
       }
       if (e.type === 'text-delta') {
@@ -513,6 +553,7 @@ export function App() {
           }
         })
         streamBuf.current[e.sessionId] = ''
+        intentBuf.current[e.sessionId] = ''
         assistantMsgId.current[e.sessionId] = null
       }
     },
@@ -597,12 +638,9 @@ export function App() {
     [pickWorkspace, switchComposerWorkspace]
   )
 
-  const handleComposerPlusMenuClick = useCallback<NonNullable<MenuProps['onClick']>>(
-    ({ key }) => {
-      if (key === 'ask') setComposerAskOn((v) => !v)
-    },
-    []
-  )
+  const handleComposerPlusMenuClick = useCallback<NonNullable<MenuProps['onClick']>>(({ key }) => {
+    if (key === 'ask') setComposerAskOn((v) => !v)
+  }, [])
 
   const composerPlusMenuItems = useMemo<MenuProps['items']>(
     () => [
@@ -744,6 +782,21 @@ export function App() {
   const isRun = activeId ? running[activeId] : false
   const isQueued = activeId ? queued[activeId] : undefined
   const currentRunStats = activeId ? runStats[activeId] : undefined
+  const [liveTick, setLiveTick] = useState(0)
+  useEffect(() => {
+    if (!isRun) return
+    const id = window.setInterval(() => setLiveTick((n) => n + 1), 500)
+    return () => window.clearInterval(id)
+  }, [isRun])
+
+  const timelineWallMs = useMemo(() => {
+    const st = activeId ? runStats[activeId] : undefined
+    const started = st?.startedAt
+    if (isRun && started != null) return Math.max(0, Date.now() - started + liveTick * 0)
+    if (st?.durationMs != null && st.durationMs >= 0) return st.durationMs
+    return 0
+  }, [activeId, runStats, isRun, liveTick])
+
   const hasInput = input.trim().length > 0
   const showSendButton = !isRun || hasInput
   const showStopButton = Boolean(activeId && isRun && !hasInput)
@@ -1023,54 +1076,98 @@ export function App() {
                       autoScrollRef.current = isNearBottom(e.currentTarget)
                     }}
                   >
-                    {currentMessages.map((m) => (
-                      <Card
-                        key={m.id}
-                        size="small"
-                        className={`app-message-card ${m.role === 'user' ? 'is-user' : 'is-assistant'}`}
-                      >
-                        <div className="app-message-content">
-                          {m.role === 'assistant' ? (
-                            <div className="app-message-markdown" onClick={onMarkdownClick}>
-                              <ReactMarkdown
-                                remarkPlugins={[remarkGfm, remarkLinkifyBareUrls]}
-                                rehypePlugins={[rehypeHighlight]}
-                              >
-                                {m.content || (isRun ? '…' : '')}
-                              </ReactMarkdown>
-                            </div>
-                          ) : (
-                            m.content
-                          )}
-                        </div>
-                        {m.role === 'assistant' &&
-                          m.id === latestAssistantMessageId &&
-                          currentTimeline.length > 0 && (
-                            <div className="app-timeline-wrap">
-                              {currentTimeline.map((e, idx) => (
-                                <div
-                                  key={`${e.kind}-${'id' in e ? e.id : idx}-${idx}`}
-                                  className="app-timeline-item"
-                                >
-                                  {e.kind === 'error' ? (
-                                    <Text type="danger">{e.message}</Text>
-                                  ) : (
-                                    <>
-                                      <Text code>
-                                        {e.name} {e.status === 'start' ? '…' : '✓'}
-                                      </Text>
-                                      {e.args && <Text type="secondary"> {e.args}</Text>}
-                                      {e.status === 'end' && e.result && (
-                                        <pre className="app-timeline-result">{e.result}</pre>
-                                      )}
-                                    </>
-                                  )}
+                    {currentMessages.map((m) => {
+                      const isLatestAssistant =
+                        m.role === 'assistant' && m.id === latestAssistantMessageId
+                      const showTimelineAccordion = isLatestAssistant && currentTimeline.length > 0
+                      const intentText = m.intentThinking?.trim()
+                      const timelineExpanded =
+                        timelineOpenOverride[m.id] !== undefined
+                          ? timelineOpenOverride[m.id]!
+                          : Boolean(isRun && showTimelineAccordion)
+                      return (
+                        <Card
+                          key={m.id}
+                          size="small"
+                          className={`app-message-card ${m.role === 'user' ? 'is-user' : 'is-assistant'}`}
+                        >
+                          <div className="app-message-content">
+                            {m.role === 'assistant' ? (
+                              <>
+                                {intentText ? (
+                                  <div className="app-intent-thinking">
+                                    <Text type="secondary" className="app-intent-label">
+                                      意图思考
+                                    </Text>
+                                    <div className="app-intent-body">
+                                      <Text>{intentText}</Text>
+                                    </div>
+                                  </div>
+                                ) : null}
+                                {showTimelineAccordion ? (
+                                  <div className="app-timeline-accordion">
+                                    <button
+                                      type="button"
+                                      className="app-timeline-accordion-head"
+                                      aria-expanded={timelineExpanded}
+                                      onClick={() =>
+                                        setTimelineOpenOverride((prev) => ({
+                                          ...prev,
+                                          [m.id]: !timelineExpanded
+                                        }))
+                                      }
+                                    >
+                                      <RightOutlined
+                                        className={`app-timeline-chevron${timelineExpanded ? ' is-open' : ''}`}
+                                      />
+                                      <span className="app-timeline-accordion-title">
+                                        Worked for {formatWorkedDuration(timelineWallMs)}
+                                      </span>
+                                    </button>
+                                    {timelineExpanded ? (
+                                      <div className="app-timeline-wrap">
+                                        {currentTimeline.map((e, idx) => (
+                                          <div
+                                            key={`${e.kind}-${'id' in e ? e.id : idx}-${idx}`}
+                                            className="app-timeline-item"
+                                          >
+                                            {e.kind === 'error' ? (
+                                              <Text type="danger">{e.message}</Text>
+                                            ) : (
+                                              <>
+                                                <Text code>
+                                                  {e.name} {e.status === 'start' ? '…' : '✓'}
+                                                </Text>
+                                                {e.args && <Text type="secondary"> {e.args}</Text>}
+                                                {e.status === 'end' && e.result && (
+                                                  <pre className="app-timeline-result">
+                                                    {e.result}
+                                                  </pre>
+                                                )}
+                                              </>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                ) : null}
+                                <div className="app-message-markdown" onClick={onMarkdownClick}>
+                                  <ReactMarkdown
+                                    remarkPlugins={[remarkGfm, remarkLinkifyBareUrls]}
+                                    rehypePlugins={[rehypeHighlight]}
+                                  >
+                                    {m.content || (isRun && isLatestAssistant ? '…' : '')}
+                                  </ReactMarkdown>
                                 </div>
-                              ))}
-                            </div>
-                          )}
-                      </Card>
-                    ))}
+                              </>
+                            ) : (
+                              m.content
+                            )}
+                          </div>
+                        </Card>
+                      )
+                    })}
                     <div ref={messagesBottomRef} />
                   </div>
                 </div>

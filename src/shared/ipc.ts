@@ -472,6 +472,8 @@ export type ChatMessage = {
   id: string
   role: MessageRole
   content: string
+  /** ReAct 前由主进程流式写入的简短意图理解（对齐 Cursor 式「先思考」） */
+  intentThinking?: string
   /** 附带的工具/时间线（仅用于 UI 恢复，主进程有完整 tool 过程） */
   toolEvents?: ToolTimelineEvent[]
 }
@@ -514,6 +516,17 @@ export type StreamTextDeltaEvent = StreamBase & {
   text: string
 }
 
+/** 意图思考阶段流式文本（先于主回答与工具时间线） */
+export type StreamIntentDeltaEvent = StreamBase & {
+  type: 'intent-delta'
+  text: string
+}
+
+/** 意图思考阶段结束（主进程在发起 ReAct / 主对话流前发出） */
+export type StreamIntentEndEvent = StreamBase & {
+  type: 'intent-end'
+}
+
 export type StreamToolEvent = StreamBase & {
   type: 'tool'
   event: ToolTimelineEvent
@@ -544,6 +557,8 @@ export type StreamRunStartEvent = StreamBase & {
 /** StreamEvent 根据 Agent 一次 run 生命周期的阶段变化定义。 */
 export type StreamEvent =
   | StreamTextDeltaEvent
+  | StreamIntentDeltaEvent
+  | StreamIntentEndEvent
   | StreamToolEvent
   | StreamErrorEvent
   | StreamDoneEvent

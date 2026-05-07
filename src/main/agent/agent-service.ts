@@ -148,9 +148,21 @@ function fromPersistedMessages(messages: ChatMessage[]): BaseMessage[] {
 function persistSessionMessages(
   workspaceId: string,
   sessionId: string,
-  coreMessages: BaseMessage[]
+  coreMessages: BaseMessage[],
+  opts?: { intentThinkingForLastAssistant?: string }
 ): void {
-  setSessionMessages(workspaceId, sessionId, toPersistedMessages(coreMessages))
+  const list = toPersistedMessages(coreMessages)
+  const intent = opts?.intentThinkingForLastAssistant?.trim()
+  if (intent) {
+    for (let i = list.length - 1; i >= 0; i -= 1) {
+      const row = list[i]
+      if (row?.role === 'assistant') {
+        list[i] = { ...row, intentThinking: intent }
+        break
+      }
+    }
+  }
+  setSessionMessages(workspaceId, sessionId, list)
 }
 
 function ensureOpenAiV1BaseUrl(baseUrl: string, fallback: string): string {
@@ -212,7 +224,8 @@ function buildSystemPrompt(root: string, settings: AppSettings): string {
 - 当用户明确要求删除工作区内的某个文件时，使用 delete_file（仅删普通文件，不删目录）。
 - 按文件名/路径模式找文件时用 glob（如 **/*.ts）：结果包含工作区与「用户数据」目录（技能市场安装等）；read_file/write 等仍限工作区内路径。
 ${webRule}
-- 回答简洁、可执行；修改代码前先 read/list。`
+- 回答简洁、可执行；修改代码前先 read/list。
+- 先理解任务 → 必要时复述目标 → 再选工具。`
 }
 
 function buildAskSystemPrompt(root: string, settings: AppSettings): string {
@@ -228,7 +241,8 @@ function buildAskSystemPrompt(root: string, settings: AppSettings): string {
 - 仅可使用只读工具: ${toolLine}。路径均为相对工作区根。
 - 用户若要求「直接改代码 / 运行命令 / 应用补丁」，请说明这在 Ask 模式下无法自动执行，并给出可复制片段或步骤；需要自动落地时请切换到 **Build**（关闭 Ask）。
 ${webRule}
-- 回答清晰、可验证：需要引用仓库内容时先 read/list/search，再下结论。`
+- 回答清晰、可验证：需要引用仓库内容时先 read/list/search，再下结论。
+- 先理解意图 → 必要时复述目标`
 }
 
 type FileToolHint =
@@ -292,7 +306,9 @@ async function invokeChatOnlyStream(
       ? '【Ask 模式】以讲解与可复制的代码/命令建议为主，勿假定已写入磁盘或已执行命令；需要自动改仓库时请用户在界面关闭 Ask（Build）。'
       : ''
   const basePrompt =
-    composerMode === 'ask' ? buildAskSystemPrompt(root, settings) : buildSystemPrompt(root, settings)
+    composerMode === 'ask'
+      ? buildAskSystemPrompt(root, settings)
+      : buildSystemPrompt(root, settings)
   const systemText = [basePrompt, skillHint, mcpContextHints, chatNotice, askNotice]
     .filter(Boolean)
     .join('\n\n')
@@ -328,6 +344,51 @@ async function invokeChatOnlyStream(
     if (timer) clearTimeout(timer)
   }
   return streamedChars
+}
+
+const INTENT_SUMMARY_TIMEOUT_MS = 18_000
+const INTENT_SUMMARY_MAX_CHARS = 900
+
+function isAbortError(e: unknown): boolean {
+  return (
+    e instanceof Error && (e.name === 'AbortError' || e.message.toLowerCase().includes('abort'))
+  )
+}
+
+/**
+ * 在 ReAct / 主对话流之前做一次简短流式「意图思考」，供 UI 先展示再进入工具循环。
+ */
+async function streamIntentSummary(
+  settings: AppSettings,
+  userText: string,
+  ac: AbortController,
+  intentBatcher: StreamBatcher
+): Promise<string> {
+  const model = createLanguageModel(settings)
+  const system = new SystemMessage(
+    '你是「意图思考」助手。仅根据用户的**最新消息**（可含技术词汇），用中文写 2～5 个完整句子，依次说明：\n' +
+      '（1）用户想达成的大致目标或问题类型；\n' +
+      '（2）若需要查阅代码/文档或执行操作，你**打算如何推进**（只概述思路，不要列举具体工具名，不要输出 Markdown 标题或代码块）。\n' +
+      '语气简洁、面向用户；不要复述本段系统说明。'
+  )
+  const human = new HumanMessage(userText.trim() ? userText.trim() : '（空消息）')
+  const deadline = Date.now() + INTENT_SUMMARY_TIMEOUT_MS
+  let acc = ''
+  try {
+    const stream = await model.stream([system, human], { signal: ac.signal })
+    for await (const chunk of stream) {
+      if (Date.now() > deadline) break
+      const piece = contentToText((chunk as { content?: unknown }).content)
+      if (!piece) continue
+      acc += piece
+      intentBatcher.push(piece)
+      if (acc.length >= INTENT_SUMMARY_MAX_CHARS) break
+    }
+  } catch (e) {
+    if (isAbortError(e)) throw e
+    agentLog.warn('[streamIntentSummary] failed:', e instanceof Error ? e.message : e)
+  }
+  return acc.trim()
 }
 
 /**
@@ -861,12 +922,27 @@ export async function runUserMessage(
     const fileToolHint = parseFileToolHint(userText)
     const recursionLimit = settings.maxAgentLoopSteps
     const invokeTimeoutMs = settings.agentRunTimeoutMs
-    const batcher = new StreamBatcher(STREAM_FLUSH_MS, STREAM_FLUSH_CHARS, (t) => {
-      emit({ type: 'text-delta', sessionId, text: t, runId, traceId })
-    })
     const profile = getActiveProviderProfile(settings)
     session.messages.push(new HumanMessage(userText))
     persistSessionMessages(session.workspaceId, sessionId, session.messages)
+
+    const intentBatcher = new StreamBatcher(STREAM_FLUSH_MS, STREAM_FLUSH_CHARS, (t) => {
+      emit({ type: 'intent-delta', sessionId, text: t, runId, traceId })
+    })
+    let intentThinking = ''
+    try {
+      intentThinking = await streamIntentSummary(settings, userText, ac, intentBatcher)
+    } catch (e) {
+      intentBatcher.flush()
+      emit({ type: 'intent-end', sessionId, runId, traceId })
+      throw e
+    }
+    intentBatcher.flush()
+    emit({ type: 'intent-end', sessionId, runId, traceId })
+
+    const batcher = new StreamBatcher(STREAM_FLUSH_MS, STREAM_FLUSH_CHARS, (t) => {
+      emit({ type: 'text-delta', sessionId, text: t, runId, traceId })
+    })
 
     try {
       let streamedChars = 0
@@ -956,7 +1032,9 @@ export async function runUserMessage(
         }
       }
       batcher.flush()
-      persistSessionMessages(session.workspaceId, sessionId, session.messages)
+      persistSessionMessages(session.workspaceId, sessionId, session.messages, {
+        intentThinkingForLastAssistant: intentThinking
+      })
       emit({
         type: 'done',
         sessionId,
@@ -985,7 +1063,9 @@ export async function runUserMessage(
         timestampMs: Date.now(),
         durationMs: Date.now() - runStartedAt
       })
-      persistSessionMessages(session.workspaceId, sessionId, session.messages)
+      persistSessionMessages(session.workspaceId, sessionId, session.messages, {
+        intentThinkingForLastAssistant: intentThinking
+      })
     } finally {
       session.controller = null
       batcher.flush()
