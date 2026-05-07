@@ -196,17 +196,13 @@ function createWindow(): void {
     show: false,
     ...win32Chrome
   })
+
+  // Why use if (rendererUrl) loadURL else loadFile?
+  // Development: Must load from HTTP to enable HMR (Hot Module Replacement) and module hot updates.
+  // Production (packaged): There is no dev server, so can only loadFile from index.html on disk.
   const rendererUrl = process.env['ELECTRON_RENDERER_URL']
   if (rendererUrl) {
     void mainWindow.loadURL(rendererUrl)
-    if (isDev) {
-      mainWindow.webContents.once('dom-ready', () => {
-        if (!mainWindow || mainWindow.isDestroyed()) return
-        if (!mainWindow.webContents.isDevToolsOpened()) {
-          mainWindow.webContents.openDevTools({ mode: 'detach' })
-        }
-      })
-    }
   } else {
     void mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
