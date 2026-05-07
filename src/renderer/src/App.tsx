@@ -288,6 +288,10 @@ export function App() {
   const [runStats, setRunStats] = useState<Record<string, RunStats | undefined>>({})
   /** 工具时间线手风琴：key 为 assistant message id，未设置时由 isRun 推导默认展开/收起 */
   const [timelineOpenOverride, setTimelineOpenOverride] = useState<Record<string, boolean>>({})
+  /** 模型意图思考：key 为 assistant message id，未设置时默认收起 */
+  const [intentThinkingOpenOverride, setIntentThinkingOpenOverride] = useState<
+    Record<string, boolean>
+  >({})
   const [rightPaneWidth, setRightPaneWidth] = useState(RIGHT_PANE_DEFAULT_WIDTH)
   const [isRightPaneCollapsed, setIsRightPaneCollapsed] = useState(false)
   const [isRightPaneResizing, setIsRightPaneResizing] = useState(false)
@@ -1081,6 +1085,10 @@ export function App() {
                         m.role === 'assistant' && m.id === latestAssistantMessageId
                       const showTimelineAccordion = isLatestAssistant && currentTimeline.length > 0
                       const intentText = m.intentThinking?.trim()
+                      const intentThinkingExpanded =
+                        intentThinkingOpenOverride[m.id] !== undefined
+                          ? intentThinkingOpenOverride[m.id]!
+                          : false
                       const timelineExpanded =
                         timelineOpenOverride[m.id] !== undefined
                           ? timelineOpenOverride[m.id]!
@@ -1095,7 +1103,29 @@ export function App() {
                             {m.role === 'assistant' ? (
                               <>
                                 {intentText ? (
-                                  <div className="app-intent-preamble">{intentText}</div>
+                                  <div className="app-intent-accordion">
+                                    <button
+                                      type="button"
+                                      className="app-intent-accordion-head"
+                                      aria-expanded={intentThinkingExpanded}
+                                      onClick={() =>
+                                        setIntentThinkingOpenOverride((prev) => ({
+                                          ...prev,
+                                          [m.id]: !intentThinkingExpanded
+                                        }))
+                                      }
+                                    >
+                                      <RightOutlined
+                                        className={`app-timeline-chevron${intentThinkingExpanded ? ' is-open' : ''}`}
+                                      />
+                                      <span className="app-timeline-accordion-title">思考</span>
+                                    </button>
+                                    {intentThinkingExpanded ? (
+                                      <div className="app-intent-accordion-body">
+                                        <div className="app-intent-preamble">{intentText}</div>
+                                      </div>
+                                    ) : null}
+                                  </div>
                                 ) : null}
                                 {showTimelineAccordion ? (
                                   <div className="app-timeline-accordion">

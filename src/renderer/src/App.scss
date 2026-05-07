@@ -616,6 +616,42 @@
   white-space: pre-wrap;
 }
 
+.app-intent-accordion {
+  margin-bottom: 10px;
+}
+
+.app-intent-accordion-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--aw-color-text-secondary);
+}
+
+.app-intent-accordion-head:hover {
+  color: var(--aw-color-text);
+}
+
+.app-intent-accordion-body {
+  margin-top: 4px;
+  margin-bottom: 0;
+  padding-top: 6px;
+  padding-left: 14px;
+  margin-left: 4px;
+  border-left: 2px solid var(--aw-color-border-secondary);
+}
+
+.app-intent-accordion-body .app-intent-preamble {
+  margin-bottom: 0;
+}
+
 .app-timeline-accordion {
   margin-bottom: 10px;
 }
