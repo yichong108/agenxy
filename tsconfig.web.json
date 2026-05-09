@@ -16,7 +16,8 @@
     "paths": {
       "@/*": ["src/*"],
       "@shared": ["src/shared"],
-      "@shared/*": ["src/shared/*"]
+      "@shared/*": ["src/shared/*"],
+      "@monaco-themes/github-light": ["node_modules/monaco-themes/themes/GitHub Light.json"]
     }
   },
   "include": ["src/renderer/src/**/*", "src/shared/**/*"]
