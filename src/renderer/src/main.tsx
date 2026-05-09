@@ -58,10 +58,11 @@ if (root) {
             colorWarning: '#d97706',
             colorError: '#dc2626',
             colorText: '#18181b',
+            /* 略浅：侧栏/工具条等图标与次要文案更柔和 */
             colorTextSecondary: '#52525b',
-            colorTextTertiary: '#71717a',
-            colorBorder: '#e4e4e7',
-            colorSplit: '#e4e4e7',
+            colorTextTertiary: '#5f5f6b',
+            colorBorder: 'rgba(24, 24, 27, 0.09)',
+            colorSplit: 'rgba(24, 24, 27, 0.055)',
             borderRadius: 12,
             borderRadiusSM: 10,
             borderRadiusLG: 14,
@@ -95,7 +96,7 @@ if (root) {
               headerBg: '#f4f4f5'
             },
             Tabs: {
-              itemColor: '#71717a',
+              itemColor: '#5f5f6b',
               itemSelectedColor: '#18181b',
               inkBarColor: '#0d9488'
             },

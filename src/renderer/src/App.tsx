@@ -1080,118 +1080,123 @@ export function App() {
                       autoScrollRef.current = isNearBottom(e.currentTarget)
                     }}
                   >
-                    {currentMessages.map((m) => {
-                      const isLatestAssistant =
-                        m.role === 'assistant' && m.id === latestAssistantMessageId
-                      const showTimelineAccordion = isLatestAssistant && currentTimeline.length > 0
-                      const intentText = m.intentThinking?.trim()
-                      const intentThinkingExpanded =
-                        intentThinkingOpenOverride[m.id] !== undefined
-                          ? intentThinkingOpenOverride[m.id]!
-                          : false
-                      const timelineExpanded =
-                        timelineOpenOverride[m.id] !== undefined
-                          ? timelineOpenOverride[m.id]!
-                          : Boolean(isRun && showTimelineAccordion)
-                      return (
-                        <Card
-                          key={m.id}
-                          size="small"
-                          className={`app-message-card ${m.role === 'user' ? 'is-user' : 'is-assistant'}`}
-                        >
-                          <div className="app-message-content">
-                            {m.role === 'assistant' ? (
-                              <>
-                                {intentText ? (
-                                  <div className="app-intent-accordion">
-                                    <button
-                                      type="button"
-                                      className="app-intent-accordion-head"
-                                      aria-expanded={intentThinkingExpanded}
-                                      onClick={() =>
-                                        setIntentThinkingOpenOverride((prev) => ({
-                                          ...prev,
-                                          [m.id]: !intentThinkingExpanded
-                                        }))
-                                      }
+                    <div className="app-messages-inner">
+                      {currentMessages.map((m) => {
+                        const isLatestAssistant =
+                          m.role === 'assistant' && m.id === latestAssistantMessageId
+                        const showTimelineAccordion =
+                          isLatestAssistant && currentTimeline.length > 0
+                        const intentText = m.intentThinking?.trim()
+                        const intentThinkingExpanded =
+                          intentThinkingOpenOverride[m.id] !== undefined
+                            ? intentThinkingOpenOverride[m.id]!
+                            : false
+                        const timelineExpanded =
+                          timelineOpenOverride[m.id] !== undefined
+                            ? timelineOpenOverride[m.id]!
+                            : Boolean(isRun && showTimelineAccordion)
+                        return (
+                          <Card
+                            key={m.id}
+                            size="small"
+                            className={`app-message-card ${m.role === 'user' ? 'is-user' : 'is-assistant'}`}
+                          >
+                            <div className="app-message-content">
+                              {m.role === 'assistant' ? (
+                                <>
+                                  {intentText ? (
+                                    <div className="app-intent-accordion">
+                                      <button
+                                        type="button"
+                                        className="app-intent-accordion-head"
+                                        aria-expanded={intentThinkingExpanded}
+                                        onClick={() =>
+                                          setIntentThinkingOpenOverride((prev) => ({
+                                            ...prev,
+                                            [m.id]: !intentThinkingExpanded
+                                          }))
+                                        }
+                                      >
+                                        <RightOutlined
+                                          className={`app-timeline-chevron${intentThinkingExpanded ? ' is-open' : ''}`}
+                                        />
+                                        <span className="app-timeline-accordion-title">思考</span>
+                                      </button>
+                                      {intentThinkingExpanded ? (
+                                        <div className="app-intent-accordion-body">
+                                          <div className="app-intent-preamble">{intentText}</div>
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  ) : null}
+                                  {showTimelineAccordion ? (
+                                    <div className="app-timeline-accordion">
+                                      <button
+                                        type="button"
+                                        className="app-timeline-accordion-head"
+                                        aria-expanded={timelineExpanded}
+                                        onClick={() =>
+                                          setTimelineOpenOverride((prev) => ({
+                                            ...prev,
+                                            [m.id]: !timelineExpanded
+                                          }))
+                                        }
+                                      >
+                                        <RightOutlined
+                                          className={`app-timeline-chevron${timelineExpanded ? ' is-open' : ''}`}
+                                        />
+                                        <span className="app-timeline-accordion-title">
+                                          Worked for {formatWorkedDuration(timelineWallMs)}
+                                        </span>
+                                      </button>
+                                      {timelineExpanded ? (
+                                        <div className="app-timeline-wrap">
+                                          {currentTimeline.map((e, idx) => (
+                                            <div
+                                              key={`${e.kind}-${'id' in e ? e.id : idx}-${idx}`}
+                                              className="app-timeline-item"
+                                            >
+                                              {e.kind === 'error' ? (
+                                                <Text type="danger">{e.message}</Text>
+                                              ) : (
+                                                <>
+                                                  <Text code>
+                                                    {e.name} {e.status === 'start' ? '…' : '✓'}
+                                                  </Text>
+                                                  {e.args && (
+                                                    <Text type="secondary"> {e.args}</Text>
+                                                  )}
+                                                  {e.status === 'end' && e.result && (
+                                                    <pre className="app-timeline-result">
+                                                      {e.result}
+                                                    </pre>
+                                                  )}
+                                                </>
+                                              )}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  ) : null}
+                                  <div className="app-message-markdown" onClick={onMarkdownClick}>
+                                    <ReactMarkdown
+                                      remarkPlugins={[remarkGfm, remarkLinkifyBareUrls]}
+                                      rehypePlugins={[rehypeHighlight]}
                                     >
-                                      <RightOutlined
-                                        className={`app-timeline-chevron${intentThinkingExpanded ? ' is-open' : ''}`}
-                                      />
-                                      <span className="app-timeline-accordion-title">思考</span>
-                                    </button>
-                                    {intentThinkingExpanded ? (
-                                      <div className="app-intent-accordion-body">
-                                        <div className="app-intent-preamble">{intentText}</div>
-                                      </div>
-                                    ) : null}
+                                      {m.content || (isRun && isLatestAssistant ? '…' : '')}
+                                    </ReactMarkdown>
                                   </div>
-                                ) : null}
-                                {showTimelineAccordion ? (
-                                  <div className="app-timeline-accordion">
-                                    <button
-                                      type="button"
-                                      className="app-timeline-accordion-head"
-                                      aria-expanded={timelineExpanded}
-                                      onClick={() =>
-                                        setTimelineOpenOverride((prev) => ({
-                                          ...prev,
-                                          [m.id]: !timelineExpanded
-                                        }))
-                                      }
-                                    >
-                                      <RightOutlined
-                                        className={`app-timeline-chevron${timelineExpanded ? ' is-open' : ''}`}
-                                      />
-                                      <span className="app-timeline-accordion-title">
-                                        Worked for {formatWorkedDuration(timelineWallMs)}
-                                      </span>
-                                    </button>
-                                    {timelineExpanded ? (
-                                      <div className="app-timeline-wrap">
-                                        {currentTimeline.map((e, idx) => (
-                                          <div
-                                            key={`${e.kind}-${'id' in e ? e.id : idx}-${idx}`}
-                                            className="app-timeline-item"
-                                          >
-                                            {e.kind === 'error' ? (
-                                              <Text type="danger">{e.message}</Text>
-                                            ) : (
-                                              <>
-                                                <Text code>
-                                                  {e.name} {e.status === 'start' ? '…' : '✓'}
-                                                </Text>
-                                                {e.args && <Text type="secondary"> {e.args}</Text>}
-                                                {e.status === 'end' && e.result && (
-                                                  <pre className="app-timeline-result">
-                                                    {e.result}
-                                                  </pre>
-                                                )}
-                                              </>
-                                            )}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                ) : null}
-                                <div className="app-message-markdown" onClick={onMarkdownClick}>
-                                  <ReactMarkdown
-                                    remarkPlugins={[remarkGfm, remarkLinkifyBareUrls]}
-                                    rehypePlugins={[rehypeHighlight]}
-                                  >
-                                    {m.content || (isRun && isLatestAssistant ? '…' : '')}
-                                  </ReactMarkdown>
-                                </div>
-                              </>
-                            ) : (
-                              m.content
-                            )}
-                          </div>
-                        </Card>
-                      )
-                    })}
-                    <div ref={messagesBottomRef} />
+                                </>
+                              ) : (
+                                m.content
+                              )}
+                            </div>
+                          </Card>
+                        )
+                      })}
+                      <div ref={messagesBottomRef} />
+                    </div>
                   </div>
                 </div>
                 <div className="app-composer-stack">

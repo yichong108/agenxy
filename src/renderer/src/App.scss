@@ -6,20 +6,33 @@
   --aw-color-bg-container: #ffffff;
   --aw-color-fill-secondary: #e9e9ec;
   --aw-color-fill-tertiary: #dcdce2;
-  --aw-color-border: #e4e4e7;
-  --aw-color-border-secondary: #d4d4d8;
+  /* 边框：墨色透明分层 — secondary 比 border 更淡，用于竖线/内部分割；避免 zinc 实色发闷、层级颠倒 */
+  --aw-color-border: rgb(24 24 27 / 0.09);
+  --aw-color-border-secondary: rgb(24 24 27 / 0.055);
+  --aw-color-border-strong: rgb(24 24 27 / 0.14);
+  /* 可拖拽分割条：与全局 1px 边框同色，仅悬停/拖拽略加深，避免同色深造成“变粗”观感 */
+  --aw-color-splitter: var(--aw-color-border);
+  --aw-color-splitter-hover: var(--aw-color-border-strong);
+  --aw-color-splitter-active: rgb(24 24 27 / 0.2);
   --aw-color-text: #18181b;
   --aw-color-text-secondary: #52525b;
-  --aw-color-text-tertiary: #71717a;
+  /* 第三级文案：较 tertiary 略深，满足浅底上的小字对比（约 4.5:1+） */
+  --aw-color-text-tertiary: #5f5f6b;
+  /* 图标：默认比 secondary 更浅，悬停介于两者之间 */
+  --aw-color-icon: rgb(24 24 27 / 0.38);
+  --aw-color-icon-hover: rgb(24 24 27 / 0.52);
+  --aw-color-icon-muted: rgb(24 24 27 / 0.3);
+  /* 侧栏会话列表左侧圆点（仅装饰，比 icon-muted 更淡） */
+  --aw-color-session-dot: rgb(24 24 27 / 0.16);
   --aw-color-primary: #27272a;
   --aw-color-primary-bg: #e4e4e7;
-  --aw-color-primary-border: #d4d4d8;
+  --aw-color-primary-border: rgb(13 148 136 / 0.38);
   --aw-color-accent: #0d9488;
   --aw-color-accent-hover: #0f766e;
   --aw-shadow-soft: 0 1px 2px rgb(24 24 27 / 0.04);
   --aw-shadow-card: 0 1px 2px rgb(24 24 27 / 0.05), 0 4px 14px rgb(24 24 27 / 0.04);
   --aw-composer-surface: #ffffff;
-  --aw-composer-border: rgb(24 24 27 / 0.1);
+  --aw-composer-border: var(--aw-color-border);
   --aw-composer-border-focus: rgb(13 148 136 / 0.45);
   --aw-composer-ring: rgb(13 148 136 / 0.22);
   --aw-composer-shadow: 0 10px 38px rgb(24 24 27 / 0.07), 0 2px 10px rgb(24 24 27 / 0.04);
@@ -27,8 +40,25 @@
   --aw-composer-toolbar-bg: rgb(24 24 27 / 0.04);
   --aw-composer-send: var(--aw-color-accent);
   --aw-composer-send-hover: var(--aw-color-accent-hover);
-  --aw-composer-footer-rule: rgb(24 24 27 / 0.08);
+  --aw-composer-footer-rule: var(--aw-color-border-secondary);
   --aw-color-text-primary: var(--aw-color-text);
+  /* 主栏会话/输入可读宽度上限（与空状态 composer 一致） */
+  --aw-main-content-max-width: 880px;
+
+  /* 字号 / 行高 / 字重：全局阶梯，与 Ant Design fontSize 13 对齐 */
+  --aw-font-micro: 10px;
+  --aw-font-caption: 11px;
+  --aw-font-xs: 12px;
+  --aw-font-sm: 13px;
+  --aw-font-md: 14px;
+  --aw-font-lg: 15px;
+  --aw-font-xl: 16px;
+  --aw-line-tight: 1.25;
+  --aw-line-snug: 1.35;
+  --aw-line-body: 1.5;
+  --aw-line-relaxed: 1.65;
+  --aw-font-weight-medium: 500;
+  --aw-font-weight-semibold: 600;
 
   height: 100%;
   display: flex;
@@ -83,8 +113,10 @@
   flex-shrink: 0;
 }
 
+/* 可拖区域 3px，可见分隔仅为居中 ::before 1px */
 .app-sidebar-resizer {
-  width: 8px;
+  width: 3px;
+  min-width: 3px;
   flex-shrink: 0;
   position: relative;
   cursor: col-resize;
@@ -93,6 +125,7 @@
 
 .app-sidebar-resizer.is-hidden {
   width: 0;
+  min-width: 0;
 }
 
 .app-sidebar-resizer::before {
@@ -102,13 +135,25 @@
   bottom: 0;
   left: 50%;
   width: 1px;
+  min-width: 1px;
+  max-width: 1px;
   transform: translateX(-50%);
-  background: var(--aw-color-border-secondary);
+  background: var(--aw-color-splitter);
   transition: background-color 0.15s ease;
 }
 
+.app-sidebar-resizer:hover::before {
+  background: var(--aw-color-splitter-hover);
+}
+
+.app-body.is-sidebar-resizing .app-sidebar-resizer::before,
+.app-sidebar-resizer.is-dragging::before {
+  background: var(--aw-color-splitter-active);
+}
+
 .app-right-resizer {
-  width: 8px;
+  width: 3px;
+  min-width: 3px;
   flex-shrink: 0;
   position: relative;
   cursor: col-resize;
@@ -122,18 +167,20 @@
   bottom: 0;
   left: 50%;
   width: 1px;
+  min-width: 1px;
+  max-width: 1px;
   transform: translateX(-50%);
-  background: var(--aw-color-border-secondary);
+  background: var(--aw-color-splitter);
   transition: background-color 0.15s ease;
 }
 
-.app-sidebar-resizer:hover::before,
-.app-body.is-sidebar-resizing .app-sidebar-resizer::before,
-.app-sidebar-resizer.is-dragging::before,
-.app-right-resizer:hover::before,
+.app-right-resizer:hover::before {
+  background: var(--aw-color-splitter-hover);
+}
+
 .app-body.is-right-resizing .app-right-resizer::before,
 .app-right-resizer.is-dragging::before {
-  background: var(--aw-color-text-tertiary);
+  background: var(--aw-color-splitter-active);
 }
 
 .app-sidebar-inner {
@@ -157,8 +204,8 @@
 
 .app-brand-text {
   color: var(--aw-color-text);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--aw-font-md);
+  font-weight: var(--aw-font-weight-semibold);
   letter-spacing: 0.3px;
 }
 
@@ -168,7 +215,7 @@
 }
 
 .app-settings-btn {
-  color: var(--aw-color-text-secondary);
+  color: var(--aw-color-icon);
   border-radius: 6px;
   width: 26px !important;
   height: 26px !important;
@@ -200,8 +247,8 @@
 .app-workspace-tree {
   flex: 1;
   overflow: auto;
-  margin-top: 2px;
-  padding: 0 6px 8px;
+  margin-top: 0;
+  padding: 0;
 }
 
 .app-workspace-tree-empty {
@@ -210,7 +257,7 @@
 }
 
 .app-workspace-tree-empty .ant-typography {
-  font-size: 12px;
+  font-size: var(--aw-font-xs);
 }
 
 .app-workspace-node {
@@ -229,19 +276,6 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  transition: background-color 0.18s ease;
-}
-
-.app-workspace-node-header:hover {
-  background: var(--aw-color-fill-secondary);
-}
-
-.app-workspace-node-header.is-draggable {
-  cursor: grab;
-}
-
-.app-workspace-node-header.is-draggable:active {
-  cursor: grabbing;
 }
 
 .app-workspace-node {
@@ -295,9 +329,9 @@
   flex: 1;
   min-width: 0;
   color: var(--aw-color-text);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.35;
+  font-size: var(--aw-font-xs);
+  font-weight: var(--aw-font-weight-medium);
+  line-height: var(--aw-line-snug);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -310,12 +344,15 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--aw-color-text-secondary);
+  color: var(--aw-color-icon);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.16s ease;
+  transition:
+    opacity 0.16s ease,
+    background-color 0.16s ease,
+    color 0.16s ease;
 }
 
 .app-workspace-add-session-btn:hover {
@@ -323,9 +360,23 @@
   color: var(--aw-color-text);
 }
 
+/* 鼠标环境：加号仅在悬停该行或键盘焦点在工作区标题行内时显示；触控仍常显 */
+@media (hover: hover) and (pointer: fine) {
+  .app-workspace-add-session-btn {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .app-workspace-node-header:hover .app-workspace-add-session-btn,
+  .app-workspace-node-header:focus-within .app-workspace-add-session-btn {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
 .app-workspace-chevron {
-  color: var(--aw-color-text-tertiary);
-  font-size: 12px;
+  color: var(--aw-color-icon-muted);
+  font-size: var(--aw-font-xs);
   display: inline-flex;
   align-items: center;
   line-height: 1;
@@ -344,7 +395,7 @@
 
 .app-session-placeholder {
   color: var(--aw-color-text-secondary);
-  font-size: 12px;
+  font-size: var(--aw-font-xs);
   padding: 8px 10px 8px 0;
 }
 
@@ -361,7 +412,8 @@
 .app-session-item-sub {
   margin: 0 0 2px;
   border-radius: 7px;
-  padding: 6px 9px 6px 22px;
+  /* 左内边距略大，让小圆点（约 10–16px）与标题之间留白更足 */
+  padding: 6px 9px 6px 28px;
   position: relative;
 }
 
@@ -373,7 +425,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--aw-color-text-tertiary);
+  background: var(--aw-color-session-dot);
   transform: translateY(-50%);
 }
 
@@ -392,7 +444,7 @@
 
 .app-session-title {
   color: var(--aw-color-text);
-  font-size: 12px;
+  font-size: var(--aw-font-xs);
   line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
@@ -434,6 +486,29 @@
   &.is-empty-conversation {
     min-height: 0;
   }
+
+  /* 有会话时：输入区与空状态同宽并居中；消息区全宽，滚动条贴主栏右侧，正文在 inner 居中 */
+  &:not(.is-empty-conversation) {
+    align-items: center;
+  }
+
+  &:not(.is-empty-conversation) .app-messages-shell {
+    align-self: stretch;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
+
+  &:not(.is-empty-conversation) .app-composer-stack {
+    width: 100%;
+    max-width: var(--aw-main-content-max-width);
+    box-sizing: border-box;
+  }
+
+  &:not(.is-empty-conversation) .app-preload-alert-wrap {
+    align-self: stretch;
+    width: 100%;
+  }
 }
 
 .app-composer-hero {
@@ -447,7 +522,7 @@
 
 .app-composer-hero-inner {
   width: 100%;
-  max-width: 720px;
+  max-width: var(--aw-main-content-max-width);
   padding: 0 14px;
   box-sizing: border-box;
   display: flex;
@@ -471,8 +546,8 @@
 .app-composer-workspace-trigger.ant-btn {
   height: 28px;
   padding: 0 10px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--aw-font-xs);
+  font-weight: var(--aw-font-weight-medium);
   line-height: 26px;
   border-radius: 8px;
   color: var(--aw-color-text-secondary);
@@ -483,7 +558,7 @@
 
 .app-composer-workspace-trigger.ant-btn:hover {
   color: var(--aw-color-text) !important;
-  border-color: rgb(24 24 27 / 0.14) !important;
+  border-color: var(--aw-color-border-strong) !important;
   background: rgb(24 24 27 / 0.05) !important;
 }
 
@@ -513,12 +588,24 @@
   flex-direction: column;
 }
 
+/* 全宽滚动层：纵向滚动条落在主栏最右侧，与居中正文列之间自然留白 */
 .app-messages-scroll {
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  padding: 16px 20px;
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding: 0;
   background: var(--aw-color-bg-layout);
+}
+
+.app-messages-inner {
+  max-width: var(--aw-main-content-max-width);
+  margin: 0 auto;
+  padding: 16px 20px;
+  box-sizing: border-box;
 }
 
 .app-message-card {
@@ -554,7 +641,7 @@
 
 .app-message-markdown {
   color: var(--aw-color-text);
-  line-height: 1.65;
+  line-height: var(--aw-line-relaxed);
   word-break: break-word;
 }
 
@@ -617,7 +704,7 @@
 .app-intent-preamble {
   margin-bottom: 12px;
   color: var(--aw-color-text);
-  line-height: 1.65;
+  line-height: var(--aw-line-relaxed);
   word-break: break-word;
   white-space: pre-wrap;
 }
@@ -651,7 +738,7 @@
   padding-top: 6px;
   padding-left: 14px;
   margin-left: 4px;
-  border-left: 2px solid var(--aw-color-border-secondary);
+  border-left: 1px solid var(--aw-color-border-secondary);
 }
 
 .app-intent-accordion-body .app-intent-preamble {
@@ -682,9 +769,9 @@
 }
 
 .app-timeline-chevron {
-  font-size: 10px;
+  font-size: var(--aw-font-micro);
   transition: transform 0.15s ease;
-  color: var(--aw-color-text-tertiary);
+  color: var(--aw-color-icon-muted);
 }
 
 .app-timeline-chevron.is-open {
@@ -692,8 +779,8 @@
 }
 
 .app-timeline-accordion-title {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--aw-font-sm);
+  font-weight: var(--aw-font-weight-medium);
 }
 
 .app-timeline-accordion .app-timeline-wrap {
@@ -703,7 +790,7 @@
   padding-left: 14px;
   margin-left: 4px;
   border-top: none;
-  border-left: 2px solid var(--aw-color-border-secondary);
+  border-left: 1px solid var(--aw-color-border-secondary);
 }
 
 .app-timeline-wrap {
@@ -720,7 +807,7 @@
   margin-top: 8px;
   margin-bottom: 0;
   padding: 8px;
-  font-size: 11px;
+  font-size: var(--aw-font-caption);
   max-height: 120px;
   overflow: auto;
   border-radius: 8px;
@@ -777,37 +864,37 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: rgb(24 24 27 / 0.65);
+  color: var(--aw-color-icon);
   border: 1px solid transparent;
   background: transparent;
   box-shadow: none;
 }
 
 .app-composer-plus-btn.ant-btn:hover {
-  color: rgb(24 24 27 / 0.88);
+  color: var(--aw-color-icon-hover);
   background: rgb(24 24 27 / 0.06);
-  border-color: rgb(24 24 27 / 0.08);
+  border-color: var(--aw-color-border);
 }
 
 .app-composer-plus-menu-label {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  line-height: 1.25;
+  line-height: var(--aw-line-tight);
 }
 
 .app-composer-plus-menu-title {
-  font-weight: 500;
+  font-weight: var(--aw-font-weight-medium);
 }
 
 .app-composer-plus-menu-desc {
-  font-size: 12px;
+  font-size: var(--aw-font-xs);
   color: var(--aw-color-text-tertiary);
 }
 
 .app-composer-mode-hint {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--aw-font-caption);
+  font-weight: var(--aw-font-weight-medium);
   letter-spacing: 0.02em;
   color: var(--aw-color-text-tertiary);
   white-space: nowrap;
@@ -818,8 +905,8 @@ textarea.app-composer-input.ant-input {
   flex: 1;
   width: 100%;
   padding: 4px 2px 2px;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: var(--aw-font-sm);
+  line-height: var(--aw-line-body);
   color: var(--aw-color-text);
   background: transparent !important;
   border: none !important;
@@ -850,8 +937,8 @@ textarea.app-composer-input.ant-input:focus {
   height: 30px;
   min-width: 72px;
   padding: 0 12px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--aw-font-xs);
+  font-weight: var(--aw-font-weight-medium);
   border-radius: 8px;
   box-shadow: none;
 }
@@ -876,8 +963,8 @@ textarea.app-composer-input.ant-input:focus {
   height: 30px;
   min-width: 72px;
   padding: 0 12px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--aw-font-xs);
+  font-weight: var(--aw-font-weight-medium);
   border-radius: 8px;
   box-shadow: none;
 }
@@ -918,7 +1005,8 @@ textarea.app-composer-input.ant-input:focus {
   .app-timeline-chevron,
   .app-composer,
   .app-sidebar-resizer::before,
-  .app-right-resizer::before {
+  .app-right-resizer::before,
+  .app-right-file-split-handle {
     transition-duration: 0.01ms !important;
   }
 }

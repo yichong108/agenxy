@@ -4,13 +4,16 @@
   max-width: 860px;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--aw-color-border-secondary);
+  /* 展开时竖线由主布局里 .app-right-resizer::before（1px）绘制，此处勿再 border-left，否则会叠成双条 */
+  border-left: none;
   background: var(--aw-color-bg-canvas);
 }
 
 .app-right-pane.is-collapsed {
   min-width: 0;
   max-width: 56px;
+  /* 收起时无 resizer，靠自身左边线与主区分隔 */
+  border-left: 1px solid var(--aw-color-border-secondary);
 }
 
 .app-right-toolbar {
@@ -24,13 +27,13 @@
 }
 
 .app-right-toolbar-btn.ant-btn {
-  color: var(--aw-color-text);
+  color: var(--aw-color-icon);
   border: none;
 }
 
 .app-right-toolbar-btn.ant-btn:hover {
   background: rgb(24 24 27 / 0.05);
-  color: var(--aw-color-text);
+  color: var(--aw-color-icon-hover);
 }
 
 .app-right-toolbar-btn.ant-btn.is-active,
@@ -65,14 +68,26 @@
 
 .app-right-file-split-handle {
   flex: 0 0 1px;
+  flex-shrink: 0;
   width: 1px;
+  min-width: 1px;
+  max-width: 1px;
   align-self: stretch;
   cursor: col-resize;
   user-select: none;
   touch-action: none;
-  background: var(--aw-color-border-secondary);
+  background: var(--aw-color-splitter);
+  transition: background-color 0.15s ease;
   position: relative;
   z-index: 1;
+}
+
+.app-right-file-split-handle:hover {
+  background: var(--aw-color-splitter-hover);
+}
+
+.app-right-file-split-handle.is-active {
+  background: var(--aw-color-splitter-active);
 }
 
 .app-right-file-split-handle::after {
@@ -103,7 +118,7 @@
 
 .app-right-tree {
   height: 100%;
-  color: #2f3542;
+  color: var(--aw-color-text);
   background: transparent;
 }
 
@@ -130,13 +145,13 @@
 
 .app-right-tree-switcher-icon {
   width: 16px;
-  color: #8c95a3;
+  color: var(--aw-color-icon-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--aw-font-caption);
+  font-weight: var(--aw-font-weight-medium);
   transition: transform 0.16s ease;
 }
 
@@ -158,23 +173,23 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--aw-font-xs);
 }
 
 .app-right-tree-title-icon {
-  color: #7f8897;
-  font-size: 13px;
+  color: var(--aw-color-icon);
+  font-size: var(--aw-font-sm);
   flex-shrink: 0;
 }
 
 .app-right-tree-folder-icon {
-  color: #d89a27;
-  font-size: 16px;
+  color: #e2b55a;
+  font-size: var(--aw-font-xl);
   transition: color 0.16s ease;
 }
 
 .app-right-tree-node:hover .app-right-tree-folder-icon {
-  color: #e4ab3d;
+  color: #ecc978;
 }
 
 .app-right-tree-atom-icon {
@@ -183,17 +198,17 @@
 }
 
 .app-right-tree-atom-icon::before {
-  font-size: 15px;
+  font-size: var(--aw-font-lg);
 }
 
 .app-right-tree-node.is-selected .app-right-tree-switcher-icon,
 .app-right-tree-node.is-selected .app-right-tree-title-icon {
-  color: #58606e;
+  color: var(--aw-color-text-secondary);
 }
 
 .app-right-tree-node.is-selected .app-right-tree-folder-icon,
 .app-right-tree-node.is-selected:hover .app-right-tree-folder-icon {
-  color: #d89a27;
+  color: #e2b55a;
 }
 
 .app-right-tree-node.is-selected .app-right-tree-atom-icon {
@@ -224,7 +239,7 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
-  border: 0px solid var(--aw-color-border-secondary);
+  border: none;
   border-radius: 10px;
   overflow: hidden;
   background: var(--aw-color-bg-layout);

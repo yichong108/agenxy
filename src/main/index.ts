@@ -429,12 +429,7 @@ function registerIpc(): void {
    */
   ipcMain.handle(
     IPC.AGENT_SEND,
-    async (
-      _e,
-      sessionId: string,
-      text: string,
-      opts?: { mode?: AgentComposerMode }
-    ) => {
+    async (_e, sessionId: string, text: string, opts?: { mode?: AgentComposerMode }) => {
       const mode = opts?.mode === 'ask' ? 'ask' : 'build'
       mainLog.info(`[AGENT_SEND] sessionId: ${sessionId}, mode: ${mode}, text: ${text}`)
 
