@@ -1209,3 +1209,7 @@ textarea.app-composer-input.ant-input:focus {
     transition-duration: 0.01ms !important;
   }
 }
+
+.xterm .xterm-viewport {
+  background-color: transparent;
+}

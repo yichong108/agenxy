@@ -16,6 +16,7 @@ import * as monaco from 'monaco-editor'
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -24,8 +25,8 @@ import {
 } from 'react'
 import { Tree, type NodeRendererProps } from 'react-arborist'
 
+import { WorkspaceFileTreeContainer } from '@/renderer/src/right-pane/WorkspaceFileTreeContainer'
 import type { WorkspaceFileNode } from '@/shared/ipc'
-
 import '@/renderer/src/right-pane/WorkspaceRightPane.scss'
 import '@xterm/xterm/css/xterm.css'
 import 'file-icons-js/css/style.css'
@@ -34,30 +35,32 @@ const { Text } = Typography
 loader.config({ monaco })
 const ISLANDS_LIGHT_THEME_NAME = 'islands-light'
 
-const FILE_TREE_SPLIT_STORAGE_KEY = 'aw.fileTreeSplitFraction'
-const FILE_TREE_SPLITTER_PX = 1
-const FILE_TREE_MIN_TREE_PX = 160
+/** 新版：存文件树列像素宽度，避免拖拽「聊天区—右侧栏」外部分割条时树列随总宽按比例变宽/变窄 */
+const FILE_TREE_WIDTH_STORAGE_KEY = 'aw.fileTreeWidthPx'
+/** 旧版比例（仅用于一次性迁移到像素） */
+const FILE_TREE_SPLIT_FRACTION_LEGACY_KEY = 'aw.fileTreeSplitFraction'
+const FILE_TREE_SPLITTER_PX = 3
+const FILE_TREE_MIN_TREE_PX = 200
 const FILE_TREE_MIN_PREVIEW_PX = 200
-const FILE_TREE_DEFAULT_FRACTION = 0.42
+const FILE_TREE_DEFAULT_WIDTH_PX = 236
 
-function readStoredTreeFraction(): number {
+function readStoredTreeWidthPx(): number {
   try {
-    const raw = localStorage.getItem(FILE_TREE_SPLIT_STORAGE_KEY)
-    if (!raw) return FILE_TREE_DEFAULT_FRACTION
+    const raw = localStorage.getItem(FILE_TREE_WIDTH_STORAGE_KEY)
+    if (!raw) return FILE_TREE_DEFAULT_WIDTH_PX
     const n = Number(raw)
-    if (!Number.isFinite(n)) return FILE_TREE_DEFAULT_FRACTION
-    return Math.min(0.82, Math.max(0.18, n))
+    if (!Number.isFinite(n)) return FILE_TREE_DEFAULT_WIDTH_PX
+    return Math.max(FILE_TREE_MIN_TREE_PX, n)
   } catch {
-    return FILE_TREE_DEFAULT_FRACTION
+    return FILE_TREE_DEFAULT_WIDTH_PX
   }
 }
 
-function clampFileTreeSplitFraction(fraction: number, contentWidth: number): number {
-  if (!(contentWidth > 0)) return fraction
-  const minF = FILE_TREE_MIN_TREE_PX / contentWidth
-  const maxF = (contentWidth - FILE_TREE_SPLITTER_PX - FILE_TREE_MIN_PREVIEW_PX) / contentWidth
-  if (maxF < minF) return fraction
-  return Math.min(maxF, Math.max(minF, fraction))
+function clampTreeWidthPx(treePx: number, contentWidth: number): number {
+  if (!(contentWidth > 0)) return treePx
+  const maxW = contentWidth - FILE_TREE_SPLITTER_PX - FILE_TREE_MIN_PREVIEW_PX
+  if (maxW < FILE_TREE_MIN_TREE_PX) return treePx
+  return Math.min(maxW, Math.max(FILE_TREE_MIN_TREE_PX, treePx))
 }
 
 /** `clientHeight` 含 padding；虚拟列表高度需为内容区高度，否则会与 padding 叠出多余滚动条。 */
@@ -88,7 +91,7 @@ function renderNodeTitle(
         ) : (
           <FolderOutlined className="app-right-tree-title-icon app-right-tree-folder-icon" />
         )}
-        <span>{name}</span>
+        <span className="app-right-tree-title-text">{name}</span>
       </span>
     )
   }
@@ -98,7 +101,7 @@ function renderNodeTitle(
   return (
     <span className="app-right-tree-title">
       <span className={`app-right-tree-atom-icon icon ${atomIconClass}`} aria-hidden />
-      <span>{name}</span>
+      <span className="app-right-tree-title-text">{name}</span>
     </span>
   )
 }
@@ -288,9 +291,11 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
   const [filePreviewTruncated, setFilePreviewTruncated] = useState(false)
   const [filePreviewError, setFilePreviewError] = useState('')
   const [selectedFileKey, setSelectedFileKey] = useState<string | null>(null)
-  const [fileTreeSplitFraction, setFileTreeSplitFraction] = useState(readStoredTreeFraction)
+  const [fileTreeWidthPx, setFileTreeWidthPx] = useState(readStoredTreeWidthPx)
   const [fileSplitDragging, setFileSplitDragging] = useState(false)
-  const fileTreeSplitFractionRef = useRef(fileTreeSplitFraction)
+  const fileTreeWidthPxRef = useRef(fileTreeWidthPx)
+  /** 首帧在实测 content 宽度上尝试从旧版比例 key 迁移到像素 key（仅一次） */
+  const fileTreeWidthMigrateAttemptedRef = useRef(false)
   const rightContentRef = useRef<HTMLDivElement | null>(null)
   const treeContainerRef = useRef<HTMLDivElement | null>(null)
   const [treeHeight, setTreeHeight] = useState(0)
@@ -315,21 +320,46 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
   const filePreviewLanguage = useMemo(() => inferMonacoLanguage(filePreviewPath), [filePreviewPath])
 
   useEffect(() => {
-    fileTreeSplitFractionRef.current = fileTreeSplitFraction
-  }, [fileTreeSplitFraction])
+    fileTreeWidthPxRef.current = fileTreeWidthPx
+  }, [fileTreeWidthPx])
 
   useEffect(() => {
     if (activePanel !== 'file') return
     const el = rightContentRef.current
     if (!el) return
-    const clampToWidth = () => {
+    const applyContentResize = () => {
       const w = el.getBoundingClientRect().width
-      setFileTreeSplitFraction((prev) => clampFileTreeSplitFraction(prev, w))
+      if (!(w > 0)) return
+
+      if (!fileTreeWidthMigrateAttemptedRef.current) {
+        fileTreeWidthMigrateAttemptedRef.current = true
+        try {
+          const hasNew = localStorage.getItem(FILE_TREE_WIDTH_STORAGE_KEY)
+          const legacyRaw = localStorage.getItem(FILE_TREE_SPLIT_FRACTION_LEGACY_KEY)
+          if (!hasNew && legacyRaw) {
+            const f = Number(legacyRaw)
+            if (Number.isFinite(f)) {
+              const frac = Math.min(0.82, Math.max(0.18, f))
+              const migrated = clampTreeWidthPx(frac * w, w)
+              fileTreeWidthPxRef.current = migrated
+              setFileTreeWidthPx(migrated)
+              localStorage.setItem(FILE_TREE_WIDTH_STORAGE_KEY, String(migrated))
+              return
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+
+      setFileTreeWidthPx((prev) => {
+        const next = clampTreeWidthPx(prev, w)
+        fileTreeWidthPxRef.current = next
+        return next
+      })
     }
-    clampToWidth()
-    const ro = new ResizeObserver(() => {
-      clampToWidth()
-    })
+    applyContentResize()
+    const ro = new ResizeObserver(applyContentResize)
     ro.observe(el)
     return () => ro.disconnect()
   }, [activePanel, width, isCollapsed])
@@ -457,7 +487,7 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
       if (activePanel !== 'file') return
       const content = rightContentRef.current
       if (!content) return
-      const startFraction = fileTreeSplitFractionRef.current
+      const startTreeWidth = fileTreeWidthPxRef.current
       const startX = event.clientX
       setFileSplitDragging(true)
       const prevUserSelect = document.body.style.userSelect
@@ -468,9 +498,9 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
       const onMove = (ev: MouseEvent) => {
         const cw = content.getBoundingClientRect().width
         if (cw <= 0) return
-        const next = clampFileTreeSplitFraction(startFraction + (ev.clientX - startX) / cw, cw)
-        fileTreeSplitFractionRef.current = next
-        setFileTreeSplitFraction(next)
+        const next = clampTreeWidthPx(startTreeWidth + (ev.clientX - startX), cw)
+        fileTreeWidthPxRef.current = next
+        setFileTreeWidthPx(next)
       }
       const onUp = () => {
         setFileSplitDragging(false)
@@ -480,8 +510,8 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
         window.removeEventListener('mouseup', onUp)
         try {
           localStorage.setItem(
-            FILE_TREE_SPLIT_STORAGE_KEY,
-            String(fileTreeSplitFractionRef.current)
+            FILE_TREE_WIDTH_STORAGE_KEY,
+            String(fileTreeWidthPxRef.current)
           )
         } catch {
           /* ignore */
@@ -551,7 +581,8 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
     setFilePreviewError('')
   }, [activeWorkspaceId])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (activePanel !== 'file') return
     const container = treeContainerRef.current
     if (!container) return
     const measure = () => setTreeHeight(readTreeViewportHeight(container))
@@ -561,7 +592,7 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
     })
     observer.observe(container)
     return () => observer.disconnect()
-  }, [activePanel])
+  }, [activePanel, width, isCollapsed, fileTreeWidthPx, fileTreeLoading, fileTreeData.length])
 
   useEffect(() => {
     terminalPromptPrefixRef.current = terminalPromptPrefix
@@ -594,7 +625,8 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
     terminalFitAddonRef.current = fitAddon
     terminalInputBufferRef.current = ''
     terminalRunningRef.current = false
-    writeTerminalPrompt(term)
+    // 首行提示符仅由下方「activePanel / activeWorkspaceId」effect 统一写入，避免与
+    // term.reset() 后的 write 在 xterm 异步解析队列中叠加成「PS …> PS …>」。
 
     const disposable = term.onData((data) => {
       const activeTerm = terminalRef.current
@@ -719,48 +751,51 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
               <>
                 <div
                   className="app-right-tree-panel"
-                  style={{ flex: `0 0 ${fileTreeSplitFraction * 100}%` }}
+                  style={{ flex: `0 0 ${fileTreeWidthPx}px` }}
                 >
-                  <div className="app-right-tree-wrap" ref={treeContainerRef}>
-                    {fileTreeLoading ? (
-                      <div className="app-right-tree-loading">
-                        <Spin size="small" />
-                        <Text type="secondary">正在加载文件树...</Text>
-                      </div>
-                    ) : fileTreeData.length ? (
-                      <Tree<FileTreeDataNode>
-                        className="app-right-tree"
-                        data={fileTreeData}
-                        width="100%"
-                        height={Math.max(treeHeight, 240)}
-                        rowHeight={26}
-                        indent={16}
-                        openByDefault={false}
-                        initialOpenState={fileTreeOpenState}
-                        disableDrag
-                        disableEdit
-                        selectionFollowsFocus
-                        selection={selectedFileKey ?? undefined}
-                        onToggle={(id) => {
-                          setFileTreeExpandedKeys((prev) =>
-                            prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-                          )
-                        }}
-                        onSelect={(nodes) => {
-                          const node = nodes[0]
-                          if (!node || node.data.kind !== 'file') return
-                          const relPath = node.id
-                          setSelectedFileKey(relPath)
-                          void previewWorkspaceFile(relPath)
-                        }}
-                      >
-                        {FileTreeNodeRenderer}
-                      </Tree>
-                    ) : (
-                      <Text type="secondary" className="app-right-empty-tip">
-                        当前工作区暂无可展示文件
-                      </Text>
-                    )}
+                  <div className="app-right-tree-wrap">
+                    <div className="app-right-tree-viewport" ref={treeContainerRef}>
+                      {fileTreeLoading ? (
+                        <div className="app-right-tree-loading">
+                          <Spin size="small" />
+                          <Text type="secondary">正在加载文件树...</Text>
+                        </div>
+                      ) : fileTreeData.length ? (
+                        <Tree<FileTreeDataNode>
+                          className="app-right-tree"
+                          data={fileTreeData}
+                          width="100%"
+                          height={treeHeight > 0 ? treeHeight : 240}
+                          rowHeight={26}
+                          indent={16}
+                          openByDefault={false}
+                          initialOpenState={fileTreeOpenState}
+                          renderContainer={WorkspaceFileTreeContainer}
+                          disableDrag
+                          disableEdit
+                          selectionFollowsFocus
+                          selection={selectedFileKey ?? undefined}
+                          onToggle={(id) => {
+                            setFileTreeExpandedKeys((prev) =>
+                              prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+                            )
+                          }}
+                          onSelect={(nodes) => {
+                            const node = nodes[0]
+                            if (!node || node.data.kind !== 'file') return
+                            const relPath = node.id
+                            setSelectedFileKey(relPath)
+                            void previewWorkspaceFile(relPath)
+                          }}
+                        >
+                          {FileTreeNodeRenderer}
+                        </Tree>
+                      ) : (
+                        <Text type="secondary" className="app-right-empty-tip">
+                          当前工作区暂无可展示文件
+                        </Text>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div

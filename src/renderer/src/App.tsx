@@ -266,19 +266,6 @@ export function App() {
         children: viewChildren
       },
       {
-        key: 'window',
-        label: '窗口',
-        children: [
-          { key: 'min', label: '最小化', onClick: () => void bridge.windowAction('minimize') },
-          {
-            key: 'max',
-            label: '最大化 / 还原',
-            onClick: () => void bridge.windowAction('maximize-toggle')
-          },
-          { key: 'close', label: '关闭窗口', onClick: () => void bridge.windowAction('close') }
-        ]
-      },
-      {
         key: 'help',
         label: '帮助',
         children: [
@@ -983,7 +970,7 @@ export function App() {
           onChange={(e) => setInput(e.target.value)}
           autoSize={isEmptyConversation ? { minRows: 4, maxRows: 16 } : { minRows: 1, maxRows: 12 }}
           variant="borderless"
-          placeholder="Plan / Build，/ 命令，@ 上下文（Enter 发送，Shift+Enter 换行）"
+          placeholder="Enter发送，Shift+Enter换行"
           className="app-composer-input"
           onPressEnter={(e) => {
             if (!e.shiftKey) {

@@ -2,6 +2,8 @@
   width: 560px;
   min-width: 420px;
   max-width: 860px;
+  min-height: 0;
+  align-self: stretch;
   display: flex;
   flex-direction: column;
   /* 展开时竖线由主布局里 .app-right-resizer::before（1px）绘制，此处勿再 border-left，否则会叠成双条 */
@@ -70,18 +72,19 @@
 .app-right-tree-panel {
   flex-grow: 0;
   flex-shrink: 0;
-  min-width: 160px;
+  min-width: 0;
   min-height: 0;
   display: flex;
+  flex-direction: column;
   background: var(--aw-color-bg-canvas);
 }
 
 .app-right-file-split-handle {
-  flex: 0 0 1px;
+  flex: 0 0 0.5px;
   flex-shrink: 0;
-  width: 1px;
-  min-width: 1px;
-  max-width: 1px;
+  width: 0.5px;
+  min-width: 0.5px;
+  max-width: 0.5px;
   align-self: stretch;
   cursor: col-resize;
   user-select: none;
@@ -103,18 +106,30 @@
 .app-right-file-split-handle::after {
   content: '';
   position: absolute;
-  inset: 0 -5px;
+  inset: 0 -1px;
 }
 
 .app-right-tree-wrap {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  /* 纵向滚动由 react-window 承担，避免外层矮框 + 双滚动条 */
+  overflow: hidden;
   margin: 0;
-  padding: 8px;
+  padding: 8px 0 8px 8px;
   border: none;
   border-radius: 0;
   background: transparent;
+}
+
+.app-right-tree-viewport {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .app-right-tree-loading,
@@ -132,12 +147,46 @@
   background: transparent;
 }
 
+/* 文件树虚拟列表滚动条：SimpleBar 自绘，与主栏消息区一致（避免 Windows 叠加滚动条样式失效） */
+.app-right-file-tree-simplebar[data-simplebar] {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  min-width: 0;
+}
+
+.app-right-file-tree-simplebar .simplebar-content-wrapper {
+  overflow-x: hidden !important;
+}
+
+.app-right-file-tree-simplebar .simplebar-track.simplebar-vertical {
+  width: var(--aw-chat-scrollbar-size);
+}
+
+.app-right-file-tree-simplebar .simplebar-track.simplebar-horizontal {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.app-right-file-tree-simplebar .simplebar-scrollbar::before {
+  inset: 3px;
+  border-radius: 999px;
+  background: var(--aw-chat-scrollbar-thumb);
+  opacity: 1;
+  transition: background-color 0.15s ease;
+}
+
+.app-right-file-tree-simplebar .simplebar-scrollbar:hover::before {
+  background: var(--aw-chat-scrollbar-thumb-hover);
+}
+
 .app-right-tree-node {
   height: 24px;
   display: flex;
   align-items: center;
   gap: 6px;
   width: 100%;
+  min-width: 0;
   box-sizing: border-box;
   padding: 0 6px;
   border-radius: 8px;
@@ -155,6 +204,7 @@
 
 .app-right-tree-switcher-icon {
   width: 16px;
+  flex-shrink: 0;
   color: var(--aw-color-icon-muted);
   display: inline-flex;
   align-items: center;
@@ -179,17 +229,26 @@
 }
 
 .app-right-tree-title {
-  display: inline-flex;
+  display: flex;
+  flex: 1 1 0;
   align-items: center;
   gap: 6px;
   min-width: 0;
   font-size: var(--aw-font-xs);
 }
 
+.app-right-tree-title-text {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .app-right-tree-title-icon {
+  flex-shrink: 0;
   color: var(--aw-color-icon);
   font-size: var(--aw-font-sm);
-  flex-shrink: 0;
 }
 
 .app-right-tree-folder-icon {
@@ -312,13 +371,11 @@
   padding: 12px 8px;
 }
 
-.app-right-tree-wrap::-webkit-scrollbar,
 .app-right-terminal-canvas .xterm-viewport::-webkit-scrollbar {
   width: 9px;
   height: 9px;
 }
 
-.app-right-tree-wrap::-webkit-scrollbar-thumb,
 .app-right-terminal-canvas .xterm-viewport::-webkit-scrollbar-thumb {
   background: rgb(24 24 27 / 0.22);
   border-radius: 999px;
@@ -326,7 +383,6 @@
   background-clip: content-box;
 }
 
-.app-right-tree-wrap::-webkit-scrollbar-track,
 .app-right-terminal-canvas .xterm-viewport::-webkit-scrollbar-track {
   background: transparent;
 }
