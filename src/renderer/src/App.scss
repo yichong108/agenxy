@@ -5,6 +5,35 @@
   --aw-chat-scrollbar-thumb-hover: rgb(24 24 27 / 0.19);
 }
 
+/* 全局默认原生滚动条（侧栏、Table、下拉、Markdown pre 等），与上列 token 一致。
+ * 主进程已关闭 Overlay/Fluent 滚动条，否则 webkit 伪元素在 Windows 上常不生效。
+ * 更具体的选择器（如 .app-workspace-tree、Modal/Table、终端视口）仍可覆盖。 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--aw-chat-scrollbar-thumb) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: var(--aw-chat-scrollbar-size);
+  height: var(--aw-chat-scrollbar-size);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--aw-chat-scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background-color 0.15s ease;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--aw-chat-scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 .app-shell {
   /* Zinc 暖中性灰 + Teal 强调（配色：生产力工具主色 #0D9488） */
   --aw-color-bg-canvas: #f4f4f5;
@@ -1204,6 +1233,7 @@ textarea.app-composer-input.ant-input:focus {
   .app-messages-scroll.is-messages-scrollbar-hot .simplebar-scrollbar::before,
   .app-messages-scroll.simplebar-scrolling .simplebar-scrollbar::before,
   .app-messages-scroll.simplebar-dragging .simplebar-scrollbar::before,
+  *::-webkit-scrollbar-thumb,
   .ant-modal-root .ant-modal-body::-webkit-scrollbar-thumb,
   .ant-modal-root .ant-table-body::-webkit-scrollbar-thumb {
     transition-duration: 0.01ms !important;
