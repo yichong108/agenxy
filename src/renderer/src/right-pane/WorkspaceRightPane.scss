@@ -11,9 +11,10 @@
 
 .app-right-pane.is-collapsed {
   min-width: 0;
-  max-width: 56px;
-  /* 收起时无 resizer，靠自身左边线与主区分隔 */
-  border-left: 1px solid var(--aw-color-border-secondary);
+  max-width: 0;
+  overflow: hidden;
+  border-left: none;
+  pointer-events: none;
 }
 
 .app-right-toolbar {
@@ -26,7 +27,16 @@
   border-bottom: 1px solid var(--aw-color-border);
 }
 
+/* 与顶栏「展开右边栏」(.app-settings-btn.app-topbar-pane-toggle) 同尺寸与圆角，避免收起/展开两处观感不一致 */
 .app-right-toolbar-btn.ant-btn {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  padding-inline: 0 !important;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--aw-color-icon);
   border: none;
 }

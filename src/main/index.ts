@@ -65,6 +65,15 @@ import {
 
 mainLog.info('Electron 主进程启动')
 
+/**
+ * Chromium 叠加 / Fluent 滚动条由系统层绘制时，会忽略渲染进程里的 ::-webkit-scrollbar。
+ * 关闭后使用经典滚动条轨道，聊天区等自定义 scrollbar 才能稳定生效（尤其 Windows）。
+ */
+app.commandLine.appendSwitch(
+  'disable-features',
+  'OverlayScrollbar,FluentOverlayScrollbars,FluentScrollbar'
+)
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const isDev = !app.isPackaged
 let mainWindow: BrowserWindow | null = null

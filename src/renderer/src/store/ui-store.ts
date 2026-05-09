@@ -6,12 +6,15 @@ type UiStoreState = {
   activeWorkspaceId: string | null
   activeSessionId: string | null
   inputDraft: string
+  /** 递增以触发主区域对话输入框聚焦（如新会话） */
+  composerFocusNonce: number
   byWorkspace: Record<string, WorkspaceUiState>
   hydrated: boolean
   hydrateFromMain: () => Promise<void>
   setActiveWorkspaceId: (workspaceId: string | null) => void
   setActiveSessionId: (id: string | null) => void
   setInputDraft: (text: string) => void
+  requestComposerFocus: () => void
 }
 
 let draftTimer: ReturnType<typeof setTimeout> | null = null
@@ -38,6 +41,7 @@ export const useUiStore = create<UiStoreState>((set, get) => ({
   activeWorkspaceId: null,
   activeSessionId: null,
   inputDraft: '',
+  composerFocusNonce: 0,
   byWorkspace: {},
   hydrated: false,
   hydrateFromMain: async () => {
@@ -98,5 +102,6 @@ export const useUiStore = create<UiStoreState>((set, get) => ({
       persistPatch({ byWorkspace: { [workspaceId]: byWorkspace[workspaceId]! } })
       draftTimer = null
     }, 150)
-  }
+  },
+  requestComposerFocus: () => set((s) => ({ composerFocusNonce: s.composerFocusNonce + 1 }))
 }))

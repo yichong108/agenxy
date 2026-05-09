@@ -1,6 +1,7 @@
 import {
   ApiOutlined,
   FolderOpenOutlined,
+  InboxOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   PlusOutlined,
@@ -10,6 +11,7 @@ import {
 } from '@ant-design/icons'
 import { Button, Dropdown, Input, Modal, Space, Typography } from 'antd'
 import type { DragEvent } from 'react'
+import { createPortal } from 'react-dom'
 
 import { McpHubModal, SettingsModal, SkillsHubModal } from './modals'
 import { useWorkspaceLeftPane } from './useWorkspaceLeftPane'
@@ -17,51 +19,70 @@ import { useWorkspaceLeftPane } from './useWorkspaceLeftPane'
 const { Text } = Typography
 
 export type WorkspaceLeftPaneProps = {
-  /** 从侧栏变更当前会话后，主区域按需强制拉取消息（例如移除侧栏会话时） */
-  ensureSessionMessages?: (sessionId: string, force?: boolean) => void
+  /** 顶栏左侧挂载点：侧栏收起时仅将「展开」按钮 portal 到此，展开时按钮在侧栏内 */
+  leftTogglePortalHost?: HTMLElement | null
 }
 
-export function WorkspaceLeftPane({ ensureSessionMessages }: WorkspaceLeftPaneProps) {
-  const p = useWorkspaceLeftPane({ ensureSessionMessages })
+export function WorkspaceLeftPane({ leftTogglePortalHost }: WorkspaceLeftPaneProps) {
+  const p = useWorkspaceLeftPane()
+
+  const leftToggleInTopbar = (
+    <Button
+      type="text"
+      icon={<MenuUnfoldOutlined />}
+      onClick={p.handleSidebarCollapseToggle}
+      className="app-settings-btn app-sidebar-collapse-btn app-topbar-pane-toggle"
+      title="展开侧边栏"
+      aria-label="展开侧边栏"
+    />
+  )
 
   return (
     <>
-      <div className="app-sidebar" style={{ width: `${p.sidebarWidth}px` }}>
+      {p.isSidebarCollapsed && leftTogglePortalHost
+        ? createPortal(leftToggleInTopbar, leftTogglePortalHost)
+        : null}
+      <div
+        className={`app-sidebar ${p.isSidebarCollapsed ? 'is-collapsed' : ''}`}
+        style={{ width: `${p.sidebarWidth}px` }}
+      >
         <div className={`app-sidebar-inner ${p.isSidebarCollapsed ? 'is-collapsed' : ''}`}>
           <div className="app-sidebar-header">
-            <Button
-              type="text"
-              icon={p.isSidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-              onClick={p.handleSidebarCollapseToggle}
-              className="app-settings-btn app-sidebar-collapse-btn"
-              title={p.isSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
-              aria-label={p.isSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
-            />
-            {!p.isSidebarCollapsed && (
-              <Space size={2}>
+            {!p.isSidebarCollapsed ? (
+              <>
                 <Button
                   type="text"
-                  icon={<ApiOutlined />}
-                  onClick={p.openMcpHub}
-                  className="app-settings-btn"
-                  title="MCP 与扩展"
+                  icon={<MenuFoldOutlined />}
+                  onClick={p.handleSidebarCollapseToggle}
+                  className="app-settings-btn app-sidebar-collapse-btn"
+                  title="收起侧边栏"
+                  aria-label="收起侧边栏"
                 />
-                <Button
-                  type="text"
-                  icon={<ShopOutlined />}
-                  onClick={p.openSkillsHub}
-                  className="app-settings-btn"
-                  title="技能与市场"
-                />
-                <Button
-                  type="text"
-                  icon={<SettingOutlined />}
-                  onClick={p.openSettings}
-                  className="app-settings-btn"
-                  title="设置"
-                />
-              </Space>
-            )}
+                <Space size={2}>
+                  <Button
+                    type="text"
+                    icon={<ApiOutlined />}
+                    onClick={p.openMcpHub}
+                    className="app-settings-btn"
+                    title="MCP 与扩展"
+                  />
+                  <Button
+                    type="text"
+                    icon={<ShopOutlined />}
+                    onClick={p.openSkillsHub}
+                    className="app-settings-btn"
+                    title="技能与市场"
+                  />
+                  <Button
+                    type="text"
+                    icon={<SettingOutlined />}
+                    onClick={p.openSettings}
+                    className="app-settings-btn"
+                    title="设置"
+                  />
+                </Space>
+              </>
+            ) : null}
           </div>
           {!p.isSidebarCollapsed && (
             <div className="app-new-session-wrap">
@@ -173,18 +194,6 @@ export function WorkspaceLeftPane({ ensureSessionMessages }: WorkspaceLeftPanePr
                                     key: 'rename',
                                     label: '重命名',
                                     onClick: () => p.handleSessionRenameRequest(session)
-                                  },
-                                  {
-                                    key: 'remove-from-sidebar',
-                                    label: '从侧边栏移除',
-                                    onClick: () =>
-                                      p.handleRemoveSessionFromSidebar(workspace.id, session)
-                                  },
-                                  {
-                                    key: 'del',
-                                    danger: true,
-                                    label: '删除',
-                                    onClick: () => p.handleSessionDeleteRequest(session)
                                   }
                                 ]
                               }}
@@ -194,7 +203,21 @@ export function WorkspaceLeftPane({ ensureSessionMessages }: WorkspaceLeftPanePr
                                 className={`app-session-item app-session-item-sub ${session.id === p.activeSessionId ? 'is-active' : ''}`}
                                 onClick={() => void p.handleSessionClick(workspace.id, session.id)}
                               >
-                                <div className="app-session-title">{session.name}</div>
+                                <div className="app-session-item-inner">
+                                  <div className="app-session-title">{session.name}</div>
+                                  <button
+                                    type="button"
+                                    className="app-session-archive-btn"
+                                    title="归档"
+                                    aria-label="归档"
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      p.handleRemoveSessionFromSidebar(workspace.id, session)
+                                    }}
+                                  >
+                                    <InboxOutlined aria-hidden />
+                                  </button>
+                                </div>
                               </div>
                             </Dropdown>
                           ))}

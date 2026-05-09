@@ -28,12 +28,7 @@ type WorkspaceDropMarker = {
 
 const legacyWorkspaceId = 'legacy-single-workspace'
 
-export type UseWorkspaceLeftPaneOptions = {
-  /** 从侧栏移除当前会话后，强制为主区域加载消息 */
-  ensureSessionMessages?: (sessionId: string, force?: boolean) => void
-}
-
-export function useWorkspaceLeftPane({ ensureSessionMessages }: UseWorkspaceLeftPaneOptions) {
+export function useWorkspaceLeftPane() {
   const { message: msgApi, modal: modalApi } = AntdApp.useApp()
   const preloadOk = typeof window !== 'undefined' && typeof window.bridge !== 'undefined'
   const bridge = window.bridge
@@ -227,7 +222,7 @@ export function useWorkspaceLeftPane({ ensureSessionMessages }: UseWorkspaceLeft
         return false
       }
       sidebarExpandedWidthRef.current = sidebarWidth
-      setSidebarWidth(56)
+      setSidebarWidth(0)
       return true
     })
   }, [sidebarWidth])
@@ -305,6 +300,7 @@ export function useWorkspaceLeftPane({ ensureSessionMessages }: UseWorkspaceLeft
       addExpandedWorkspaceId(resolvedId)
       setActiveSessionId(null)
       setInputDraft('')
+      useUiStore.getState().requestComposerFocus()
     },
     [
       activeWorkspaceId,
@@ -346,19 +342,6 @@ export function useWorkspaceLeftPane({ ensureSessionMessages }: UseWorkspaceLeft
     setRenameName(session.name)
   }, [])
 
-  const handleSessionDeleteRequest = useCallback(
-    (session: SessionInfo) => {
-      modalApi.confirm({
-        title: '删除此会话？',
-        centered: true,
-        onOk: () => {
-          void bridge.deleteSession(session.id).then(() => msgApi.success('已删除'))
-        }
-      })
-    },
-    [bridge, modalApi, msgApi]
-  )
-
   const handleRemoveWorkspaceFromSidebar = useCallback(
     (workspace: WorkspaceInfo) => {
       const isDefault = Boolean(workspace.isDefault)
@@ -399,17 +382,14 @@ export function useWorkspaceLeftPane({ ensureSessionMessages }: UseWorkspaceLeft
       useUiStore.setState({ byWorkspace: nextByWorkspace })
       void window.bridge.setUiState({ byWorkspace: { [workspaceId]: nextWs } })
 
-      const list = sessionsByWorkspace[workspaceId] ?? []
-      const hiddenSet = new Set(sidebarHiddenSessionIds)
-      const visible = list.filter((s) => !hiddenSet.has(s.id))
       if (activeSessionId === session.id) {
-        const nextId = visible[0]?.id ?? null
-        setActiveSessionId(nextId)
-        if (nextId) ensureSessionMessages?.(nextId, true)
+        setActiveSessionId(null)
+        setInputDraft('')
+        useUiStore.getState().requestComposerFocus()
       }
-      msgApi.success('已从侧边栏移除')
+      msgApi.success('已归档')
     },
-    [ensureSessionMessages, msgApi, sessionsByWorkspace, setActiveSessionId]
+    [msgApi, setActiveSessionId, setInputDraft]
   )
 
   const handleWorkspaceDragStart = useCallback(
@@ -525,7 +505,6 @@ export function useWorkspaceLeftPane({ ensureSessionMessages }: UseWorkspaceLeft
     openBlankConversationInWorkspace,
     handleSessionClick,
     handleSessionRenameRequest,
-    handleSessionDeleteRequest,
     handleRemoveSessionFromSidebar,
     handleRemoveWorkspaceFromSidebar: supportsMultiWorkspaceApi
       ? handleRemoveWorkspaceFromSidebar

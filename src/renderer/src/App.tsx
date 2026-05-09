@@ -3,6 +3,7 @@ import {
   CheckOutlined,
   DownOutlined,
   FolderOpenOutlined,
+  MenuUnfoldOutlined,
   PlusOutlined,
   RightOutlined,
   SendOutlined,
@@ -22,12 +23,16 @@ import {
   Typography,
   MenuProps
 } from 'antd'
+import type { InputRef } from 'antd/es/input'
 import { findAndReplace } from 'mdast-util-find-and-replace'
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import ReactMarkdown from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
 import remarkGfm from 'remark-gfm'
+import type SimpleBarCore from 'simplebar-core'
+import SimpleBar from 'simplebar-react'
+import 'simplebar-react/dist/simplebar.min.css'
 import 'highlight.js/styles/github.css'
 
 import { WorkspaceLeftPane } from '@/renderer/src/left-pane'
@@ -135,7 +140,6 @@ export function App() {
   const RIGHT_PANE_MIN_WIDTH = 420
   const RIGHT_PANE_MAX_WIDTH = 860
   const RIGHT_PANE_DEFAULT_WIDTH = 560
-  const RIGHT_PANE_COLLAPSED_WIDTH = 56
   const { message: msgApi, modal: modalApi } = AntdApp.useApp()
   const preloadOk = typeof window !== 'undefined' && typeof window.bridge !== 'undefined'
   const bridge = window.bridge
@@ -167,7 +171,14 @@ export function App() {
   const setActiveId = useUiStore((s) => s.setActiveSessionId)
   const input = useUiStore((s) => s.inputDraft)
   const setInput = useUiStore((s) => s.setInputDraft)
+  const composerFocusNonce = useUiStore((s) => s.composerFocusNonce)
   const hydrateUiStore = useUiStore((s) => s.hydrateFromMain)
+  const composerInputRef = useRef<InputRef>(null)
+
+  useLayoutEffect(() => {
+    if (!composerFocusNonce) return
+    composerInputRef.current?.focus({ preventScroll: true })
+  }, [composerFocusNonce])
 
   /** 未开启时为 Cursor 风格的 Build（可写可执行）；开启后为 Ask 只读问答 */
   const [composerAskOn, setComposerAskOn] = useState(false)
@@ -297,14 +308,17 @@ export function App() {
   const [isRightPaneResizing, setIsRightPaneResizing] = useState(false)
   const rightPaneResizeStartRef = useRef<{ startX: number; startWidth: number } | null>(null)
   const rightPaneExpandedWidthRef = useRef(RIGHT_PANE_DEFAULT_WIDTH)
+  const [leftTogglePortalHost, setLeftTogglePortalHost] = useState<HTMLDivElement | null>(null)
 
   const streamBuf = useRef<Record<string, string>>({})
   const intentBuf = useRef<Record<string, string>>({})
   const assistantMsgId = useRef<Record<string, string | null>>({})
   const hydratedMessageSessions = useRef<Set<string>>(new Set())
-  const messagesScrollRef = useRef<HTMLDivElement | null>(null)
+  const messagesSimpleBarRef = useRef<SimpleBarCore | null>(null)
   const messagesBottomRef = useRef<HTMLDivElement | null>(null)
   const autoScrollRef = useRef(true)
+  /** 指针在消息区 `.simplebar-content-wrapper` 内时为 true，用于仅在该区域悬停时显示滚动条 */
+  const [messagesScrollSurfaceHot, setMessagesScrollSurfaceHot] = useState(false)
 
   const isNearBottom = useCallback((el: HTMLDivElement) => {
     const threshold = 48
@@ -312,13 +326,19 @@ export function App() {
   }, [])
 
   const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
-    const el = messagesScrollRef.current
     const bottomEl = messagesBottomRef.current
     if (bottomEl) {
       bottomEl.scrollIntoView({ block: 'end', behavior })
       return
     }
+    const el = messagesSimpleBarRef.current?.getScrollElement()
     if (el) el.scrollTo({ top: el.scrollHeight, behavior })
+  }, [])
+
+  const handleMessagesShellMouseLeave = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const next = e.relatedTarget
+    if (next instanceof Node && e.currentTarget.contains(next)) return
+    setMessagesScrollSurfaceHot(false)
   }, [])
 
   const ensureSessionMessages = useCallback(
@@ -651,19 +671,12 @@ export function App() {
       {
         key: 'ask',
         label: (
-          <div className="app-composer-plus-menu-label">
-            <span className="app-composer-plus-menu-title">
-              {composerAskOn ? (
-                <CheckOutlined style={{ marginRight: 8 }} />
-              ) : (
-                <span style={{ display: 'inline-block', width: 22 }} aria-hidden />
-              )}
-              Ask
-            </span>
-            <span className="app-composer-plus-menu-desc">
-              只读问答与讲解；改代码、跑终端请用默认 Build（不勾选此项）
-            </span>
-          </div>
+          <span className="app-composer-plus-menu-title">
+            <span>Ask</span>
+            {composerAskOn ? (
+              <CheckOutlined className="app-composer-plus-menu-check" aria-hidden />
+            ) : null}
+          </span>
         )
       }
     ],
@@ -815,6 +828,15 @@ export function App() {
     void bridge.activateWorkspace(HOME_WORKSPACE_ID)
   }, [activeWorkspaceId, bridge, preloadOk, supportsMultiWorkspaceApi])
   const isEmptyConversation = currentMessages.length === 0
+
+  useEffect(() => {
+    if (isEmptyConversation) setMessagesScrollSurfaceHot(false)
+  }, [isEmptyConversation])
+
+  useEffect(() => {
+    setMessagesScrollSurfaceHot(false)
+  }, [activeId])
+
   const openExternalWithConfirm = useCallback(
     (href: string) => {
       const target = (() => {
@@ -940,12 +962,14 @@ export function App() {
         menu={{ items: composerWorkspaceMenuItems, onClick: handleComposerWorkspaceMenuClick }}
         trigger={['click']}
       >
-        <Button type="default" className="app-composer-workspace-trigger">
-          <span className="app-composer-workspace-name">
-            {activeWorkspace?.name ?? '未选择工作区'}
+        <button type="button" className="app-composer-workspace-trigger" aria-haspopup="menu">
+          <span className="app-composer-workspace-trigger-body">
+            <span className="app-composer-workspace-name">
+              {activeWorkspace?.name ?? '未选择工作区'}
+            </span>
+            <DownOutlined className="app-composer-workspace-trigger-chevron" aria-hidden />
           </span>
-          <DownOutlined />
-        </Button>
+        </button>
       </Dropdown>
     </div>
   )
@@ -954,9 +978,10 @@ export function App() {
     <div className="app-composer">
       <div className="app-composer-inner">
         <TextArea
+          ref={composerInputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          autoSize={{ minRows: 1, maxRows: 6 }}
+          autoSize={isEmptyConversation ? { minRows: 4, maxRows: 16 } : { minRows: 1, maxRows: 12 }}
           variant="borderless"
           placeholder="Plan / Build，/ 命令，@ 上下文（Enter 发送，Shift+Enter 换行）"
           className="app-composer-input"
@@ -971,7 +996,7 @@ export function App() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Dropdown
               menu={{ items: composerPlusMenuItems, onClick: handleComposerPlusMenuClick }}
-              trigger={['click']}
+              trigger={['hover']}
               placement="topLeft"
             >
               <Button
@@ -1025,32 +1050,51 @@ export function App() {
         </div>
       ) : null}
       <div className={`app-body ${isRightPaneResizing ? 'is-right-resizing' : ''}`}>
-        <WorkspaceLeftPane ensureSessionMessages={ensureSessionMessages} />
+        <WorkspaceLeftPane leftTogglePortalHost={leftTogglePortalHost} />
         <div className="app-main-pane">
           <div className="app-topbar">
-            {activeId && (
-              <Space>
-                <Text type="secondary">会话</Text>
-                <Text>
-                  {
-                    (sessionsByWorkspace[composerSelectedWorkspaceId] ?? []).find(
-                      (s) => s.id === activeId
-                    )?.name
-                  }
-                </Text>
-                {isRun && <Tag color="processing">执行中</Tag>}
-                {isQueued && isQueued > 0 && <Tag color="warning">排队 #{isQueued}</Tag>}
-                {currentRunStats && (
-                  <Text type="secondary">
-                    本轮: {currentRunStats.toolCalls} 次调用 / {currentRunStats.toolErrors} 次错误 /{' '}
-                    {((currentRunStats.durationMs ?? 0) / 1000).toFixed(2)}s
+            <div
+              className="app-topbar-leading"
+              ref={(el) => {
+                setLeftTogglePortalHost((prev) => (prev === el ? prev : el))
+              }}
+            />
+            <div className="app-topbar-body">
+              {activeId ? (
+                <Space>
+                  <Text>
+                    {
+                      (sessionsByWorkspace[composerSelectedWorkspaceId] ?? []).find(
+                        (s) => s.id === activeId
+                      )?.name
+                    }
                   </Text>
-                )}
-                {currentRunStats?.traceId && (
-                  <Tag color="default">trace: {currentRunStats.traceId.slice(-12)}</Tag>
-                )}
-              </Space>
-            )}
+                  {isRun && <Tag color="processing">执行中</Tag>}
+                  {isQueued && isQueued > 0 && <Tag color="warning">排队 #{isQueued}</Tag>}
+                  {currentRunStats && (
+                    <Text type="secondary">
+                      本轮: {currentRunStats.toolCalls} 次调用 / {currentRunStats.toolErrors} 次错误
+                      / {((currentRunStats.durationMs ?? 0) / 1000).toFixed(2)}s
+                    </Text>
+                  )}
+                  {currentRunStats?.traceId && (
+                    <Tag color="default">trace: {currentRunStats.traceId.slice(-12)}</Tag>
+                  )}
+                </Space>
+              ) : null}
+            </div>
+            {isRightPaneCollapsed ? (
+              <div className="app-topbar-trailing">
+                <Button
+                  type="text"
+                  icon={<MenuUnfoldOutlined />}
+                  onClick={handleRightPaneCollapseToggle}
+                  className="app-settings-btn app-topbar-pane-toggle"
+                  title="展开右边栏"
+                  aria-label="展开右边栏"
+                />
+              </div>
+            ) : null}
           </div>
           <div className={`app-content ${isEmptyConversation ? 'is-empty-conversation' : ''}`}>
             {!preloadOk && (
@@ -1072,12 +1116,16 @@ export function App() {
               </div>
             ) : (
               <>
-                <div className="app-messages-shell">
-                  <div
-                    className="app-messages-scroll"
-                    ref={messagesScrollRef}
-                    onScroll={(e) => {
-                      autoScrollRef.current = isNearBottom(e.currentTarget)
+                <div className="app-messages-shell" onMouseLeave={handleMessagesShellMouseLeave}>
+                  <SimpleBar
+                    className={`app-messages-scroll${messagesScrollSurfaceHot ? ' is-messages-scrollbar-hot' : ''}`}
+                    ref={messagesSimpleBarRef}
+                    autoHide={false}
+                    scrollableNodeProps={{
+                      onMouseEnter: () => setMessagesScrollSurfaceHot(true),
+                      onScroll: (e: React.UIEvent<HTMLElement>) => {
+                        autoScrollRef.current = isNearBottom(e.currentTarget as HTMLDivElement)
+                      }
                     }}
                   >
                     <div className="app-messages-inner">
@@ -1099,6 +1147,7 @@ export function App() {
                           <Card
                             key={m.id}
                             size="small"
+                            bordered={m.role === 'user'}
                             className={`app-message-card ${m.role === 'user' ? 'is-user' : 'is-assistant'}`}
                           >
                             <div className="app-message-content">
@@ -1197,12 +1246,9 @@ export function App() {
                       })}
                       <div ref={messagesBottomRef} />
                     </div>
-                  </div>
+                  </SimpleBar>
                 </div>
-                <div className="app-composer-stack">
-                  {composerWorkspaceToolbar}
-                  {composerInput}
-                </div>
+                <div className="app-composer-stack">{composerInput}</div>
               </>
             )}
           </div>
@@ -1223,7 +1269,7 @@ export function App() {
             workspacesWithComposerHomeStub.find((x) => x.id === composerSelectedWorkspaceId)
               ?.path ?? null
           }
-          width={isRightPaneCollapsed ? RIGHT_PANE_COLLAPSED_WIDTH : rightPaneWidth}
+          width={isRightPaneCollapsed ? 0 : rightPaneWidth}
           isCollapsed={isRightPaneCollapsed}
           onToggleCollapse={handleRightPaneCollapseToggle}
         />

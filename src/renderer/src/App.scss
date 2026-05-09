@@ -1,3 +1,10 @@
+/* 主栏聊天 / 弹窗正文：统一滚动条 token（Modal 传送门在 body 外，须挂 :root） */
+:root {
+  --aw-chat-scrollbar-size: 15px;
+  --aw-chat-scrollbar-thumb: rgb(24 24 27 / 0.1);
+  --aw-chat-scrollbar-thumb-hover: rgb(24 24 27 / 0.19);
+}
+
 .app-shell {
   /* Zinc 暖中性灰 + Teal 强调（配色：生产力工具主色 #0D9488） */
   --aw-color-bg-canvas: #f4f4f5;
@@ -43,7 +50,9 @@
   --aw-composer-footer-rule: var(--aw-color-border-secondary);
   --aw-color-text-primary: var(--aw-color-text);
   /* 主栏会话/输入可读宽度上限（与空状态 composer 一致） */
-  --aw-main-content-max-width: 880px;
+  --aw-main-content-max-width: 840px;
+  /* 会话正文列左右内边距：与 .app-messages-inner 一致，有会话时底部输入区须用同一值才能与气泡对齐 */
+  --aw-main-column-padding-x: 20px;
 
   /* 字号 / 行高 / 字重：全局阶梯，与 Ant Design fontSize 13 对齐 */
   --aw-font-micro: 10px;
@@ -111,6 +120,11 @@
   background: var(--aw-color-bg-elevated);
   min-width: 0;
   flex-shrink: 0;
+}
+
+.app-sidebar.is-collapsed {
+  overflow: hidden;
+  border-right: none;
 }
 
 /* 可拖区域 3px，可见分隔仅为居中 ::before 1px */
@@ -195,11 +209,6 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-
-.app-sidebar-inner.is-collapsed .app-sidebar-header {
-  justify-content: center;
-  padding: 12px 0;
 }
 
 .app-brand-text {
@@ -406,22 +415,29 @@
   padding-inline: 10px 8px;
   background: transparent;
   border: 1px solid transparent;
+  box-sizing: border-box;
   transition: all 0.16s ease;
 }
 
 .app-session-item-sub {
   margin: 0 0 2px;
   border-radius: 7px;
-  /* 左内边距略大，让小圆点（约 10–16px）与标题之间留白更足 */
-  padding: 6px 9px 6px 28px;
+  /* 固定行高：侧栏会话列表更紧凑 */
+  padding: 0 6px 0 24px;
   position: relative;
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
 }
 
 .app-session-item-sub::before {
   content: '';
   position: absolute;
   top: 50%;
-  left: 10px;
+  left: 8px;
   width: 6px;
   height: 6px;
   border-radius: 50%;
@@ -442,10 +458,53 @@
   background: var(--aw-color-primary);
 }
 
+.app-session-item-inner {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  width: 100%;
+}
+
+.app-session-archive-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--aw-color-icon);
+  font-size: var(--aw-font-md);
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    color 0.15s ease;
+}
+
+.app-session-item:hover .app-session-archive-btn,
+.app-session-item:focus-within .app-session-archive-btn {
+  opacity: 1;
+}
+
+.app-session-archive-btn:hover {
+  color: var(--aw-color-icon-hover);
+}
+
 .app-session-title {
+  flex: 1;
+  min-width: 0;
   color: var(--aw-color-text);
   font-size: var(--aw-font-xs);
-  line-height: 1.3;
+  line-height: 1.25;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -465,14 +524,38 @@
   background: transparent;
 }
 
+/* Horizontal inset matches .app-sidebar-header (12px) for pane toggle alignment. */
 .app-topbar {
   background: var(--aw-color-bg-canvas);
   display: flex;
   align-items: center;
-  padding-inline: 18px;
+  gap: 12px;
+  padding-inline: 12px;
   height: 52px;
   line-height: 52px;
   border-bottom: 1px solid var(--aw-color-border);
+}
+
+.app-topbar-leading,
+.app-topbar-trailing {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.app-topbar-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.app-topbar-pane-toggle.ant-btn {
+  width: 28px !important;
+  height: 28px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .app-content {
@@ -503,6 +586,8 @@
     width: 100%;
     max-width: var(--aw-main-content-max-width);
     box-sizing: border-box;
+    margin: 0 auto 14px;
+    padding-inline: var(--aw-main-column-padding-x);
   }
 
   &:not(.is-empty-conversation) .app-preload-alert-wrap {
@@ -539,27 +624,59 @@
 .app-composer-workspace-trigger {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  margin: 0;
+  padding: 2px 4px;
+  min-height: 28px;
+  box-sizing: border-box;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-composer-workspace-trigger:focus {
+  outline: none;
+}
+
+.app-composer-workspace-trigger-body {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
   max-width: 100%;
-}
-
-.app-composer-workspace-trigger.ant-btn {
-  height: 28px;
-  padding: 0 10px;
   font-size: var(--aw-font-xs);
   font-weight: var(--aw-font-weight-medium);
-  line-height: 26px;
-  border-radius: 8px;
+  line-height: 22px;
   color: var(--aw-color-text-secondary);
-  border-color: var(--aw-composer-border);
-  background: var(--aw-composer-toolbar-bg);
-  box-shadow: none;
+  transition:
+    color 0.14s ease,
+    opacity 0.12s ease;
 }
 
-.app-composer-workspace-trigger.ant-btn:hover {
-  color: var(--aw-color-text) !important;
-  border-color: var(--aw-color-border-strong) !important;
-  background: rgb(24 24 27 / 0.05) !important;
+.app-composer-workspace-trigger:hover .app-composer-workspace-trigger-body {
+  color: var(--aw-color-text);
+}
+
+.app-composer-workspace-trigger:active .app-composer-workspace-trigger-body {
+  color: var(--aw-color-text);
+  opacity: 0.68;
+}
+
+.app-composer-workspace-trigger:focus-visible .app-composer-workspace-trigger-body {
+  outline: 2px solid var(--aw-color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.app-composer-workspace-trigger-chevron.anticon {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: inherit;
 }
 
 .app-composer-workspace-name {
@@ -588,23 +705,54 @@
   flex-direction: column;
 }
 
-/* 全宽滚动层：纵向滚动条落在主栏最右侧，与居中正文列之间自然留白 */
-.app-messages-scroll {
+/*
+ * 主栏消息区：用 SimpleBar 自绘滚动条。Windows / Electron 下 Chromium Fluent 叠加滚动条
+ * 会忽略 ::-webkit-scrollbar，原生改样式往往「看起来完全没变化」。
+ */
+.app-messages-scroll[data-simplebar] {
   flex: 1;
   min-height: 0;
   width: 100%;
   min-width: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
   padding: 0;
   background: var(--aw-color-bg-layout);
+}
+
+.app-messages-scroll .simplebar-content-wrapper {
+  overflow-x: hidden;
+}
+
+.app-messages-scroll .simplebar-track.simplebar-vertical {
+  width: var(--aw-chat-scrollbar-size);
+}
+
+/* 仅当指针在可滚动面 (.simplebar-content-wrapper) 上、或正在滚动/拖拽滑块时显示；移出消息壳（如输入区）即隐藏 */
+.app-messages-scroll .simplebar-scrollbar::before {
+  inset: 3px;
+  border-radius: 999px;
+  background: var(--aw-chat-scrollbar-thumb);
+  opacity: 0;
+  transition:
+    background-color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.app-messages-scroll.is-messages-scrollbar-hot .simplebar-scrollbar::before,
+.app-messages-scroll.simplebar-scrolling .simplebar-scrollbar::before,
+.app-messages-scroll.simplebar-dragging .simplebar-scrollbar::before {
+  opacity: 1;
+}
+
+.app-messages-scroll.is-messages-scrollbar-hot .simplebar-scrollbar:hover::before,
+.app-messages-scroll.simplebar-scrolling .simplebar-scrollbar:hover::before,
+.app-messages-scroll.simplebar-dragging .simplebar-scrollbar:hover::before {
+  background: var(--aw-chat-scrollbar-thumb-hover);
 }
 
 .app-messages-inner {
   max-width: var(--aw-main-content-max-width);
   margin: 0 auto;
-  padding: 16px 20px;
+  padding: 16px var(--aw-main-column-padding-x);
   box-sizing: border-box;
 }
 
@@ -620,14 +768,30 @@
   padding: 10px 14px;
 }
 
+.app-message-card.is-assistant .ant-card-body {
+  padding: 4px 7px;
+}
+
 .app-message-card.is-user {
   border: 1px solid var(--aw-color-border);
   background: var(--aw-color-bg-container);
 }
 
+/* 第二条及之后的用户气泡：与上一条助手区（含免责声明块）拉开顶距 */
+.app-message-card.is-user ~ .app-message-card.is-user {
+  margin-top: 14px;
+}
+
 .app-message-card.is-assistant {
   border: none;
+  box-shadow: none;
   background: transparent;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+/* 助手卡片自身不占纵向 margin，与下一条消息的间距由下一条顶边距承担 */
+.app-message-card.is-assistant + .app-message-card {
 }
 
 .app-message-content {
@@ -838,7 +1002,6 @@
 }
 
 .app-composer-inner {
-  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -876,20 +1039,19 @@
   border-color: var(--aw-color-border);
 }
 
-.app-composer-plus-menu-label {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  line-height: var(--aw-line-tight);
-}
-
 .app-composer-plus-menu-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 112px;
   font-weight: var(--aw-font-weight-medium);
 }
 
-.app-composer-plus-menu-desc {
-  font-size: var(--aw-font-xs);
-  color: var(--aw-color-text-tertiary);
+.app-composer-plus-menu-check {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--aw-color-text-secondary);
 }
 
 .app-composer-mode-hint {
@@ -902,7 +1064,8 @@
 
 .app-composer-input.ant-input,
 textarea.app-composer-input.ant-input {
-  flex: 1;
+  /* 勿使用 flex:1，否则会占满纵向空间，Ant Design autoSize 无法随内容增高 */
+  flex: 0 1 auto;
   width: 100%;
   padding: 4px 2px 2px;
   font-size: var(--aw-font-sm);
@@ -978,23 +1141,51 @@ textarea.app-composer-input.ant-input:focus {
   width: 100%;
 }
 
-.app-workspace-tree::-webkit-scrollbar,
-.app-messages-scroll::-webkit-scrollbar {
+.app-workspace-tree::-webkit-scrollbar {
   width: 9px;
   height: 9px;
 }
 
-.app-workspace-tree::-webkit-scrollbar-thumb,
-.app-messages-scroll::-webkit-scrollbar-thumb {
+.app-workspace-tree::-webkit-scrollbar-thumb {
   background: rgb(24 24 27 / 0.22);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 
-.app-workspace-tree::-webkit-scrollbar-track,
-.app-messages-scroll::-webkit-scrollbar-track {
+.app-workspace-tree::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* Modal 传送门在 body 下；与主栏聊天区共用滚动条 token，侧栏树仍为 9px */
+.ant-modal-root .ant-modal-body::-webkit-scrollbar,
+.ant-modal-root .ant-table-body::-webkit-scrollbar {
+  width: var(--aw-chat-scrollbar-size);
+  height: var(--aw-chat-scrollbar-size);
+}
+
+.ant-modal-root .ant-modal-body::-webkit-scrollbar-thumb,
+.ant-modal-root .ant-table-body::-webkit-scrollbar-thumb {
+  background: var(--aw-chat-scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background-color 0.15s ease;
+}
+
+.ant-modal-root .ant-modal-body::-webkit-scrollbar-thumb:hover,
+.ant-modal-root .ant-table-body::-webkit-scrollbar-thumb:hover {
+  background: var(--aw-chat-scrollbar-thumb-hover);
+}
+
+.ant-modal-root .ant-modal-body::-webkit-scrollbar-track,
+.ant-modal-root .ant-table-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ant-modal-root .ant-modal-body,
+.ant-modal-root .ant-table-body {
+  scrollbar-color: var(--aw-chat-scrollbar-thumb) transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1007,6 +1198,14 @@ textarea.app-composer-input.ant-input:focus {
   .app-sidebar-resizer::before,
   .app-right-resizer::before,
   .app-right-file-split-handle {
+    transition-duration: 0.01ms !important;
+  }
+
+  .app-messages-scroll.is-messages-scrollbar-hot .simplebar-scrollbar::before,
+  .app-messages-scroll.simplebar-scrolling .simplebar-scrollbar::before,
+  .app-messages-scroll.simplebar-dragging .simplebar-scrollbar::before,
+  .ant-modal-root .ant-modal-body::-webkit-scrollbar-thumb,
+  .ant-modal-root .ant-table-body::-webkit-scrollbar-thumb {
     transition-duration: 0.01ms !important;
   }
 }
