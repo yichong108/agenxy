@@ -52,16 +52,23 @@ if (root) {
         locale={zhCN}
         theme={{
           token: {
-            colorPrimary: '#262626',
-            colorInfo: '#262626',
-            colorSuccess: '#262626',
-            colorWarning: '#595959',
-            colorError: '#434343',
+            colorPrimary: '#0d9488',
+            colorInfo: '#0d9488',
+            colorSuccess: '#059669',
+            colorWarning: '#d97706',
+            colorError: '#dc2626',
+            colorText: '#18181b',
+            colorTextSecondary: '#52525b',
+            colorTextTertiary: '#71717a',
+            colorBorder: '#e4e4e7',
+            colorSplit: '#e4e4e7',
             borderRadius: 12,
             borderRadiusSM: 10,
             borderRadiusLG: 14,
             wireframe: false,
             fontSize: 13,
+            fontFamily:
+              "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
             controlHeight: 36
           },
           components: {
@@ -69,7 +76,7 @@ if (root) {
               controlHeight: 36,
               borderRadius: 10,
               fontWeight: 500,
-              primaryShadow: 'none'
+              primaryShadow: '0 1px 2px rgb(24 24 27 / 0.06)'
             },
             Card: {
               borderRadiusLG: 14
@@ -85,12 +92,12 @@ if (root) {
             },
             Table: {
               borderRadius: 12,
-              headerBg: '#fafafa'
+              headerBg: '#f4f4f5'
             },
             Tabs: {
-              itemColor: '#595959',
-              itemSelectedColor: '#111111',
-              inkBarColor: '#111111'
+              itemColor: '#71717a',
+              itemSelectedColor: '#18181b',
+              inkBarColor: '#0d9488'
             },
             Tag: {
               borderRadiusSM: 8

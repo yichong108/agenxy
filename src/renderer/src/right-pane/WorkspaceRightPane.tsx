@@ -580,11 +580,11 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
       fontFamily: "Consolas, 'Courier New', monospace",
       scrollback: 5000,
       theme: {
-        background: '#fafafa',
-        foreground: '#191919',
-        cursor: '#1f1f1f',
-        cursorAccent: '#fafafa',
-        selectionBackground: '#d9d9d980'
+        background: '#f4f4f5',
+        foreground: '#18181b',
+        cursor: '#27272a',
+        cursorAccent: '#f4f4f5',
+        selectionBackground: 'rgb(13 148 136 / 0.22)'
       }
     })
     const fitAddon = new FitAddon()

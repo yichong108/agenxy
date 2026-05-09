@@ -38,7 +38,7 @@ export function WorkspaceLeftPane({ ensureSessionMessages }: WorkspaceLeftPanePr
               aria-label={p.isSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
             />
             {!p.isSidebarCollapsed && (
-              <Space size={0}>
+              <Space size={2}>
                 <Button
                   type="text"
                   icon={<ApiOutlined />}

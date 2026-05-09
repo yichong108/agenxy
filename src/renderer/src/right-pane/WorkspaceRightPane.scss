@@ -5,7 +5,7 @@
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--aw-color-border-secondary);
-  background: #fafafa;
+  background: var(--aw-color-bg-canvas);
 }
 
 .app-right-pane.is-collapsed {
@@ -19,23 +19,24 @@
   align-items: center;
   gap: 8px;
   padding: 0 12px;
-  border-bottom: 1px solid var(--aw-color-border-secondary);
+  background: var(--aw-color-bg-canvas);
+  border-bottom: 1px solid var(--aw-color-border);
 }
 
 .app-right-toolbar-btn.ant-btn {
-  color: var(--aw-color-text-primary);
+  color: var(--aw-color-text);
   border: none;
 }
 
 .app-right-toolbar-btn.ant-btn:hover {
-  background: rgba(0, 0, 0, 0.04);
-  color: var(--aw-color-text-primary);
+  background: rgb(24 24 27 / 0.05);
+  color: var(--aw-color-text);
 }
 
 .app-right-toolbar-btn.ant-btn.is-active,
 .app-right-toolbar-btn.ant-btn.is-active:hover {
-  background: rgba(0, 0, 0, 0.06);
-  color: var(--aw-color-text-primary);
+  background: rgb(24 24 27 / 0.08);
+  color: var(--aw-color-text);
 }
 
 .app-right-toolbar-spacer {
@@ -59,7 +60,7 @@
   min-width: 160px;
   min-height: 0;
   display: flex;
-  background: var(--aw-color-bg-layout);
+  background: var(--aw-color-bg-canvas);
 }
 
 .app-right-file-split-handle {
@@ -119,12 +120,12 @@
 }
 
 .app-right-tree-node:hover {
-  background: #f2f4f7;
+  background: var(--aw-color-fill-secondary);
 }
 
 .app-right-tree-node.is-selected,
 .app-right-tree-node.is-selected:hover {
-  background: #eceff3;
+  background: var(--aw-color-primary-bg);
 }
 
 .app-right-tree-switcher-icon {
@@ -205,7 +206,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: #ffffff;
+  /* 与文件树同一画布；代码白底由 Monaco 容器承担 */
+  background: var(--aw-color-bg-canvas);
 }
 
 .app-right-terminal-panel {
@@ -256,7 +258,8 @@
   justify-content: space-between;
   gap: 8px;
   padding: 8px 10px;
-  border-bottom: 1px solid var(--aw-color-border-secondary);
+  background: var(--aw-color-bg-canvas);
+  border-bottom: 1px solid var(--aw-color-border);
 }
 
 .app-right-preview-body {
@@ -273,9 +276,10 @@
   flex: 1;
   min-height: 0;
   min-width: 0;
-  border: 1px solid #eceff3;
+  border: 1px solid var(--aw-color-border);
   border-radius: 8px;
   overflow: hidden;
+  background: var(--aw-color-bg-container);
 }
 
 .app-right-empty-tip {
@@ -291,7 +295,7 @@
 
 .app-right-tree-wrap::-webkit-scrollbar-thumb,
 .app-right-terminal-canvas .xterm-viewport::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.18);
+  background: rgb(24 24 27 / 0.22);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: content-box;
