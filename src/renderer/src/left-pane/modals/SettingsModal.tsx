@@ -1,4 +1,4 @@
-import { App as AntdApp, Form, Input, Modal, Select, Switch } from 'antd'
+import { App as AntdApp, Form, Input, Modal, Select } from 'antd'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import {
@@ -63,16 +63,15 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     (next: ModelProviderId) => {
       const prev = settingsProviderRef.current
       if (prev === next) return
-      const cur = form.getFieldsValue(['baseUrl', 'model', 'apiKey', 'enableTools']) as Pick<
+      const cur = form.getFieldsValue(['baseUrl', 'model', 'apiKey']) as Pick<
         ProviderProfile,
-        'baseUrl' | 'model' | 'apiKey' | 'enableTools'
+        'baseUrl' | 'model' | 'apiKey'
       >
       profilesDraftRef.current[prev] = {
         ...profilesDraftRef.current[prev],
         baseUrl: String(cur.baseUrl ?? ''),
         model: String(cur.model ?? ''),
-        apiKey: String(cur.apiKey ?? ''),
-        enableTools: prev === 'deepseek' ? true : Boolean(cur.enableTools)
+        apiKey: String(cur.apiKey ?? '')
       }
       settingsProviderRef.current = next
       const nextProf = profilesDraftRef.current[next]
@@ -80,8 +79,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
         provider: next,
         baseUrl: nextProf.baseUrl,
         model: nextProf.model,
-        apiKey: nextProf.apiKey,
-        enableTools: next === 'deepseek' ? true : nextProf.enableTools
+        apiKey: nextProf.apiKey
       })
     },
     [form]
@@ -140,20 +138,6 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
               </Form.Item>
             )
           }}
-        </Form.Item>
-        <Form.Item noStyle shouldUpdate={(prev, cur) => prev.provider !== cur.provider}>
-          {() =>
-            form.getFieldValue('provider') === 'ollama' ? (
-              <Form.Item
-                name="enableTools"
-                label="启用工作区工具"
-                valuePropName="checked"
-                extra="需模型支持 Ollama/OpenAI 的 tools API（如 llama3.2、qwen2.5）。deepseek-r1 等不支持，请保持关闭以免报错。"
-              >
-                <Switch />
-              </Form.Item>
-            ) : null
-          }
         </Form.Item>
         <Form.Item
           name="tavilyApiKey"

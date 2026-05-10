@@ -11,7 +11,7 @@ import { StreamBatcher } from '@/main/agent/batcher'
 import { ConcurrencyQueue } from '@/main/agent/queue'
 import { buildSkillBundle } from '@/main/agent/skills/index'
 import { logScope } from '@/main/logger'
-import { buildMcpLangChainTools, collectMcpServerContextHints } from '@/main/mcp/mcp-runtime'
+import { buildMcpLangChainTools } from '@/main/mcp/mcp-runtime'
 import {
   getSessionMessages,
   getSettings,
@@ -250,70 +250,6 @@ ${webRule}
 `
 }
 
-/** 无原生 tool calling 时的纯对话流式（不调用 bindTools，避免 Ollama 返回 does not support tools） */
-async function invokeChatOnlyStream(
-  settings: AppSettings,
-  session: SessionRuntime,
-  root: string,
-  skillHint: string,
-  mcpContextHints: string,
-  ac: AbortController,
-  batcher: StreamBatcher,
-  timeoutMs: number,
-  composerMode: AgentComposerMode = 'build'
-): Promise<number> {
-  const model = createLanguageModel(settings)
-  const webHint =
-    ' 若用户要天气、新闻等实时信息：如实说明当前为「纯对话模式」无法调用工具；请其（1）在「设置」填写 Tavily API Key（或环境变量 TAVILY_API_KEY），（2）使用 DeepSeek 或对 Ollama 打开「启用工作区工具」。'
-  const chatNotice =
-    '【运行模式】当前未启用工作区工具（模型不支持 function calling 或未在设置中打开）：不得调用 read_file、write_file、delete_file、list_dir、glob、search_workspace、shell、web_search、任何 skill_* 及任何 mcp_* 工具；请用纯文本协助用户（可做步骤说明、命令示例与代码片段）。' +
-    ' 勿编造「网络搜索不可用」「搜索引擎故障」等理由；应如实说明是未开启工具或未配置 Tavily。' +
-    webHint
-  const askNotice =
-    composerMode === 'ask'
-      ? '【Ask 模式】以讲解与可复制的代码/命令建议为主，勿假定已写入磁盘或已执行命令；需要自动改仓库时请用户在界面关闭 Ask（Build）。'
-      : ''
-  const basePrompt =
-    composerMode === 'ask'
-      ? buildAskSystemPrompt(root, settings)
-      : buildSystemPrompt(root, settings)
-  const systemText = [basePrompt, skillHint, mcpContextHints, chatNotice, askNotice]
-    .filter(Boolean)
-    .join('\n\n')
-  const llmMessages = [new SystemMessage(systemText), ...session.messages]
-  let streamedChars = 0
-  let full = ''
-  let timer: ReturnType<typeof setTimeout> | null = null
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      ac.abort()
-      reject(new Error(`对话生成超时（>${timeoutMs}ms），已中止`))
-    }, timeoutMs)
-  })
-  try {
-    await Promise.race([
-      (async () => {
-        const stream = await model.stream(llmMessages, { signal: ac.signal })
-        for await (const chunk of stream) {
-          const piece = contentToText((chunk as { content?: unknown }).content)
-          if (piece) {
-            full += piece
-            streamedChars += piece.length
-            batcher.push(piece)
-          }
-        }
-      })(),
-      timeoutPromise
-    ])
-    if (full.trim()) {
-      session.messages.push(new AIMessage(full))
-    }
-  } finally {
-    if (timer) clearTimeout(timer)
-  }
-  return streamedChars
-}
-
 const INTENT_SUMMARY_TIMEOUT_MS = 18_000
 const INTENT_SUMMARY_MAX_CHARS = 900
 
@@ -435,302 +371,145 @@ const ASK_MODE_TOOL_NAMES = new Set([
   'web_search'
 ])
 
-async function makeTools(
+/** 工具执行器上下文 */
+type ToolExecutorContext = {
+  runId: string
+  traceId: string
+  onTool: (e: ToolTimelineEvent) => void
+}
+
+/** 简化工具定义：只需描述和执行逻辑 */
+type ToolDefinition<T extends z.ZodTypeAny> = {
+  name: string
+  description: string
+  schema: T
+  execute: (input: z.infer<T>, ctx: ToolExecutorContext) => Promise<unknown>
+  formatResult?: (result: unknown) => string
+  truncateTo?: number
+}
+
+/** 将 ToolDefinition 包装为带生命周期追踪的 NamedTool */
+function defineTool<T extends z.ZodTypeAny>(
+  def: ToolDefinition<T>,
+  runCtx: ToolExecutorContext
+): NamedTool {
+  const { name, description, schema, execute, formatResult, truncateTo } = def
+
+  return tool(
+    async (input: z.infer<T>) => {
+      const id = `${name}-${Date.now()}`
+      const startedAt = Date.now()
+      const args =
+        typeof input === 'object' && input !== null
+          ? Object.values(input).join(', ')
+          : String(input)
+
+      runCtx.onTool({
+        kind: 'tool',
+        id,
+        name,
+        status: 'start',
+        args,
+        runId: runCtx.runId,
+        traceId: runCtx.traceId,
+        timestampMs: startedAt
+      })
+
+      const result = await execute(input, runCtx)
+      const resultStr = formatResult ? formatResult(result) : String(result)
+      const truncated = truncateTo ? resultStr.slice(0, truncateTo) : resultStr
+
+      runCtx.onTool({
+        kind: 'tool',
+        id,
+        name,
+        status: 'end',
+        result: truncated,
+        runId: runCtx.runId,
+        traceId: runCtx.traceId,
+        timestampMs: Date.now(),
+        durationMs: Date.now() - startedAt
+      })
+
+      return result
+    },
+    { name, description, schema }
+  ) as unknown as NamedTool
+}
+
+/** 工作区基础工具 + 可选联网；Ask / Build 智能体共用 */
+function buildBaseAndWebTools(
   sessionId: string,
   root: string,
   settings: AppSettings,
-  runCtx: { runId: string; traceId: string },
-  onTool: (e: ToolTimelineEvent) => void,
-  composerMode: AgentComposerMode = 'build'
-) {
+  runCtx: ToolExecutorContext
+): { baseTools: NamedTool[]; webSearchTools: NamedTool[] } {
   const termKey = `term:${sessionId}`
-  const baseTools = [
-    tool(
-      async ({ path: p }) => {
-        const id = `read-${Date.now()}`
-        const startedAt = Date.now()
-        onTool({
-          kind: 'tool',
-          id,
-          name: 'read_file',
-          status: 'start',
-          args: p,
-          runId: runCtx.runId,
-          traceId: runCtx.traceId,
-          timestampMs: startedAt
-        })
-        const r = await readFileTool(root, p)
-        onTool({
-          kind: 'tool',
-          id,
-          name: 'read_file',
-          status: 'end',
-          result: r.slice(0, 1_000),
-          runId: runCtx.runId,
-          traceId: runCtx.traceId,
-          timestampMs: Date.now(),
-          durationMs: Date.now() - startedAt
-        })
-        return r
-      },
-      {
-        name: 'read_file',
-        description: '读取工作区内 UTF-8 文本文件，path 为相对工作区',
-        schema: z.object({ path: z.string() })
-      }
-    ),
-    tool(
-      async ({ path: p, content }) => {
-        const id = `w-${Date.now()}`
-        const startedAt = Date.now()
-        onTool({
-          kind: 'tool',
-          id,
-          name: 'write_file',
-          status: 'start',
-          args: p,
-          runId: runCtx.runId,
-          traceId: runCtx.traceId,
-          timestampMs: startedAt
-        })
-        const r = await writeFileTool(root, p, content)
-        onTool({
-          kind: 'tool',
-          id,
-          name: 'write_file',
-          status: 'end',
-          result: r,
-          runId: runCtx.runId,
-          traceId: runCtx.traceId,
-          timestampMs: Date.now(),
-          durationMs: Date.now() - startedAt
-        })
-        return r
-      },
-      {
-        name: 'write_file',
-        description: '写入或覆盖工作区文件，自动创建父目录',
-        schema: z.object({ path: z.string(), content: z.string() })
-      }
-    ),
-    tool(
-      async ({ path: p }) => {
-        const id = `del-${Date.now()}`
-        const startedAt = Date.now()
-        onTool({
-          kind: 'tool',
-          id,
-          name: 'delete_file',
-          status: 'start',
-          args: p,
-          runId: runCtx.runId,
-          traceId: runCtx.traceId,
-          timestampMs: startedAt
-        })
-        const r = await deleteFileTool(root, p)
-        onTool({
-          kind: 'tool',
-          id,
-          name: 'delete_file',
-          status: 'end',
-          result: r,
-          runId: runCtx.runId,
-          traceId: runCtx.traceId,
-          timestampMs: Date.now(),
-          durationMs: Date.now() - startedAt
-        })
-        return r
-      },
-      {
-        name: 'delete_file',
-        description: '删除工作区内单个普通文件（path 相对工作区）；不能删除目录',
-        schema: z.object({ path: z.string() })
-      }
-    ),
-    tool(
-      async ({ path: p, depth }) => {
-        const id = `ls-${Date.now()}`
-        const startedAt = Date.now()
-        onTool({
-          kind: 'tool',
-          id,
-          name: 'list_dir',
-          status: 'start',
-          args: p || '.',
-          runId: runCtx.runId,
-          traceId: runCtx.traceId,
-          timestampMs: startedAt
-        })
-        const r = await listDirTool(root, p || '.', { depth: depth ?? 2 })
-        onTool({
-          kind: 'tool',
-          id,
-          name: 'list_dir',
-          status: 'end',
-          result: r.slice(0, 8_000),
-          runId: runCtx.runId,
-          traceId: runCtx.traceId,
-          timestampMs: Date.now(),
-          durationMs: Date.now() - startedAt
-        })
-        return r
-      },
-      {
-        name: 'list_dir',
-        description: '列出目录，path 为相对或空为根，depth 1-3',
-        schema: z.object({
-          path: z.string().optional(),
-          depth: z.number().int().min(1).max(3).optional()
-        })
-      }
-    ),
-    tool(
-      async ({ query }) => {
-        const id = `find-${Date.now()}`
-        const startedAt = Date.now()
-        onTool({
-          kind: 'tool',
-          id,
-          name: 'search_workspace',
-          status: 'start',
-          args: query,
-          runId: runCtx.runId,
-          traceId: runCtx.traceId,
-          timestampMs: startedAt
-        })
-        const r = await searchWorkspace(root, query, { maxFiles: 50 })
-        onTool({
-          kind: 'tool',
-          id,
-          name: 'search_workspace',
-          status: 'end',
-          result: r.slice(0, 8_000),
-          runId: runCtx.runId,
-          traceId: runCtx.traceId,
-          timestampMs: Date.now(),
-          durationMs: Date.now() - startedAt
-        })
-        return r
-      },
-      {
-        name: 'search_workspace',
-        description: '在文本类源码中按子串搜索，适合找符号',
-        schema: z.object({ query: z.string() })
-      }
-    ),
-    tool(
-      async ({ pattern, max_results }) => {
-        const id = `glob-${Date.now()}`
-        const startedAt = Date.now()
-        const arg = `${pattern}${max_results != null ? ` max=${max_results}` : ''}`
-        onTool({
-          kind: 'tool',
-          id,
-          name: 'glob',
-          status: 'start',
-          args: arg,
-          runId: runCtx.runId,
-          traceId: runCtx.traceId,
-          timestampMs: startedAt
-        })
-        const r = await globFilesTool(root, pattern, {
-          maxFiles: max_results,
-          userDataRoot: userDataPath()
-        })
-        onTool({
-          kind: 'tool',
-          id,
-          name: 'glob',
-          status: 'end',
-          result: r.slice(0, 12_000),
-          runId: runCtx.runId,
-          traceId: runCtx.traceId,
-          timestampMs: Date.now(),
-          durationMs: Date.now() - startedAt
-        })
-        return r
-      },
-      {
-        name: 'glob',
-        description:
-          '在工作区根与 Electron 用户数据目录（userData）下按同一 pattern 做 glob，列出匹配的**文件**路径（仅文件）。返回分「工作区」「用户数据」两段，用户数据路径为相对 userData 根；pattern 使用 Node 风格如 **/*.ts、skills/**/*.md；两侧均排除 node_modules/.git/dist 及 Chromium 缓存等目录',
-        schema: z.object({
-          pattern: z.string(),
-          max_results: z.number().int().min(1).max(500).optional()
-        })
-      }
-    ),
-    tool(
-      async ({ command }) => {
-        const id = `sh-${Date.now()}`
-        const startedAt = Date.now()
-        onTool({
-          kind: 'tool',
-          id,
-          name: 'shell',
-          status: 'start',
-          args: command,
-          runId: runCtx.runId,
-          traceId: runCtx.traceId,
-          timestampMs: startedAt
-        })
-        const r = await runCommand(termKey, root, command, MAX_TERMINAL_OUTPUT_CHARS)
-        onTool({
-          kind: 'tool',
-          id,
-          name: 'shell',
-          status: 'end',
-          result: r.slice(0, 4_000),
-          runId: runCtx.runId,
-          traceId: runCtx.traceId,
-          timestampMs: Date.now(),
-          durationMs: Date.now() - startedAt
-        })
-        return r
-      },
-      {
-        name: 'shell',
-        description:
-          '在工作区根目录执行一条 shell 命令并等待完成，返回合并的 stdout/stderr（长输出会被截断）。用于安装依赖、构建、测试、git 等。',
-        schema: z.object({ command: z.string() })
-      }
-    )
+
+  const baseToolDefs: ToolDefinition<z.ZodTypeAny>[] = [
+    {
+      name: 'read_file',
+      description: '读取工作区内 UTF-8 文本文件，path 为相对工作区',
+      schema: z.object({ path: z.string() }),
+      execute: ({ path }) => readFileTool(root, path),
+      truncateTo: 1_000
+    },
+    {
+      name: 'write_file',
+      description: '写入或覆盖工作区文件，自动创建父目录',
+      schema: z.object({ path: z.string(), content: z.string() }),
+      execute: ({ path, content }) => writeFileTool(root, path, content)
+    },
+    {
+      name: 'delete_file',
+      description: '删除工作区内单个普通文件（path 相对工作区）；不能删除目录',
+      schema: z.object({ path: z.string() }),
+      execute: ({ path }) => deleteFileTool(root, path)
+    },
+    {
+      name: 'list_dir',
+      description: '列出目录，path 为相对或空为根，depth 1-3',
+      schema: z.object({
+        path: z.string().optional(),
+        depth: z.number().int().min(1).max(3).optional()
+      }),
+      execute: ({ path, depth }) => listDirTool(root, path || '.', { depth: depth ?? 2 }),
+      truncateTo: 8_000
+    },
+    {
+      name: 'search_workspace',
+      description: '在文本类源码中按子串搜索，适合找符号',
+      schema: z.object({ query: z.string() }),
+      execute: ({ query }) => searchWorkspace(root, query, { maxFiles: 50 }),
+      truncateTo: 8_000
+    },
+    {
+      name: 'glob',
+      description:
+        '在工作区根与 Electron 用户数据目录（userData）下按同一 pattern 做 glob，列出匹配的**文件**路径（仅文件）。返回分「工作区」「用户数据」两段，用户数据路径为相对 userData 根；pattern 使用 Node 风格如 **/*.ts、skills/**/*.md；两侧均排除 node_modules/.git/dist 及 Chromium 缓存等目录',
+      schema: z.object({
+        pattern: z.string(),
+        max_results: z.number().int().min(1).max(500).optional()
+      }),
+      execute: ({ pattern, max_results }) =>
+        globFilesTool(root, pattern, { maxFiles: max_results, userDataRoot: userDataPath() }),
+      truncateTo: 12_000
+    },
+    {
+      name: 'shell',
+      description:
+        '在工作区根目录执行一条 shell 命令并等待完成，返回合并的 stdout/stderr（长输出会被截断）。用于安装依赖、构建、测试、git 等。',
+      schema: z.object({ command: z.string() }),
+      execute: ({ command }) => runCommand(termKey, root, command, MAX_TERMINAL_OUTPUT_CHARS),
+      truncateTo: 4_000
+    }
   ]
-  const webSearchTools = isTavilyConfigured(settings.tavilyApiKey)
+
+  const baseTools = baseToolDefs.map((def) => defineTool(def, runCtx))
+
+  const webSearchTools: NamedTool[] = isTavilyConfigured(settings.tavilyApiKey)
     ? [
-        tool(
-          async ({ query, max_results }) => {
-            const id = `web-${Date.now()}`
-            const startedAt = Date.now()
-            const arg =
-              max_results != null && max_results !== 5 ? `${query} (max=${max_results})` : query
-            onTool({
-              kind: 'tool',
-              id,
-              name: 'web_search',
-              status: 'start',
-              args: arg,
-              runId: runCtx.runId,
-              traceId: runCtx.traceId,
-              timestampMs: startedAt
-            })
-            const r = await tavilyWebSearch(query, {
-              maxResults: max_results,
-              apiKey: settings.tavilyApiKey
-            })
-            onTool({
-              kind: 'tool',
-              id,
-              name: 'web_search',
-              status: 'end',
-              result: r.slice(0, 12_000),
-              runId: runCtx.runId,
-              traceId: runCtx.traceId,
-              timestampMs: Date.now(),
-              durationMs: Date.now() - startedAt
-            })
-            return r
-          },
+        defineTool(
           {
             name: 'web_search',
             description:
@@ -738,39 +517,96 @@ async function makeTools(
             schema: z.object({
               query: z.string(),
               max_results: z.number().int().min(1).max(20).optional()
-            })
-          }
+            }),
+            execute: ({ query, max_results }) =>
+              tavilyWebSearch(query, { maxResults: max_results, apiKey: settings.tavilyApiKey }),
+            formatResult: (r) => (typeof r === 'string' ? r : String(r)),
+            truncateTo: 12_000
+          },
+          runCtx
         )
       ]
     : []
-  const skillBundle = await buildSkillBundle({
-    root,
-    termKey,
-    settings,
-    runCtx,
-    onTool
-  })
-  const { tools: mcpTools, contextHints: mcpContextHints } = await buildMcpLangChainTools(
-    settings,
-    runCtx,
-    onTool
-  )
-  let tools = [
-    ...skillBundle.tools,
-    ...baseTools,
-    ...webSearchTools,
-    ...mcpTools
-  ] as unknown as NamedTool[]
-  if (composerMode === 'ask') {
-    tools = tools.filter((t) => ASK_MODE_TOOL_NAMES.has((t as NamedTool).name))
+
+  return { baseTools, webSearchTools }
+}
+
+/** 智能体工具集 */
+type AgentTooling = {
+  tools: NamedTool[]
+  skillHint: string
+  mcpContextHints: string
+}
+
+/** 智能体策略接口 */
+interface AgentStrategy {
+  readonly name: AgentComposerMode
+  prepareTools(
+    sessionId: string,
+    root: string,
+    settings: AppSettings,
+    runCtx: ToolExecutorContext
+  ): Promise<AgentTooling> | AgentTooling
+  buildPrompt(root: string, settings: AppSettings, tooling: AgentTooling): string
+}
+
+/** Ask 智能体策略：仅只读工作区工具 + 可选 web_search；不加载 skill / MCP */
+const askAgentStrategy: AgentStrategy = {
+  name: 'ask',
+  prepareTools(sessionId, root, settings, runCtx) {
+    const { baseTools, webSearchTools } = buildBaseAndWebTools(sessionId, root, settings, runCtx)
+    const tools = [...baseTools, ...webSearchTools].filter((t) => ASK_MODE_TOOL_NAMES.has(t.name))
+    return { tools, skillHint: '', mcpContextHints: '' }
+  },
+  buildPrompt(root, settings) {
+    return [buildAskSystemPrompt(root, settings), commonPrompt].filter(Boolean).join('\n\n')
   }
-  const byName = new Map<string, NamedTool>(tools.map((x) => [x.name, x as NamedTool]))
-  return {
-    tools,
-    byName,
-    skillHint: composerMode === 'ask' ? '' : skillBundle.hint,
-    mcpContextHints: composerMode === 'ask' ? '' : mcpContextHints
+}
+
+/** Build 智能体策略：完整工作区工具 + skill_* + MCP */
+const buildAgentStrategy: AgentStrategy = {
+  name: 'build',
+  async prepareTools(sessionId, root, settings, runCtx) {
+    const termKey = `term:${sessionId}`
+    const { baseTools, webSearchTools } = buildBaseAndWebTools(sessionId, root, settings, runCtx)
+
+    const [skillBundle, mcpResult] = await Promise.all([
+      buildSkillBundle({ root, termKey, settings, runCtx, onTool: runCtx.onTool }),
+      buildMcpLangChainTools(settings, runCtx, runCtx.onTool)
+    ])
+
+    const tools = [...skillBundle.tools, ...baseTools, ...webSearchTools, ...mcpResult.tools]
+    return {
+      tools,
+      skillHint: skillBundle.hint,
+      mcpContextHints: mcpResult.contextHints
+    }
+  },
+  buildPrompt(root, settings, tooling) {
+    return [
+      buildSystemPrompt(root, settings),
+      tooling.skillHint,
+      tooling.mcpContextHints,
+      commonPrompt
+    ]
+      .filter(Boolean)
+      .join('\n\n')
   }
+}
+
+/** 策略注册表 */
+const agentStrategies: Record<AgentComposerMode, AgentStrategy> = {
+  ask: askAgentStrategy,
+  build: buildAgentStrategy
+}
+
+/** 获取智能体策略 */
+function getAgentStrategy(mode: AgentComposerMode): AgentStrategy {
+  const strategy = agentStrategies[mode]
+  if (!strategy) {
+    throw new Error(`Unknown agent mode: ${mode}`)
+  }
+  return strategy
 }
 
 function contentToText(content: unknown): string {
@@ -889,7 +725,6 @@ export async function runUserMessage(
     }
     const recursionLimit = settings.maxAgentLoopSteps
     const invokeTimeoutMs = settings.agentRunTimeoutMs
-    const profile = getActiveProviderProfile(settings)
     session.messages.push(new HumanMessage(userText))
     persistSessionMessages(session.workspaceId, sessionId, session.messages)
 
@@ -914,74 +749,44 @@ export async function runUserMessage(
     try {
       let streamedChars = 0
 
-      if (!profile.enableTools) {
-        const noopTool: (e: ToolTimelineEvent) => void = () => {}
-        const [skillBundle, mcpContextHints] = await Promise.all([
-          buildSkillBundle({
-            root,
-            termKey: session.terminalKey,
-            settings,
-            runCtx: { runId, traceId },
-            onTool: noopTool
-          }),
-          collectMcpServerContextHints(settings)
-        ])
-        streamedChars = await invokeChatOnlyStream(
-          settings,
-          session,
-          root,
-          composerMode === 'ask' ? '' : skillBundle.hint,
-          composerMode === 'ask' ? '' : mcpContextHints,
-          ac,
-          batcher,
-          invokeTimeoutMs,
-          composerMode
-        )
-      } else {
-        const { tools, skillHint, mcpContextHints } = await makeTools(
-          sessionId,
-          root,
-          settings,
-          { runId, traceId },
-          onTool,
-          composerMode
-        )
+      // 获取对应策略并执行
+      const strategy = getAgentStrategy(composerMode)
+      const tooling = await strategy.prepareTools(sessionId, root, settings, {
+        runId,
+        traceId,
+        onTool
+      })
+      const { tools } = tooling
 
-        const model = createLanguageModel(settings).bindTools(tools as never[])
-        const baseSystem =
-          composerMode === 'ask'
-            ? buildAskSystemPrompt(root, settings)
-            : buildSystemPrompt(root, settings)
-        const runPrompt = [baseSystem, skillHint, mcpContextHints, commonPrompt]
-          .filter(Boolean)
-          .join('\n\n')
+      const model = createLanguageModel(settings).bindTools(tools as never[])
+      const runPrompt = strategy.buildPrompt(root, settings, tooling)
 
-        agentLog.info(`[runUserMessage] runPrompt: ${JSON.stringify(runPrompt, null, 2)}`)
+      agentLog.info(
+        `[runUserMessage] agent=${strategy.name} runPrompt: ${JSON.stringify(runPrompt, null, 2)}`
+      )
 
-        // 创建Agent
-        const agent = createReactAgent({
-          llm: model,
-          tools: tools as never[],
-          prompt: runPrompt
-        })
+      const agent = createReactAgent({
+        llm: model,
+        tools: tools as never[],
+        prompt: runPrompt
+      })
 
-        const onStreamToken = (token: string) => {
-          streamedChars += token.length
-          batcher.push(token)
-        }
-        const agentInvokeOpts = { recursionLimit, timeoutMs: invokeTimeoutMs }
+      const onStreamToken = (token: string) => {
+        streamedChars += token.length
+        batcher.push(token)
+      }
+      const agentInvokeOpts = { recursionLimit, timeoutMs: invokeTimeoutMs }
 
-        const result = await invokeAgentWithGuard(
-          agent,
-          session.messages,
-          ac,
-          onStreamToken,
-          agentInvokeOpts
-        )
-        const maybeMessages = (result as { messages?: BaseMessage[] }).messages
-        if (Array.isArray(maybeMessages) && maybeMessages.length > 0) {
-          session.messages = maybeMessages
-        }
+      const result = await invokeAgentWithGuard(
+        agent,
+        session.messages,
+        ac,
+        onStreamToken,
+        agentInvokeOpts
+      )
+      const maybeMessages = (result as { messages?: BaseMessage[] }).messages
+      if (Array.isArray(maybeMessages) && maybeMessages.length > 0) {
+        session.messages = maybeMessages
       }
 
       if (streamedChars === 0) {

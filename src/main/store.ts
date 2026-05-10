@@ -319,13 +319,14 @@ function normalizeSettings(
     }
   }
 
-  const finalizeProfile = (p: ProviderProfile, id: ModelProviderId): ProviderProfile => ({
-    ...p,
-    enableTools: typeof p.enableTools === 'boolean' ? p.enableTools : id === 'ollama' ? false : true
+  const finalizeProfile = (p: ProviderProfile): ProviderProfile => ({
+    baseUrl: p.baseUrl ?? '',
+    model: p.model ?? '',
+    apiKey: p.apiKey ?? ''
   })
   providerProfiles = {
-    deepseek: finalizeProfile(providerProfiles.deepseek, 'deepseek'),
-    ollama: finalizeProfile(providerProfiles.ollama, 'ollama')
+    deepseek: finalizeProfile(providerProfiles.deepseek),
+    ollama: finalizeProfile(providerProfiles.ollama)
   }
 
   const provider: ModelProviderId = inputRest.provider === 'ollama' ? 'ollama' : 'deepseek'

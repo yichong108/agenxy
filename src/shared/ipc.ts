@@ -264,11 +264,6 @@ export type ProviderProfile = {
   model: string
   /** 本地 Ollama 等可为空字符串 */
   apiKey: string
-  /**
-   * 是否使用 LangGraph 原生工具调用（读写工作区、终端、技能工具）。
-   * 多数 Ollama 上的 deepseek-r1 等模型不支持 tools API，需为 false 并走纯对话流式。
-   */
-  enableTools: boolean
 }
 
 export type AppSettings = {
@@ -346,14 +341,12 @@ export const defaultProviderProfiles = (): Record<ModelProviderId, ProviderProfi
   deepseek: {
     baseUrl: 'https://api.deepseek.com',
     model: 'deepseek-chat',
-    apiKey: '',
-    enableTools: true
+    apiKey: ''
   },
   ollama: {
     baseUrl: 'http://127.0.0.1:11434',
     model: 'qwen3.5:4b',
-    apiKey: '',
-    enableTools: true
+    apiKey: ''
   }
 })
 
@@ -380,8 +373,6 @@ export type SettingsFormValues = Pick<
   baseUrl: string
   model: string
   apiKey: string
-  /** 当前提供方是否启用工具（DeepSeek 恒为 true，仅 Ollama 可改） */
-  enableTools: boolean
 }
 
 export function settingsToFormValues(s: AppSettings): SettingsFormValues {
@@ -391,7 +382,6 @@ export function settingsToFormValues(s: AppSettings): SettingsFormValues {
     baseUrl: p.baseUrl,
     model: p.model,
     apiKey: p.apiKey,
-    enableTools: s.provider === 'deepseek' ? true : p.enableTools,
     maxAgentLoopSteps: s.maxAgentLoopSteps,
     agentRunTimeoutMs: s.agentRunTimeoutMs,
     tavilyApiKey: s.tavilyApiKey ?? ''
@@ -410,8 +400,7 @@ export function mergeFormIntoProviderProfiles(
   next[form.provider] = {
     baseUrl: form.baseUrl.trim(),
     model: form.model.trim(),
-    apiKey: form.provider === 'ollama' ? '' : (form.apiKey ?? '').trim(),
-    enableTools: form.provider === 'deepseek' ? true : Boolean(form.enableTools)
+    apiKey: form.provider === 'ollama' ? '' : (form.apiKey ?? '').trim()
   }
   return next
 }
