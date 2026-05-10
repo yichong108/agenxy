@@ -14,6 +14,7 @@ import {
   Alert,
   Button,
   Card,
+  ConfigProvider,
   Dropdown,
   FloatButton,
   Input,
@@ -35,7 +36,12 @@ import SimpleBar from 'simplebar-react'
 import 'simplebar-react/dist/simplebar.min.css'
 import 'highlight.js/styles/github.css'
 
+import agenxyLogoUrl from '@/renderer/src/assets/agenxy-logo.png'
 import { WorkspaceLeftPane } from '@/renderer/src/left-pane'
+import {
+  installCaptionBlockingOverlayObserver,
+  resetNativeTitlebarModalStack
+} from '@/renderer/src/native-titlebar-bridge'
 import { WorkspaceRightPane } from '@/renderer/src/right-pane/WorkspaceRightPane'
 import { useUiStore } from '@/renderer/src/store/ui-store'
 import { useWorkspaceStore } from '@/renderer/src/store/workspace-store'
@@ -81,6 +87,25 @@ const { Text } = Typography
 const { TextArea } = Input
 
 const PRELOAD_MISSING_ERROR = '未检测到 preload 注入（window.bridge 不存在）'
+
+/** Windows 标题栏子菜单弹层 class，与 App.scss 中 `.ant-menu-submenu-popup.app-win-menubar-popup` 对应 */
+const WIN_MENUBAR_POPUP_CLASS_NAME = 'app-win-menubar-popup'
+
+/**
+ * 仅作用于标题栏 Menu：子菜单项高度来自 Menu token `itemHeight`（默认≈controlHeightLG），
+ * 单靠外层 SCSS 易被 antd css-in-js 覆盖，故用局部 ConfigProvider。
+ */
+const WIN_MENUBAR_MENU_THEME = {
+  components: {
+    Menu: {
+      itemHeight: 28,
+      itemMarginBlock: 0,
+      /** 默认 marginXXS 会让项宽为 calc(100% - 2*margin)，视觉上左右不撑满 */
+      itemMarginInline: 0,
+      itemPaddingInline: 10
+    }
+  }
+} as const
 
 function randomId() {
   return `m-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -208,6 +233,12 @@ export function App() {
 
   const isWinCustomChrome = preloadOk && bridge.platform === 'win32'
 
+  useEffect(() => {
+    if (!preloadOk) return
+    resetNativeTitlebarModalStack()
+    return installCaptionBlockingOverlayObserver()
+  }, [preloadOk])
+
   const winMenubarItems: MenuProps['items'] = useMemo(() => {
     if (!isWinCustomChrome) return []
     const viewChildren: MenuProps['items'] = [
@@ -219,24 +250,11 @@ export function App() {
         }
       }
     ]
-    if (isDevEnv) {
-      viewChildren.push({
-        key: 'devtools',
-        label: '切换开发者工具',
-        onClick: () => {
-          void bridge
-            .toggleDevtools()
-            .then(() => {
-              window.location.reload()
-            })
-            .catch(() => {})
-        }
-      })
-    }
     return [
       {
         key: 'file',
         label: '文件',
+        popupClassName: WIN_MENUBAR_POPUP_CLASS_NAME,
         children: [
           {
             key: 'quit',
@@ -248,26 +266,15 @@ export function App() {
         ]
       },
       {
-        key: 'edit',
-        label: '编辑',
-        children: [
-          { key: 'undo', label: '撤销', onClick: () => void bridge.webEdit('undo') },
-          { key: 'redo', label: '重做', onClick: () => void bridge.webEdit('redo') },
-          { type: 'divider' },
-          { key: 'cut', label: '剪切', onClick: () => void bridge.webEdit('cut') },
-          { key: 'copy', label: '复制', onClick: () => void bridge.webEdit('copy') },
-          { key: 'paste', label: '粘贴', onClick: () => void bridge.webEdit('paste') },
-          { key: 'selectAll', label: '全选', onClick: () => void bridge.webEdit('selectAll') }
-        ]
-      },
-      {
         key: 'view',
         label: '视图',
+        popupClassName: WIN_MENUBAR_POPUP_CLASS_NAME,
         children: viewChildren
       },
       {
         key: 'help',
         label: '帮助',
+        popupClassName: WIN_MENUBAR_POPUP_CLASS_NAME,
         children: [
           {
             key: 'about',
@@ -277,7 +284,7 @@ export function App() {
         ]
       }
     ]
-  }, [bridge, isDevEnv, isWinCustomChrome])
+  }, [bridge, isWinCustomChrome])
 
   const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({})
   const [timeline, setTimeline] = useState<Record<string, ToolTimelineEvent[]>>({})
@@ -291,7 +298,7 @@ export function App() {
     Record<string, boolean>
   >({})
   const [rightPaneWidth, setRightPaneWidth] = useState(RIGHT_PANE_DEFAULT_WIDTH)
-  const [isRightPaneCollapsed, setIsRightPaneCollapsed] = useState(false)
+  const [isRightPaneCollapsed, setIsRightPaneCollapsed] = useState(true)
   const [isRightPaneResizing, setIsRightPaneResizing] = useState(false)
   const rightPaneResizeStartRef = useRef<{ startX: number; startWidth: number } | null>(null)
   const rightPaneExpandedWidthRef = useRef(RIGHT_PANE_DEFAULT_WIDTH)
@@ -1027,25 +1034,60 @@ export function App() {
     <div className="app-shell">
       {isWinCustomChrome ? (
         <div className="app-win-titlebar">
-          <Menu
-            mode="horizontal"
-            selectable={false}
-            triggerSubMenuAction="click"
-            items={winMenubarItems}
-            className="app-win-menubar"
-          />
+          <span className="app-brand-logo-visual app-brand-logo-visual--titlebar">
+            <img
+              src={agenxyLogoUrl}
+              alt=""
+              width={15}
+              height={15}
+              className="app-win-titlebar-brand-logo"
+              draggable={false}
+            />
+          </span>
+          <ConfigProvider theme={WIN_MENUBAR_MENU_THEME}>
+            <Menu
+              mode="horizontal"
+              selectable={false}
+              triggerSubMenuAction="click"
+              items={winMenubarItems}
+              className="app-win-menubar"
+            />
+          </ConfigProvider>
+          {/* 菜单仅占内容宽；右侧留白由 spacer 承担 drag，避免整行 ant-menu 的 no-drag 盖住空白区 */}
+          <div className="app-win-titlebar-spacer" aria-hidden />
         </div>
       ) : null}
       <div className={`app-body ${isRightPaneResizing ? 'is-right-resizing' : ''}`}>
         <WorkspaceLeftPane leftTogglePortalHost={leftTogglePortalHost} />
         <div className="app-main-pane">
           <div className="app-topbar">
-            <div
-              className="app-topbar-leading"
-              ref={(el) => {
-                setLeftTogglePortalHost((prev) => (prev === el ? prev : el))
-              }}
-            />
+            {isWinCustomChrome ? (
+              <div
+                className="app-topbar-leading"
+                ref={(el) => {
+                  setLeftTogglePortalHost((prev) => (prev === el ? prev : el))
+                }}
+              />
+            ) : (
+              <div className="app-topbar-leading-cluster">
+                <span className="app-brand-logo-visual app-brand-logo-visual--topbar">
+                  <img
+                    src={agenxyLogoUrl}
+                    alt=""
+                    width={19}
+                    height={19}
+                    className="app-topbar-brand-logo"
+                    draggable={false}
+                  />
+                </span>
+                <div
+                  className="app-topbar-leading"
+                  ref={(el) => {
+                    setLeftTogglePortalHost((prev) => (prev === el ? prev : el))
+                  }}
+                />
+              </div>
+            )}
             <div className="app-topbar-body">
               {activeId ? (
                 <Space>

@@ -117,16 +117,70 @@
   height: 32px;
   display: flex;
   align-items: center;
+  gap: 8px;
   padding-left: 8px;
   padding-right: 132px;
   box-sizing: border-box;
   background: var(--aw-color-bg-elevated);
-  border-bottom: 1px solid var(--aw-color-border);
+  /* 底边分隔改由 .app-body 顶边绘制：否则与 titleBarOverlay 系统按钮合成层重叠，右侧横线会断 */
+  border-bottom: none;
   -webkit-app-region: drag;
 }
 
+/* WCO 收起后不再为系统按钮预留宽条，避免右侧露白/色差（与 native-titlebar-bridge 同步 dataset） */
+html[data-aw-wco-suppressed='1'] .app-win-titlebar {
+  padding-right: 10px;
+}
+
+/* 纯黑像素用 brightness() 乘不亮；叠浅白 + screen 抬暗部、透明区仍透出顶栏底 */
+.app-brand-logo-visual {
+  position: relative;
+  display: inline-flex;
+  line-height: 0;
+  flex-shrink: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  pointer-events: none;
+  isolation: isolate;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: rgba(255, 255, 255, 0.25);
+    mix-blend-mode: screen;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  > img {
+    display: block;
+    position: relative;
+    z-index: 0;
+  }
+}
+
+.app-brand-logo-visual--topbar {
+  border-radius: 5px;
+}
+
+.app-win-titlebar-brand-logo {
+  flex-shrink: 0;
+  display: block;
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+/* Windows 自定义标题栏：整宽顶部分割线在 caption 区域之下，避免被系统按钮盖住 */
+.app-shell:has(> .app-win-titlebar) > .app-body {
+  border-top: 1px solid var(--aw-color-border);
+}
+
 .app-win-menubar {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   border-bottom: none !important;
   background: transparent !important;
@@ -135,14 +189,60 @@
   -webkit-app-region: no-drag;
 }
 
+.app-win-titlebar-spacer {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  -webkit-app-region: drag;
+}
+
 .app-win-menubar.ant-menu-horizontal {
   border-bottom: none;
+  align-items: center;
 }
 
 .app-win-menubar.ant-menu-horizontal > .ant-menu-item,
 .app-win-menubar.ant-menu-horizontal > .ant-menu-submenu {
   padding-inline: 10px;
   top: 0;
+}
+
+/* 标题栏内水平菜单：去掉项底部的选中/展开指示条（AntD 用 ::after 画 2px 底边） */
+.app-win-menubar.ant-menu-horizontal .ant-menu-item::after,
+.app-win-menubar.ant-menu-horizontal .ant-menu-submenu::after {
+  display: none !important;
+}
+
+/*
+ * 标题栏「文件 / 视图 / 帮助」下拉：压缩行高（兜底）。
+ * AntD 5 子菜单走 css-in-js，须用弹层根上的 .ant-menu-submenu-popup + 自定义 class，并用 !important 压住默认 itemHeight。
+ */
+.ant-menu-submenu-popup.app-win-menubar-popup {
+  border-radius: 6px !important;
+
+  .ant-menu.ant-menu-vertical.ant-menu-sub {
+    border-radius: 6px !important;
+    /* AntD 默认 submenu 竖向列表 padding:0，选项会贴边；这里留出弹框与文字、项与项的间距 */
+    padding: 3px !important;
+
+    > .ant-menu-item + .ant-menu-item {
+      margin-top: 4px !important;
+    }
+
+    > .ant-menu-item,
+    > .ant-menu-submenu > .ant-menu-submenu-title {
+      box-sizing: border-box !important;
+      width: 100% !important;
+      max-width: none !important;
+      border-radius: 4px !important;
+      height: 28px !important;
+      line-height: 28px !important;
+      margin-block: 0 !important;
+      margin-inline: 0 !important;
+      padding-block: 0 !important;
+      padding-inline: 8px !important;
+    }
+  }
 }
 
 .app-sidebar {
@@ -238,13 +338,6 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-
-.app-brand-text {
-  color: var(--aw-color-text);
-  font-size: var(--aw-font-md);
-  font-weight: var(--aw-font-weight-semibold);
-  letter-spacing: 0.3px;
 }
 
 .app-sidebar-collapse-btn {
@@ -563,6 +656,24 @@
   height: 52px;
   line-height: 52px;
   border-bottom: 1px solid var(--aw-color-border);
+  -webkit-app-region: drag;
+}
+
+.app-topbar-leading-cluster {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: normal;
+}
+
+.app-topbar-brand-logo {
+  display: block;
+  flex-shrink: 0;
+  width: 19px;
+  height: 19px;
+  border-radius: 5px;
+  object-fit: contain;
 }
 
 .app-topbar-leading,
@@ -570,6 +681,8 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
+  /* 避免继承 .app-topbar 的 line-height: 52px，否则固定高度 icon 按钮内文字行盒过高导致图标视觉不垂直居中 */
+  line-height: normal;
 }
 
 .app-topbar-body {
@@ -577,6 +690,11 @@
   min-width: 0;
   display: flex;
   align-items: center;
+  -webkit-app-region: drag;
+}
+
+.app-topbar .ant-btn {
+  -webkit-app-region: no-drag;
 }
 
 .app-topbar-pane-toggle.ant-btn {
@@ -585,6 +703,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  line-height: 1;
+  padding: 0 !important;
+}
+
+.app-topbar-pane-toggle.ant-btn .anticon {
+  line-height: 1;
 }
 
 .app-content {

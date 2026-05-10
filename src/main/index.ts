@@ -78,6 +78,21 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const isDev = !app.isPackaged
 let mainWindow: BrowserWindow | null = null
 
+/** 与 IPC `WINDOW_CAPTION_CONTROLS` 同步：为 false 时拦截主窗 `close`（WCO 关闭键在 Win 上常忽略 `setClosable`） */
+let mainWindowNativeControlsEnabled = true
+let applicationIsQuitting = false
+
+function getAppIconPath(): string | undefined {
+  if (app.isPackaged) {
+    const packaged = path.join(process.resourcesPath, 'app-icon.png')
+    if (existsSync(packaged)) return packaged
+    return undefined
+  }
+  const devPath = path.join(__dirname, '../../resources/app-icon.png')
+  if (existsSync(devPath)) return devPath
+  return undefined
+}
+
 let lastMcpWarmupReport: McpWarmupReport | null = null
 /** 递增以作废进行中的预热结果（例如保存 MCP 后） */
 let mcpWarmupGen = 0
@@ -118,6 +133,58 @@ function setupConsoleUtf8(): void {
 }
 
 setupConsoleUtf8()
+
+/** 与 `createWindow` 中 `titleBarOverlay` 一致 */
+const WIN_TITLE_BAR_OVERLAY = {
+  color: '#f5f5f5',
+  symbolColor: '#000000d9',
+  height: 32
+} as const
+
+/** 弹层打开时收起 WCO：`color` 须透明，否则 height 为 0 仍可能残留浅色底（观感为白块） */
+const WIN_TITLE_BAR_OVERLAY_SUPPRESSED = {
+  height: 0,
+  color: '#00000000',
+  symbolColor: '#00000000'
+} as const
+
+/**
+ * 弹窗打开时去掉系统标题栏按钮区（Win：`titleBarOverlay` 高度收为 0；macOS：隐藏交通灯），
+ * 并 `setMinimizable` / `setMaximizable` / `setClosable`；关闭后恢复。
+ * Windows WCO 关闭键常忽略 `setClosable`，故同时依赖 `mainWindow.on('close')` 在禁用时 `preventDefault`。
+ */
+function applyNativeWindowControlsEnabled(win: BrowserWindow | null, enabled: boolean): void {
+  mainWindowNativeControlsEnabled = enabled
+  if (!win || win.isDestroyed()) return
+  try {
+    if (process.platform === 'darwin') {
+      win.setWindowButtonVisibility(enabled)
+    }
+    win.setMinimizable(enabled)
+    win.setMaximizable(enabled)
+    win.setClosable(enabled)
+    if (process.platform === 'win32') {
+      if (enabled) {
+        win.setTitleBarOverlay({ ...WIN_TITLE_BAR_OVERLAY })
+      } else {
+        win.setTitleBarOverlay({ ...WIN_TITLE_BAR_OVERLAY_SUPPRESSED })
+        // 部分 Chromium/WCO 组合下首帧未收起，下一 tick 再写一次
+        setTimeout(() => {
+          try {
+            if (win.isDestroyed()) return
+            if (mainWindowNativeControlsEnabled) return
+            win.setTitleBarOverlay({ ...WIN_TITLE_BAR_OVERLAY_SUPPRESSED })
+          } catch {
+            /* ignore */
+          }
+        }, 32)
+      }
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
+    mainLog.warn('[window:caption-controls] 应用窗口控制状态失败:', msg)
+  }
+}
 
 async function loadDevtoolsExtension(): Promise<void> {
   if (!isDev) return
@@ -191,13 +258,10 @@ function createWindow(): void {
     process.platform === 'win32'
       ? ({
           titleBarStyle: 'hidden' as const,
-          titleBarOverlay: {
-            color: '#f5f5f5',
-            symbolColor: '#000000d9',
-            height: 32
-          }
+          titleBarOverlay: { ...WIN_TITLE_BAR_OVERLAY }
         } as const)
       : {}
+  const appIcon = getAppIconPath()
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -206,6 +270,7 @@ function createWindow(): void {
     webPreferences,
     /** 等首屏 did-finish-load 再 show + maximize，避免 ready-to-show 未触发时无法最大化 */
     show: false,
+    ...(appIcon ? { icon: appIcon } : {}),
     ...win32Chrome
   })
 
@@ -236,6 +301,12 @@ function createWindow(): void {
     mainWindow?.show()
     broadcastWorkspaces()
     broadcastSessions()
+  })
+  mainWindow.on('close', (e) => {
+    if (applicationIsQuitting) return
+    if (!mainWindowNativeControlsEnabled) {
+      e.preventDefault()
+    }
   })
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -531,6 +602,13 @@ function registerIpc(): void {
     return { ok: false as const, error: '无效参数' }
   })
 
+  ipcMain.on(IPC.WINDOW_CAPTION_CONTROLS, (event, visible: unknown) => {
+    const win =
+      mainWindow && !mainWindow.isDestroyed() ? mainWindow : BrowserWindow.getFocusedWindow()
+    applyNativeWindowControlsEnabled(win, visible === true)
+    event.returnValue = true
+  })
+
   ipcMain.handle(IPC.WINDOW_ACTION, (_e, action: WindowChromeAction) => {
     const win = BrowserWindow.getFocusedWindow() ?? mainWindow
     switch (action) {
@@ -619,6 +697,7 @@ app.whenReady().then(() => {
 })
 
 app.on('before-quit', () => {
+  applicationIsQuitting = true
   void disposeMcpConnectionPool()
 })
 

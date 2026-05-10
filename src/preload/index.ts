@@ -36,6 +36,10 @@ const api = {
   platform: process.platform,
   windowAction: (action: WindowChromeAction) =>
     ipcRenderer.invoke(IPC.WINDOW_ACTION, action) as Promise<void>,
+  /** 为 true 时允许原生最小化/最大化/关闭；antd 弹层打开时由渲染进程置为 false（sendSync 以便与首帧绘制同步） */
+  setCaptionControlsVisible: (visible: boolean) => {
+    ipcRenderer.sendSync(IPC.WINDOW_CAPTION_CONTROLS, visible)
+  },
   webEdit: (action: WebEditAction) => ipcRenderer.invoke(IPC.WEB_EDIT, action) as Promise<void>,
   showAbout: () => ipcRenderer.invoke(IPC.APP_ABOUT) as Promise<void>,
   selectWorkspace: () => ipcRenderer.invoke(IPC.WORKSPACE_SELECT) as Promise<{ path: string }>,

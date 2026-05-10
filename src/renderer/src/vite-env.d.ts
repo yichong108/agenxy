@@ -29,6 +29,8 @@ import type {
 type Api = {
   platform: NodeJS.Platform
   windowAction: (action: WindowChromeAction) => Promise<void>
+  /** true：允许系统最小化/最大化/关闭；false：禁用（弹窗打开时） */
+  setCaptionControlsVisible: (visible: boolean) => void
   webEdit: (action: WebEditAction) => Promise<void>
   showAbout: () => Promise<void>
   selectWorkspace: () => Promise<{ path: string }>

@@ -43,6 +43,12 @@ export const IPC = {
   SKILLS_UNINSTALL: 'skills:uninstall',
   /** Windows 自定义标题栏：窗口行为（最小化 / 最大化 / 关闭 / 重载 / 退出） */
   WINDOW_ACTION: 'window:action',
+  /**
+   * 是否显示并允许原生窗口控制（标题栏系统按钮区）。
+   * 渲染层在 antd Modal 等层打开时置为 false（Win：收起 WCO；macOS：隐藏交通灯）；关闭弹窗后 true。
+   * 预加载使用 `sendSync`，以便与弹层首帧绘制同步。
+   */
+  WINDOW_CAPTION_CONTROLS: 'window:caption-controls',
   /** 触发 webContents 编辑命令（撤销、复制等） */
   WEB_EDIT: 'web:edit',
   /** 关于对话框 */
