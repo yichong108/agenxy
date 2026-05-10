@@ -250,43 +250,6 @@ ${webRule}
 `
 }
 
-type FileToolHint =
-  | { type: 'read'; pathHint: string }
-  | { type: 'list'; pathHint: string; depthHint?: number }
-
-function parseFileToolHint(text: string): FileToolHint | null {
-  const raw = text.trim()
-  if (!raw) return null
-
-  const readSlash = raw.match(/^\/(?:read|cat)\s+(.+)$/i)
-  if (readSlash?.[1]) {
-    return { type: 'read', pathHint: readSlash[1].trim() }
-  }
-  const listSlash = raw.match(/^\/(?:ls|list)\s*([^\s]+)?(?:\s+(\d+))?$/i)
-  if (listSlash) {
-    const maybeDepth = listSlash[2] ? Number.parseInt(listSlash[2], 10) : undefined
-    return {
-      type: 'list',
-      pathHint: (listSlash[1] || '.').trim(),
-      depthHint: Number.isFinite(maybeDepth) ? maybeDepth : undefined
-    }
-  }
-
-  const readZh = raw.match(/^(?:查看|读取)(?:工作区)?(?:文件)?[:：\s]+(.+)$/)
-  if (readZh?.[1]) {
-    return { type: 'read', pathHint: readZh[1].trim() }
-  }
-  const listZh = raw.match(/^(?:列出|查看)(?:工作区)?(?:目录|文件夹)?[:：\s]+(.+)$/)
-  if (listZh?.[1]) {
-    return { type: 'list', pathHint: listZh[1].trim() }
-  }
-  const listRootZh = raw.match(/^(?:列出|查看)(?:工作区)?(?:目录|文件夹)$/)
-  if (listRootZh) {
-    return { type: 'list', pathHint: '.' }
-  }
-  return null
-}
-
 /** 无原生 tool calling 时的纯对话流式（不调用 bindTools，避免 Ollama 返回 does not support tools） */
 async function invokeChatOnlyStream(
   settings: AppSettings,
@@ -924,7 +887,6 @@ export async function runUserMessage(
         }
       })
     }
-    const fileToolHint = parseFileToolHint(userText)
     const recursionLimit = settings.maxAgentLoopSteps
     const invokeTimeoutMs = settings.agentRunTimeoutMs
     const profile = getActiveProviderProfile(settings)
@@ -990,18 +952,7 @@ export async function runUserMessage(
           composerMode === 'ask'
             ? buildAskSystemPrompt(root, settings)
             : buildSystemPrompt(root, settings)
-        const fileToolInstruction = fileToolHint
-          ? fileToolHint.type === 'read'
-            ? `（可选上下文）用户消息可能涉及读取文件；需要时请自行调用 read_file，路径可参考: ${fileToolHint.pathHint}。是否调用由你根据意图决定。`
-            : `（可选上下文）用户消息可能涉及浏览目录；需要时请自行调用 list_dir，路径可参考: ${fileToolHint.pathHint}，depth 可参考: ${fileToolHint.depthHint ?? 2}。是否调用由你根据意图决定。`
-          : ''
-        const runPrompt = [
-          baseSystem,
-          skillHint,
-          mcpContextHints,
-          fileToolInstruction,
-          commonPrompt
-        ]
+        const runPrompt = [baseSystem, skillHint, mcpContextHints, commonPrompt]
           .filter(Boolean)
           .join('\n\n')
 
