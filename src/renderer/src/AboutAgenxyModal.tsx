@@ -59,7 +59,6 @@ export function AboutAgenxyModal({ open, info, onClose }: AboutAgenxyModalProps)
             <img src={agenxyLogoUrl} alt="" width={72} height={72} />
           </div>
           <div className="about-agenxy-modal__main">
-            <h2 className="about-agenxy-modal__title">{info.productName}</h2>
             <div className="about-agenxy-modal__list">
               <div className="about-agenxy-modal__kv">
                 <span className="about-agenxy-modal__k">版本</span>
