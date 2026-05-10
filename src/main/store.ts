@@ -44,7 +44,7 @@ type StoreSchema = {
 const DEFAULT_WORKSPACE_ID = 'workspace-default'
 
 const store = new Store<StoreSchema>({
-  name: 'trou',
+  name: 'agenxy',
   defaults: {
     workspaces: [],
     activeWorkspaceId: null,

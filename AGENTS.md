@@ -4,7 +4,7 @@ This file guides AI assistants and contributors working on this repository.
 
 ## Project
 
-**trou** — an Electron desktop app for agents (React, Ant Design, AI SDK, MCP). Main code lives under `src/` (`main`, `renderer`, `preload`).
+**Agenxy** — an Electron desktop app for agents (React, Ant Design, AI SDK, MCP). Main code lives under `src/` (`main`, `renderer`, `preload`).
 
 ## Language and commits
 

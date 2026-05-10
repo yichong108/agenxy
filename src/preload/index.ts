@@ -150,4 +150,4 @@ const api = {
 
 contextBridge.exposeInMainWorld('bridge', api)
 
-export type TrouApi = typeof api
+export type AgenxyApi = typeof api

@@ -278,7 +278,7 @@ export function App() {
         children: [
           {
             key: 'about',
-            label: '关于 trou',
+            label: '关于 Agenxy',
             onClick: () => void bridge.showAbout()
           }
         ]
