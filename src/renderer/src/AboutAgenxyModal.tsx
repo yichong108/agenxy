@@ -65,10 +65,6 @@ export function AboutAgenxyModal({ open, info, onClose }: AboutAgenxyModalProps)
                 <span className="about-agenxy-modal__v">{info.version}</span>
               </div>
               <div className="about-agenxy-modal__kv">
-                <span className="about-agenxy-modal__k">渠道</span>
-                <span className="about-agenxy-modal__v">{info.channelLabel}</span>
-              </div>
-              <div className="about-agenxy-modal__kv">
                 <span className="about-agenxy-modal__k">Commit</span>
                 <span className="about-agenxy-modal__v">
                   {commitDisplay === '—' ? (
@@ -105,10 +101,6 @@ export function AboutAgenxyModal({ open, info, onClose }: AboutAgenxyModalProps)
               <div className="about-agenxy-modal__kv">
                 <span className="about-agenxy-modal__k">操作系统</span>
                 <span className="about-agenxy-modal__v about-agenxy-modal__v--wrap">{info.osLine}</span>
-              </div>
-              <div className="about-agenxy-modal__kv">
-                <span className="about-agenxy-modal__k">Locale</span>
-                <span className="about-agenxy-modal__v">{info.locale}</span>
               </div>
             </div>
             <div className="about-agenxy-modal__copyright">© 2026 Agenxy</div>

@@ -71,15 +71,13 @@ function collectAboutAppInfo(): AboutAppInfo {
   return {
     productName: app.getName(),
     version: app.getVersion(),
-    channelLabel: app.isPackaged ? '正式' : '开发',
     gitCommit: __AGENXY_GIT_COMMIT__,
     buildIso: __AGENXY_BUILD_ISO__,
     electron: process.versions.electron ?? '',
     chrome: process.versions.chrome ?? '',
     node: process.versions.node ?? '',
     v8: process.versions.v8 ?? '',
-    osLine: `${os.type()} ${os.release()} (${os.arch()})`,
-    locale: app.getLocale()
+    osLine: `${os.type()} ${os.release()} (${os.arch()})`
   }
 }
 

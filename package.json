@@ -1,6 +1,6 @@
 {
   "name": "agenxy",
-  "version": "0.1.0",
+  "version": "1.0.0-alpha.1",
   "description": "Agent 桌面应用 — Electron + Ant Design + AI SDK",
   "main": "out/main/index.js",
   "type": "module",

@@ -65,7 +65,6 @@ export type WebEditAction = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'select
 export type AboutAppInfo = {
   productName: string
   version: string
-  channelLabel: string
   /** 构建时注入的短 SHA，无 .git 或非 CI 检出时可能为空 */
   gitCommit: string
   /** 构建时的 ISO 时间（主进程包编译时刻） */
@@ -75,7 +74,6 @@ export type AboutAppInfo = {
   node: string
   v8: string
   osLine: string
-  locale: string
 }
 
 /** 将构建时刻 ISO 字符串格式化为 UTC 日历钟（与 `Date#toISOString` 同一时刻）。 */
@@ -92,15 +90,13 @@ export function formatAboutAppCopyText(info: AboutAppInfo): string {
   return [
     info.productName,
     `版本: ${info.version}`,
-    `渠道: ${info.channelLabel}`,
     `Commit: ${info.gitCommit || '(未知)'}`,
     `构建: ${buildLine}`,
     `Electron: ${info.electron}`,
     `Chromium: ${info.chrome}`,
     `Node.js: ${info.node}`,
     `V8: ${info.v8}`,
-    `操作系统: ${info.osLine}`,
-    `Locale: ${info.locale}`
+    `操作系统: ${info.osLine}`
   ].join('\n')
 }
 
