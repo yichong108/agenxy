@@ -1,4 +1,5 @@
 ﻿import { existsSync } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -58,12 +59,29 @@ import {
   type RendererUiState,
   type SkillsMarketCatalogItem,
   type SkillsUninstallPayload,
+  type AboutAppInfo,
   type StreamEvent,
   type WebEditAction,
   type WindowChromeAction
 } from '@/shared/ipc'
 
 mainLog.info('Electron 主进程启动')
+
+function collectAboutAppInfo(): AboutAppInfo {
+  return {
+    productName: app.getName(),
+    version: app.getVersion(),
+    channelLabel: app.isPackaged ? '正式' : '开发',
+    gitCommit: __AGENXY_GIT_COMMIT__,
+    buildIso: __AGENXY_BUILD_ISO__,
+    electron: process.versions.electron ?? '',
+    chrome: process.versions.chrome ?? '',
+    node: process.versions.node ?? '',
+    v8: process.versions.v8 ?? '',
+    osLine: `${os.type()} ${os.release()} (${os.arch()})`,
+    locale: app.getLocale()
+  }
+}
 
 /**
  * Chromium 叠加 / Fluent 滚动条由系统层绘制时，会忽略渲染进程里的 ::-webkit-scrollbar。
@@ -662,20 +680,7 @@ function registerIpc(): void {
     }
   })
 
-  ipcMain.handle(IPC.APP_ABOUT, async () => {
-    const win = BrowserWindow.getFocusedWindow() ?? mainWindow
-    const opts = {
-      type: 'info' as const,
-      title: '关于 Agenxy',
-      message: 'Agenxy',
-      detail: `版本 ${app.getVersion()}`
-    }
-    if (win && !win.isDestroyed()) {
-      await dialog.showMessageBox(win, opts)
-    } else {
-      await dialog.showMessageBox(opts)
-    }
-  })
+  ipcMain.handle(IPC.APP_ABOUT, () => collectAboutAppInfo())
 }
 
 app.whenReady().then(() => {
