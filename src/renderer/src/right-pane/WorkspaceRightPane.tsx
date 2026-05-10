@@ -26,7 +26,7 @@ import {
 import { Tree, type NodeRendererProps } from 'react-arborist'
 
 import { WorkspaceFileTreeContainer } from '@/renderer/src/right-pane/WorkspaceFileTreeContainer'
-import type { WorkspaceFileNode } from '@/shared/ipc'
+import { HOME_WORKSPACE_ID, type WorkspaceFileNode } from '@/shared/ipc'
 import '@/renderer/src/right-pane/WorkspaceRightPane.scss'
 import '@xterm/xterm/css/xterm.css'
 import 'file-icons-js/css/style.css'
@@ -233,6 +233,8 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
   const fileTreeWidthMigrateAttemptedRef = useRef(false)
   const rightContentRef = useRef<HTMLDivElement | null>(null)
   const treeContainerRef = useRef<HTMLDivElement | null>(null)
+  /** 切换工作区时作废尚未返回的文件树请求，避免旧结果覆盖 Home 等状态 */
+  const fileTreeLoadGenRef = useRef(0)
   const [treeHeight, setTreeHeight] = useState(0)
   const fileTreeData = useMemo(() => toAntdFileTree(fileTree), [fileTree])
   const fileTreeOpenState = useMemo(
@@ -372,23 +374,29 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
   }, [activeWorkspaceId, bridge, replaceTerminalInputLine, writeTerminalPrompt])
 
   const loadWorkspaceTree = useCallback(async () => {
-    if (!activeWorkspacePath) {
+    const gen = ++fileTreeLoadGenRef.current
+    if (activeWorkspaceId === HOME_WORKSPACE_ID || !activeWorkspacePath) {
       setFileTree([])
       setFileTreeExpandedKeys([])
+      setFileTreeLoading(false)
       return
     }
     setFileTreeLoading(true)
     try {
       const payload = await bridge.getWorkspaceFileTree()
+      if (gen !== fileTreeLoadGenRef.current) return
       setFileTree(payload.nodes)
       setFileTreeExpandedKeys(payload.nodes.slice(0, 8).map((node) => node.path))
     } catch (error) {
+      if (gen !== fileTreeLoadGenRef.current) return
       const msg = error instanceof Error ? error.message : String(error)
       msgApi.error(`读取文件树失败：${msg}`)
     } finally {
-      setFileTreeLoading(false)
+      if (gen === fileTreeLoadGenRef.current) {
+        setFileTreeLoading(false)
+      }
     }
-  }, [activeWorkspacePath, bridge, msgApi])
+  }, [activeWorkspaceId, activeWorkspacePath, bridge, msgApi])
 
   const previewWorkspaceFile = useCallback(
     async (relPath: string) => {
@@ -687,7 +695,11 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
                 >
                   <div className="app-right-tree-wrap">
                     <div className="app-right-tree-viewport" ref={treeContainerRef}>
-                      {fileTreeLoading ? (
+                      {activeWorkspaceId === HOME_WORKSPACE_ID ? (
+                        <div className="app-right-tree-loading" role="status">
+                          <Text type="secondary">当前未选择工作文件夹</Text>
+                        </div>
+                      ) : fileTreeLoading ? (
                         <div className="app-right-tree-loading">
                           <Spin size="small" />
                           <Text type="secondary">正在加载文件树...</Text>

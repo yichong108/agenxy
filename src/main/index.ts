@@ -353,7 +353,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.WORKSPACE_GET, () => getWorkspace())
   ipcMain.handle(IPC.WORKSPACE_FILE_TREE, async () => {
     const workspace = getActiveWorkspace()
-    if (!workspace?.path) {
+    if (!workspace?.path || workspace.id === HOME_WORKSPACE_ID) {
       return { rootPath: '', nodes: [] }
     }
     return await listWorkspaceFileTree(workspace.path)
