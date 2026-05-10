@@ -228,6 +228,10 @@ ${webRule}
 - 先理解任务 → 必要时复述目标 → 再选工具。`
 }
 
+const commonPrompt = `
+  当前日期时间（UTC）：${new Date().toLocaleString()}；
+`
+
 function buildAskSystemPrompt(root: string, settings: AppSettings): string {
   const web = isTavilyConfigured(settings.tavilyApiKey)
   const toolLine = web
@@ -242,7 +246,8 @@ function buildAskSystemPrompt(root: string, settings: AppSettings): string {
 - 用户若要求「直接改代码 / 运行命令 / 应用补丁」，请说明这在 Ask 模式下无法自动执行，并给出可复制片段或步骤；需要自动落地时请切换到 **Build**（关闭 Ask）。
 ${webRule}
 - 回答清晰、可验证：需要引用仓库内容时先 read/list/search，再下结论。
-- 先理解意图 → 必要时复述目标`
+- 先理解意图 → 必要时复述目标
+`
 }
 
 type FileToolHint =
@@ -990,7 +995,13 @@ export async function runUserMessage(
             ? `（可选上下文）用户消息可能涉及读取文件；需要时请自行调用 read_file，路径可参考: ${fileToolHint.pathHint}。是否调用由你根据意图决定。`
             : `（可选上下文）用户消息可能涉及浏览目录；需要时请自行调用 list_dir，路径可参考: ${fileToolHint.pathHint}，depth 可参考: ${fileToolHint.depthHint ?? 2}。是否调用由你根据意图决定。`
           : ''
-        const runPrompt = [baseSystem, skillHint, mcpContextHints, fileToolInstruction]
+        const runPrompt = [
+          baseSystem,
+          skillHint,
+          mcpContextHints,
+          fileToolInstruction,
+          commonPrompt
+        ]
           .filter(Boolean)
           .join('\n\n')
 
