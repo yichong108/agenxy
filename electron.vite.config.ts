@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -5,6 +6,18 @@ import react from '@vitejs/plugin-react'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url))
+
+function readGitShortHash(cwd: string): string {
+  try {
+    return execSync('git rev-parse --short HEAD', {
+      encoding: 'utf8',
+      cwd,
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).trim()
+  } catch {
+    return ''
+  }
+}
 const aliasSrc = resolve(__dirname, 'src')
 const aliasShared = resolve(__dirname, 'src/shared')
 /** monaco-themes 未在 package exports 中暴露 themes/，需直连磁盘路径供 Vite 解析 */
@@ -15,6 +28,10 @@ const monacoGithubLightThemeJson = resolve(
 
 export default defineConfig({
   main: {
+    define: {
+      __AGENXY_GIT_COMMIT__: JSON.stringify(readGitShortHash(rootDir)),
+      __AGENXY_BUILD_ISO__: JSON.stringify(new Date().toISOString())
+    },
     resolve: {
       alias: {
         '@': aliasSrc,

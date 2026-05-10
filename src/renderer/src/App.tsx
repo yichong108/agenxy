@@ -37,6 +37,7 @@ import 'simplebar-react/dist/simplebar.min.css'
 import 'highlight.js/styles/github.css'
 
 import agenxyLogoUrl from '@/renderer/src/assets/agenxy-logo.png'
+import { AboutAgenxyModal } from '@/renderer/src/AboutAgenxyModal'
 import { WorkspaceLeftPane } from '@/renderer/src/left-pane'
 import {
   installCaptionBlockingOverlayObserver,
@@ -46,6 +47,7 @@ import { WorkspaceRightPane } from '@/renderer/src/right-pane/WorkspaceRightPane
 import { useUiStore } from '@/renderer/src/store/ui-store'
 import { useWorkspaceStore } from '@/renderer/src/store/workspace-store'
 import {
+  type AboutAppInfo,
   type ChatMessage,
   type SessionInfo,
   type StreamEvent,
@@ -239,6 +241,22 @@ export function App() {
     return installCaptionBlockingOverlayObserver()
   }, [preloadOk])
 
+  const [aboutOpen, setAboutOpen] = useState(false)
+  const [aboutInfo, setAboutInfo] = useState<AboutAppInfo | null>(null)
+
+  const openAboutAgenxy = useCallback(async () => {
+    setAboutOpen(true)
+    setAboutInfo(null)
+    try {
+      const info = await bridge.showAbout()
+      setAboutInfo(info)
+    } catch (e) {
+      renderLog.warn('[about] 拉取版本信息失败', e)
+      setAboutOpen(false)
+      msgApi.error('无法加载关于信息')
+    }
+  }, [bridge, msgApi])
+
   const winMenubarItems: MenuProps['items'] = useMemo(() => {
     if (!isWinCustomChrome) return []
     const viewChildren: MenuProps['items'] = [
@@ -279,12 +297,12 @@ export function App() {
           {
             key: 'about',
             label: '关于 Agenxy',
-            onClick: () => void bridge.showAbout()
+            onClick: () => void openAboutAgenxy()
           }
         ]
       }
     ]
-  }, [bridge, isWinCustomChrome])
+  }, [bridge, isWinCustomChrome, openAboutAgenxy])
 
   const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({})
   const [timeline, setTimeline] = useState<Record<string, ToolTimelineEvent[]>>({})
@@ -657,11 +675,23 @@ export function App() {
   )
 
   const handleComposerPlusMenuClick = useCallback<NonNullable<MenuProps['onClick']>>(({ key }) => {
-    if (key === 'ask') setComposerAskOn((v) => !v)
+    if (key === 'build') setComposerAskOn(false)
+    if (key === 'ask') setComposerAskOn(true)
   }, [])
 
   const composerPlusMenuItems = useMemo<MenuProps['items']>(
     () => [
+      {
+        key: 'build',
+        label: (
+          <span className="app-composer-plus-menu-title">
+            <span>Build</span>
+            {!composerAskOn ? (
+              <CheckOutlined className="app-composer-plus-menu-check" aria-hidden />
+            ) : null}
+          </span>
+        )
+      },
       {
         key: 'ask',
         label: (
@@ -1303,6 +1333,15 @@ export function App() {
           onToggleCollapse={handleRightPaneCollapseToggle}
         />
       </div>
+
+      <AboutAgenxyModal
+        open={aboutOpen}
+        info={aboutInfo}
+        onClose={() => {
+          setAboutOpen(false)
+          setAboutInfo(null)
+        }}
+      />
 
       {isDevEnv && (
         <FloatButton

@@ -51,7 +51,7 @@ export const IPC = {
   WINDOW_CAPTION_CONTROLS: 'window:caption-controls',
   /** 触发 webContents 编辑命令（撤销、复制等） */
   WEB_EDIT: 'web:edit',
-  /** 关于对话框 */
+  /** 关于面板：返回版本/构建/引擎等信息（由渲染层展示弹窗） */
   APP_ABOUT: 'app:about'
 } as const
 
@@ -60,6 +60,49 @@ export type WindowChromeAction = 'minimize' | 'maximize-toggle' | 'close' | 'rel
 
 /** 与 IPC.WEB_EDIT 对应的编辑命令 */
 export type WebEditAction = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll'
+
+/** 主进程聚合、渲染层「关于」弹窗展示（对齐 Cursor 类版本/提交/构建/引擎信息） */
+export type AboutAppInfo = {
+  productName: string
+  version: string
+  channelLabel: string
+  /** 构建时注入的短 SHA，无 .git 或非 CI 检出时可能为空 */
+  gitCommit: string
+  /** 构建时的 ISO 时间（主进程包编译时刻） */
+  buildIso: string
+  electron: string
+  chrome: string
+  node: string
+  v8: string
+  osLine: string
+  locale: string
+}
+
+/** 将构建时刻 ISO 字符串格式化为 UTC 日历钟（与 `Date#toISOString` 同一时刻）。 */
+export function formatBuildIsoUtcHuman(iso: string): string | null {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  const s = d.toISOString()
+  return `${s.slice(0, 10)} ${s.slice(11, 19)} UTC`
+}
+
+export function formatAboutAppCopyText(info: AboutAppInfo): string {
+  const buildLine =
+    (formatBuildIsoUtcHuman(info.buildIso) ?? info.buildIso) || '(未知)'
+  return [
+    info.productName,
+    `版本: ${info.version}`,
+    `渠道: ${info.channelLabel}`,
+    `Commit: ${info.gitCommit || '(未知)'}`,
+    `构建: ${buildLine}`,
+    `Electron: ${info.electron}`,
+    `Chromium: ${info.chrome}`,
+    `Node.js: ${info.node}`,
+    `V8: ${info.v8}`,
+    `操作系统: ${info.osLine}`,
+    `Locale: ${info.locale}`
+  ].join('\n')
+}
 
 export const EVENTS = {
   AGENT_STREAM: 'agent:stream',

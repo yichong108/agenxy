@@ -334,7 +334,7 @@ html[data-aw-wco-suppressed='1'] .app-win-titlebar {
 }
 
 .app-sidebar-header {
-  padding: 12px 12px 8px;
+  padding: 8px 12px 6px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -653,9 +653,8 @@ html[data-aw-wco-suppressed='1'] .app-win-titlebar {
   align-items: center;
   gap: 12px;
   padding-inline: 12px;
-  height: 52px;
-  line-height: 52px;
-  border-bottom: 1px solid var(--aw-color-border);
+  height: 42px;
+  line-height: 42px;
   -webkit-app-region: drag;
 }
 
@@ -681,7 +680,7 @@ html[data-aw-wco-suppressed='1'] .app-win-titlebar {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  /* 避免继承 .app-topbar 的 line-height: 52px，否则固定高度 icon 按钮内文字行盒过高导致图标视觉不垂直居中 */
+  /* 避免继承 .app-topbar 的 line-height: 42px，否则固定高度 icon 按钮内文字行盒过高导致图标视觉不垂直居中 */
   line-height: normal;
 }
 
@@ -698,8 +697,8 @@ html[data-aw-wco-suppressed='1'] .app-win-titlebar {
 }
 
 .app-topbar-pane-toggle.ant-btn {
-  width: 28px !important;
-  height: 28px !important;
+  width: 26px !important;
+  height: 26px !important;
   display: inline-flex;
   align-items: center;
   justify-content: center;

@@ -20,7 +20,7 @@
 }
 
 .app-right-toolbar {
-  height: 52px;
+  height: 42px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -31,9 +31,9 @@
 
 /* 与顶栏「展开右边栏」(.app-settings-btn.app-topbar-pane-toggle) 同尺寸与圆角，避免收起/展开两处观感不一致 */
 .app-right-toolbar-btn.ant-btn {
-  width: 28px !important;
-  height: 28px !important;
-  min-width: 28px !important;
+  width: 26px !important;
+  height: 26px !important;
+  min-width: 26px !important;
   padding-inline: 0 !important;
   border-radius: 6px;
   display: inline-flex;

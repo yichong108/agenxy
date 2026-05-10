@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import type {
+  AboutAppInfo,
   AgentSendOptions,
   AppSettings,
   ChatMessage,
@@ -32,7 +33,7 @@ type Api = {
   /** true：允许系统最小化/最大化/关闭；false：禁用（弹窗打开时） */
   setCaptionControlsVisible: (visible: boolean) => void
   webEdit: (action: WebEditAction) => Promise<void>
-  showAbout: () => Promise<void>
+  showAbout: () => Promise<AboutAppInfo>
   selectWorkspace: () => Promise<{ path: string }>
   getWorkspace: () => Promise<string>
   listWorkspaces: () => Promise<WorkspacesPayload>

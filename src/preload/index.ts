@@ -4,6 +4,7 @@ import { installElectronLogBridge } from '@/preload/electron-log-bridge'
 import {
   EVENTS,
   IPC,
+  type AboutAppInfo,
   type AgentSendOptions,
   type AppSettings,
   type ChatMessage,
@@ -41,7 +42,7 @@ const api = {
     ipcRenderer.sendSync(IPC.WINDOW_CAPTION_CONTROLS, visible)
   },
   webEdit: (action: WebEditAction) => ipcRenderer.invoke(IPC.WEB_EDIT, action) as Promise<void>,
-  showAbout: () => ipcRenderer.invoke(IPC.APP_ABOUT) as Promise<void>,
+  showAbout: () => ipcRenderer.invoke(IPC.APP_ABOUT) as Promise<AboutAppInfo>,
   selectWorkspace: () => ipcRenderer.invoke(IPC.WORKSPACE_SELECT) as Promise<{ path: string }>,
   getWorkspace: () => ipcRenderer.invoke(IPC.WORKSPACE_GET) as Promise<string>,
   listWorkspaces: () => ipcRenderer.invoke(IPC.WORKSPACE_LIST) as Promise<WorkspacesPayload>,
