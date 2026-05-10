@@ -2,6 +2,8 @@
   "name": "agenxy",
   "version": "1.0.0-alpha.1",
   "description": "Agent 桌面应用 — Electron + Ant Design + AI SDK",
+  "author": "Wang Zhang",
+  "license": "MIT",
   "main": "out/main/index.js",
   "type": "module",
   "scripts": {
@@ -14,9 +16,7 @@
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier . --write",
-    "format:check": "prettier . --check",
-    "icon:transparent": "node scripts/flood-white-to-transparent.mjs",
-    "icon:normalize": "node scripts/normalize-app-icon-square.mjs"
+    "format:check": "prettier . --check"
   },
   "dependencies": {
     "@ant-design/icons": "^5.6.1",

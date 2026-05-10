@@ -52,8 +52,8 @@ if (root) {
         locale={zhCN}
         theme={{
           token: {
-            colorPrimary: '#0d9488',
-            colorInfo: '#0d9488',
+            colorPrimary: '#0a0a0a',
+            colorInfo: '#0a0a0a',
             colorSuccess: '#059669',
             colorWarning: '#d97706',
             colorError: '#dc2626',
@@ -98,7 +98,7 @@ if (root) {
             Tabs: {
               itemColor: '#5f5f6b',
               itemSelectedColor: '#18181b',
-              inkBarColor: '#0d9488'
+              inkBarColor: '#0a0a0a'
             },
             Tag: {
               borderRadiusSM: 8

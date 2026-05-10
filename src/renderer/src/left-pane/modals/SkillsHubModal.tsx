@@ -180,7 +180,7 @@ export function SkillsHubModal({ open, onClose }: SkillsHubModalProps) {
                             : kind === 'builtin_packaged'
                               ? 'blue'
                               : kind === 'market'
-                                ? 'green'
+                                ? 'geekblue'
                                 : 'orange'
                         return <Tag color={color}>{skillKindLabel(kind)}</Tag>
                       }

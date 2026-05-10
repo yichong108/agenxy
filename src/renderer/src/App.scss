@@ -35,7 +35,7 @@
 }
 
 .app-shell {
-  /* Zinc 暖中性灰 + Teal 强调（配色：生产力工具主色 #0D9488） */
+  /* Zinc 暖中性灰 + 高级黑强调（主色 #0A0A0A，悬停 #27272A） */
   /* 侧栏 / 标题栏：略深一档 zinc，与主工作区形成层次 */
   --aw-color-bg-elevated: #f4f4f5;
   /* 主栏聊天、顶栏、右侧面板：更亮、少灰感，与左侧区分 */
@@ -64,17 +64,17 @@
   --aw-color-session-dot: rgb(24 24 27 / 0.16);
   --aw-color-primary: #27272a;
   --aw-color-primary-bg: #e4e4e7;
-  --aw-color-primary-border: rgb(13 148 136 / 0.38);
-  --aw-color-accent: #0d9488;
-  --aw-color-accent-hover: #0f766e;
+  --aw-color-primary-border: rgb(10 10 10 / 0.4);
+  --aw-color-accent: #0a0a0a;
+  --aw-color-accent-hover: #27272a;
   --aw-shadow-soft: 0 1px 2px rgb(24 24 27 / 0.04);
   --aw-shadow-card: 0 1px 2px rgb(24 24 27 / 0.05), 0 4px 14px rgb(24 24 27 / 0.04);
   --aw-composer-surface: #ffffff;
   --aw-composer-border: var(--aw-color-border);
-  --aw-composer-border-focus: rgb(13 148 136 / 0.45);
-  --aw-composer-ring: rgb(13 148 136 / 0.22);
+  --aw-composer-border-focus: rgb(10 10 10 / 0.5);
+  --aw-composer-ring: rgb(10 10 10 / 0.2);
   --aw-composer-shadow: 0 10px 38px rgb(24 24 27 / 0.07), 0 2px 10px rgb(24 24 27 / 0.04);
-  --aw-composer-shadow-focus: 0 12px 42px rgb(13 148 136 / 0.12), 0 2px 10px rgb(24 24 27 / 0.05);
+  --aw-composer-shadow-focus: 0 12px 42px rgb(10 10 10 / 0.1), 0 2px 10px rgb(24 24 27 / 0.06);
   --aw-composer-toolbar-bg: rgb(24 24 27 / 0.04);
   --aw-composer-send: var(--aw-color-accent);
   --aw-composer-send-hover: var(--aw-color-accent-hover);

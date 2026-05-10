@@ -554,7 +554,7 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
         foreground: '#18181b',
         cursor: '#27272a',
         cursorAccent: '#f4f4f5',
-        selectionBackground: 'rgb(13 148 136 / 0.22)'
+        selectionBackground: 'rgb(10 10 10 / 0.14)'
       }
     })
     const fitAddon = new FitAddon()
