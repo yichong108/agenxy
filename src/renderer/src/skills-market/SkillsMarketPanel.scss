@@ -1,0 +1,4 @@
+/* 刷新/加载中空表时仍占满 scroll.y 区域，避免表体高度塌缩 */
+.skills-market-catalog-table .ant-table-body {
+  min-height: var(--skills-market-table-body-min, 400px);
+}

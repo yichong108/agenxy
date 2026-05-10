@@ -1,4 +1,4 @@
-import { Alert, App as AntdApp, Button, Modal, Table, Tabs, Tag, Tooltip } from 'antd'
+import { App as AntdApp, Button, Modal, Table, Tabs, Tag, Tooltip } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { SkillsMarketPanel } from '@/renderer/src/skills-market/SkillsMarketPanel'
@@ -160,13 +160,6 @@ export function SkillsHubModal({ open, onClose }: SkillsHubModalProps) {
             label: '已安装',
             children: (
               <div>
-                <Alert
-                  type="info"
-                  showIcon
-                  style={{ marginBottom: 12 }}
-                  message="卸载说明"
-                  description="内置（代码）与内置（随应用）不可卸载。市场安装位于 userData/skills/market。兼容目录来自旧版种子或手动放置的技能。"
-                />
                 <Table<SkillUiEntry>
                   size="small"
                   rowKey="key"

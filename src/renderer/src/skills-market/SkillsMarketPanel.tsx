@@ -1,13 +1,18 @@
 import { App as AntdApp, Alert, Button, Space, Table, Tooltip, Typography } from 'antd'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 
 import type { SkillsMarketCatalogItem } from '@/shared/ipc'
 
 import { fetchSkillsCatalogPage } from './catalog-fetch'
 
+import '@/renderer/src/skills-market/SkillsMarketPanel.scss'
+
 const { Link } = Typography
 
 const PAGE_SIZE = 10
+
+/** 技能市场表格可视区域高度（表头固定，表体滚动；分页在表格外） */
+const MARKET_TABLE_BODY_MAX_HEIGHT = 400
 
 type PageRow = {
   items: SkillsMarketCatalogItem[]
@@ -31,6 +36,8 @@ export function SkillsMarketPanel({
   const [page, setPage] = useState(1)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  /** 上一次非加载态下的分页 total，用于刷新清空缓存时避免 total=0 导致分页条消失、布局跳动 */
+  const lastStablePaginationTotalRef = useRef(0)
 
   const loadPage = useCallback(
     async (targetPage: number) => {
@@ -96,10 +103,21 @@ export function SkillsMarketPanel({
 
   const pageItems = cache[page]?.items ?? []
   const hasNext = Boolean(cache[page]?.nextCursor)
-  const paginationTotal = useMemo(
+  const rawPaginationTotal = useMemo(
     () => (hasNext ? page * PAGE_SIZE + PAGE_SIZE : (page - 1) * PAGE_SIZE + pageItems.length),
     [page, hasNext, pageItems.length]
   )
+
+  useEffect(() => {
+    if (!loading && rawPaginationTotal > 0) {
+      lastStablePaginationTotalRef.current = rawPaginationTotal
+    }
+  }, [loading, rawPaginationTotal])
+
+  const paginationTotal =
+    loading && rawPaginationTotal === 0
+      ? Math.max(lastStablePaginationTotalRef.current, PAGE_SIZE)
+      : rawPaginationTotal
 
   return (
     <div>
@@ -112,11 +130,18 @@ export function SkillsMarketPanel({
         <Alert type="error" showIcon message={error} />
       ) : (
         <Table<SkillsMarketCatalogItem>
+          className="skills-market-catalog-table"
+          style={
+            {
+              ['--skills-market-table-body-min' as string]: `${MARKET_TABLE_BODY_MAX_HEIGHT}px`
+            } as CSSProperties
+          }
           size="small"
           rowKey="id"
           loading={loading}
           dataSource={pageItems}
           locale={{ emptyText: '当前页没有条目' }}
+          scroll={{ y: MARKET_TABLE_BODY_MAX_HEIGHT }}
           pagination={{
             current: page,
             pageSize: PAGE_SIZE,
