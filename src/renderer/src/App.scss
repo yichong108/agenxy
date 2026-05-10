@@ -36,9 +36,11 @@
 
 .app-shell {
   /* Zinc 暖中性灰 + Teal 强调（配色：生产力工具主色 #0D9488） */
-  --aw-color-bg-canvas: #f4f4f5;
+  /* 侧栏 / 标题栏：略深一档 zinc，与主工作区形成层次 */
+  --aw-color-bg-elevated: #f4f4f5;
+  /* 主栏聊天、顶栏、右侧面板：更亮、少灰感，与左侧区分 */
+  --aw-color-bg-canvas: #fafafa;
   --aw-color-bg-layout: var(--aw-color-bg-canvas);
-  --aw-color-bg-elevated: var(--aw-color-bg-canvas);
   --aw-color-bg-container: #ffffff;
   --aw-color-fill-secondary: #e9e9ec;
   --aw-color-fill-tertiary: #dcdce2;

@@ -1,5 +1,4 @@
 import {
-  Alert,
   App as AntdApp,
   Button,
   Card,
@@ -14,7 +13,7 @@ import {
   Tag,
   Typography
 } from 'antd'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 
 import {
   MAX_MCP_SERVERS,
@@ -90,16 +89,6 @@ export function McpHubModal({ open, onClose }: McpHubModalProps) {
     cwd: string
     enabled: boolean
   }>()
-
-  const mcpWarmupSummary = useMemo(() => {
-    if (!mcpWarmup) return null
-    if (!mcpWarmup.servers.length) {
-      return '当前没有已启用且 command 非空的 MCP 参与预检。'
-    }
-    const ok = mcpWarmup.servers.filter((x) => x.ok).length
-    const bad = mcpWarmup.servers.length - ok
-    return `已检查 ${mcpWarmup.servers.length} 台：成功 ${ok}，失败 ${bad}。成功项的连接会留在主进程池中，Agent 调用工具时复用，空闲一段时间后自动断开。`
-  }, [mcpWarmup])
 
   useEffect(() => {
     if (!open) return
@@ -306,18 +295,6 @@ export function McpHubModal({ open, onClose }: McpHubModalProps) {
     [bridge, modalApi, msgApi]
   )
 
-  const rerunMcpWarmup = useCallback(async () => {
-    setMcpWarmupBusy(true)
-    try {
-      const r = await bridge.mcpRunWarmup()
-      setMcpWarmup(r)
-    } catch {
-      msgApi.error('MCP 预检失败')
-    } finally {
-      setMcpWarmupBusy(false)
-    }
-  }, [bridge, msgApi])
-
   const openExternalWithConfirm = useCallback(
     (href: string) => {
       const target = (() => {
@@ -368,48 +345,6 @@ export function McpHubModal({ open, onClose }: McpHubModalProps) {
               label: '我的 MCP',
               children: (
                 <div>
-                  <Alert
-                    type="info"
-                    showIcon
-                    style={{ marginBottom: 12 }}
-                    message="stdio 方式连接 MCP 子进程"
-                    description={
-                      <div>
-                        <div>
-                          与 Cursor 类似：填写启动命令与参数。启用后，Agent
-                          在「已开启工具」模式下会把各服务器的工具挂到对话中（工具名以 mcp_
-                          开头）。应用启动时会<strong>预检</strong>已启用的服务器并
-                          <strong>池化复用</strong>
-                          连接，减少反复拉起子进程；长时间无调用会自动断开。
-                        </div>
-                        {mcpWarmupSummary ? (
-                          <div style={{ marginTop: 8 }}>
-                            <Text strong>预检摘要：</Text>
-                            {mcpWarmupSummary}
-                            {mcpWarmup ? (
-                              <Text type="secondary" style={{ marginLeft: 8 }}>
-                                （{new Date(mcpWarmup.atMs).toLocaleString()}）
-                              </Text>
-                            ) : null}
-                          </div>
-                        ) : null}
-                        {mcpWarmupBusy ? (
-                          <div style={{ marginTop: 8 }}>
-                            <Text type="secondary">正在预检已启用的 MCP…</Text>
-                          </div>
-                        ) : null}
-                      </div>
-                    }
-                  />
-                  <Space style={{ marginBottom: 12 }}>
-                    <Button
-                      size="small"
-                      loading={mcpWarmupBusy}
-                      onClick={() => void rerunMcpWarmup()}
-                    >
-                      重新预检全部 MCP
-                    </Button>
-                  </Space>
                   <div style={{ marginBottom: 12 }}>
                     <Text strong>从 JSON 导入</Text>
                     <div style={{ marginTop: 6, marginBottom: 8 }}>
