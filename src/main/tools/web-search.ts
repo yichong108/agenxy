@@ -41,7 +41,9 @@ function formatTavilyResponse(data: TavilySearchJson): string {
     return body ? `${head}\n${body}` : head
   })
   parts.push(blocks.join('\n\n'))
-  parts.push('\n[Note] Above is search summary; please verify with original sources before drawing conclusions.')
+  parts.push(
+    '\n[Note] Above is search summary; please verify with original sources before drawing conclusions.'
+  )
   return parts.join('\n')
 }
 

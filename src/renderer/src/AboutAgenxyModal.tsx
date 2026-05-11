@@ -26,8 +26,7 @@ export function AboutAgenxyModal({ open, info, onClose }: AboutAgenxyModalProps)
     }
   }, [info, msgApi])
 
-  const buildDisplay =
-    info && info.buildIso ? formatBuildIsoUtcHuman(info.buildIso) ?? '—' : '—'
+  const buildDisplay = info && info.buildIso ? (formatBuildIsoUtcHuman(info.buildIso) ?? '—') : '—'
 
   const commitDisplay = info?.gitCommit?.trim() ? info.gitCommit : '—'
 
@@ -100,7 +99,9 @@ export function AboutAgenxyModal({ open, info, onClose }: AboutAgenxyModalProps)
               </div>
               <div className="about-agenxy-modal__kv">
                 <span className="about-agenxy-modal__k">操作系统</span>
-                <span className="about-agenxy-modal__v about-agenxy-modal__v--wrap">{info.osLine}</span>
+                <span className="about-agenxy-modal__v about-agenxy-modal__v--wrap">
+                  {info.osLine}
+                </span>
               </div>
             </div>
             <div className="about-agenxy-modal__copyright">© 2026 Agenxy</div>

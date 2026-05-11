@@ -1,5 +1,5 @@
 {
-"update_url": "https://clients2.google.com/service/update2/crx",
+  "update_url": "https://clients2.google.com/service/update2/crx",
 
   "manifest_version": 3,
   "name": "React Developer Tools",
@@ -28,39 +28,21 @@
   },
   "web_accessible_resources": [
     {
-      "resources": [
-        "main.html",
-        "panel.html",
-        "build/*.js"
-      ],
-      "matches": [
-        "<all_urls>"
-      ],
+      "resources": ["main.html", "panel.html", "build/*.js"],
+      "matches": ["<all_urls>"],
       "extension_ids": []
     }
   ],
   "background": {
     "service_worker": "build/background.js"
   },
-  "permissions": [
-    "scripting",
-    "storage",
-    "tabs"
-  ],
-  "optional_permissions": [
-    "clipboardWrite"
-  ],
-  "host_permissions": [
-    "<all_urls>"
-  ],
+  "permissions": ["scripting", "storage", "tabs"],
+  "optional_permissions": ["clipboardWrite"],
+  "host_permissions": ["<all_urls>"],
   "content_scripts": [
     {
-      "matches": [
-        "<all_urls>"
-      ],
-      "js": [
-        "build/prepareInjection.js"
-      ],
+      "matches": ["<all_urls>"],
+      "js": ["build/prepareInjection.js"],
       "run_at": "document_start"
     }
   ]

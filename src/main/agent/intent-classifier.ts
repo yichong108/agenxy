@@ -146,7 +146,11 @@ Output requirements:
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') throw error
     agentLog.warn('[classifyIntent] Failed:', error instanceof Error ? error.message : error)
-    return { intent: 'general', confidence: 0.5, reasoning: 'Classification failed, falling back to general intent' }
+    return {
+      intent: 'general',
+      confidence: 0.5,
+      reasoning: 'Classification failed, falling back to general intent'
+    }
   }
 }
 
@@ -185,28 +189,4 @@ export function shouldLoadSkill(skillName: string, targetIntents: UserIntent[]):
 
   // 检查技能和目标意图是否有交集
   return skillIntents.some((si) => targetIntents.includes(si))
-}
-
-/**
- * 快速意图检测（基于关键词）
- * 用于在完整分类前提供初步判断，避免不必要的 LLM 调用
- */
-export function quickIntentDetect(userText: string): UserIntent | null {
-  const text = userText.toLowerCase()
-
-  // 非编程类（高优先级检测）
-  if (/\b(ppt|slide|幻灯片|演示文稿|presentation|deck|triage|分类)\b/i.test(text)) {
-    return 'general'
-  }
-
-  // 编程类关键词
-  if (
-    /(\bbug\b|修复|报错|错误|异常|crash|fix.*error|fix.*bug|代码|code|编程|程序|函数|开发|实现|feature|评审|review|排查|部署|release|上线)/i.test(
-      text
-    )
-  ) {
-    return 'coding'
-  }
-
-  return null
 }

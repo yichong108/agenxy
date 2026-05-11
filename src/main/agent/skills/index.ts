@@ -201,7 +201,8 @@ export function makeBuiltinSkillDefinitions(ctx: SkillToolContext): SkillDefinit
   return [
     {
       name: 'skill_inspect_workspace',
-      description: 'Skill: List directory then search code as needed. Good for "understanding project structure / locating files" scenarios.',
+      description:
+        'Skill: List directory then search code as needed. Good for "understanding project structure / locating files" scenarios.',
       source: 'builtin',
       schema: inspectSchema,
       execute: async (args) => {
@@ -222,7 +223,8 @@ export function makeBuiltinSkillDefinitions(ctx: SkillToolContext): SkillDefinit
     },
     {
       name: 'skill_write_file',
-      description: 'Skill: Write or append file content. Suitable for implementing solutions into workspace files.',
+      description:
+        'Skill: Write or append file content. Suitable for implementing solutions into workspace files.',
       source: 'builtin',
       schema: writeSchema,
       execute: async (args) => {
@@ -245,7 +247,8 @@ export function makeBuiltinSkillDefinitions(ctx: SkillToolContext): SkillDefinit
     },
     {
       name: 'skill_run_terminal',
-      description: 'Skill: Execute terminal commands in workspace root directory and return output. Suitable for installing dependencies, running builds or tests.',
+      description:
+        'Skill: Execute terminal commands in workspace root directory and return output. Suitable for installing dependencies, running builds or tests.',
       source: 'builtin',
       schema: runSchema,
       execute: async (args) => {
@@ -315,7 +318,8 @@ async function appendSkillDefsFromScanRoot(scan: ScanRoot, defs: SkillDefinition
       const folderName = path.basename(path.dirname(absPath))
       const skillName = sanitizeToolName(parsed.meta.name || folderName)
       const description =
-        parsed.meta.description || `Skill document: ${rel}. Follow skill instructions and call tools when necessary.`
+        parsed.meta.description ||
+        `Skill document: ${rel}. Follow skill instructions and call tools when necessary.`
       defs.push({
         name: skillName,
         description,
@@ -514,7 +518,8 @@ export async function validateSkillPackageLayout(
   if (hasJson) return { ok: true }
   return {
     ok: false,
-    error: 'No valid skill.md (with YAML frontmatter) or root directory JSON skill files found in package'
+    error:
+      'No valid skill.md (with YAML frontmatter) or root directory JSON skill files found in package'
   }
 }
 
@@ -728,7 +733,10 @@ export async function uninstallLegacySkillFolder(
     rel.startsWith(`.cache${path.sep}`) ||
     rel === '.cache'
   ) {
-    return { ok: false, error: 'Cannot uninstall market/.cache content (use market uninstall instead)' }
+    return {
+      ok: false,
+      error: 'Cannot uninstall market/.cache content (use market uninstall instead)'
+    }
   }
   try {
     await fs.rm(abs, { recursive: true, force: true })

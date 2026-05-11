@@ -29,27 +29,27 @@ npm run dev
 
 ## 常用脚本
 
-| 命令 | 说明 |
-| ---- | ---- |
-| `npm run dev` | 开发模式启动应用（含热更新） |
-| `npm run dev:debug` | 开发模式并开启 Node/Electron 调试端口 |
-| `npm run build` | 生产构建并执行 `electron-builder` 打安装包 |
-| `npm run build:app` | 仅构建主进程 / preload / 渲染进程，不打安装包 |
-| `npm run preview` | 预览已构建的渲染端产物 |
-| `npm run typecheck` | TypeScript 检查（web 与 node 配置） |
-| `npm run lint` / `npm run lint:fix` | ESLint |
-| `npm run format` / `npm run format:check` | Prettier |
+| 命令                                      | 说明                                          |
+| ----------------------------------------- | --------------------------------------------- |
+| `npm run dev`                             | 开发模式启动应用（含热更新）                  |
+| `npm run dev:debug`                       | 开发模式并开启 Node/Electron 调试端口         |
+| `npm run build`                           | 生产构建并执行 `electron-builder` 打安装包    |
+| `npm run build:app`                       | 仅构建主进程 / preload / 渲染进程，不打安装包 |
+| `npm run preview`                         | 预览已构建的渲染端产物                        |
+| `npm run typecheck`                       | TypeScript 检查（web 与 node 配置）           |
+| `npm run lint` / `npm run lint:fix`       | ESLint                                        |
+| `npm run format` / `npm run format:check` | Prettier                                      |
 
 安装包输出目录为 `release/`（具体目标见 `package.json` 中的 `electron-builder` 配置）。
 
 ## 目录结构
 
-| 路径 | 作用 |
-| ---- | ---- |
-| `src/main/` | Electron 主进程：Agent 服务、MCP、工具、存储等 |
-| `src/renderer/` | React 渲染进程 UI |
-| `src/preload/` | Preload 与 IPC 桥接 |
-| `src/shared/` | 跨进程共享的类型与逻辑 |
+| 路径                      | 作用                                              |
+| ------------------------- | ------------------------------------------------- |
+| `src/main/`               | Electron 主进程：Agent 服务、MCP、工具、存储等    |
+| `src/renderer/`           | React 渲染进程 UI                                 |
+| `src/preload/`            | Preload 与 IPC 桥接                               |
+| `src/shared/`             | 跨进程共享的类型与逻辑                            |
 | `electron.vite.config.ts` | electron-vite 对主进程、preload、渲染端的打包配置 |
 
 参与贡献的流程与约定见 [CONTRIBUTING.md](CONTRIBUTING.md)（英文）；给贡献者与 AI 助手的仓库级说明见 [AGENTS.md](AGENTS.md)。

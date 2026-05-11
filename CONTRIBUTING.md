@@ -15,26 +15,26 @@ npm install
 
 ## Local development and checks
 
-| Command | Purpose |
-| ------- | ------- |
-| `npm run dev` | Development mode with HMR |
-| `npm run dev:debug` | Development mode with debug ports |
-| `npm run typecheck` | TypeScript check |
-| `npm run lint` | ESLint |
-| `npm run lint:fix` | ESLint with auto-fix where possible |
-| `npm run format` | Prettier write |
-| `npm run format:check` | Prettier check |
+| Command                | Purpose                             |
+| ---------------------- | ----------------------------------- |
+| `npm run dev`          | Development mode with HMR           |
+| `npm run dev:debug`    | Development mode with debug ports   |
+| `npm run typecheck`    | TypeScript check                    |
+| `npm run lint`         | ESLint                              |
+| `npm run lint:fix`     | ESLint with auto-fix where possible |
+| `npm run format`       | Prettier write                      |
+| `npm run format:check` | Prettier check                      |
 
 Before opening a pull request, please run `typecheck` and `lint` locally when feasible. If you touch layout or style-heavy files, consider `format:check` or `format`.
 
 ## Repository layout (overview)
 
-| Path | Role |
-| ---- | ---- |
-| `src/main/` | Electron main process |
-| `src/renderer/` | React UI |
-| `src/preload/` | Preload and IPC bridges |
-| `src/shared/` | Shared code across processes |
+| Path            | Role                         |
+| --------------- | ---------------------------- |
+| `src/main/`     | Electron main process        |
+| `src/renderer/` | React UI                     |
+| `src/preload/`  | Preload and IPC bridges      |
+| `src/shared/`   | Shared code across processes |
 
 Match existing naming, imports, and patterns in the files you touch. Keep each PR focused on a single concern and avoid unrelated refactors.
 

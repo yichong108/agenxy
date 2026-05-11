@@ -1152,7 +1152,9 @@ html[data-aw-wco-suppressed='1'] .app-win-titlebar {
 
 .app-composer:focus-within {
   border-color: var(--aw-composer-border-focus);
-  box-shadow: var(--aw-composer-shadow-focus), 0 0 0 1px var(--aw-composer-ring);
+  box-shadow:
+    var(--aw-composer-shadow-focus),
+    0 0 0 1px var(--aw-composer-ring);
 }
 
 .app-composer-inner {

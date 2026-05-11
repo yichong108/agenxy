@@ -449,10 +449,7 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
         window.removeEventListener('mousemove', onMove)
         window.removeEventListener('mouseup', onUp)
         try {
-          localStorage.setItem(
-            FILE_TREE_WIDTH_STORAGE_KEY,
-            String(fileTreeWidthPxRef.current)
-          )
+          localStorage.setItem(FILE_TREE_WIDTH_STORAGE_KEY, String(fileTreeWidthPxRef.current))
         } catch {
           /* ignore */
         }
@@ -689,10 +686,7 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
           <div className="app-right-content" ref={rightContentRef}>
             {activePanel === 'file' ? (
               <>
-                <div
-                  className="app-right-tree-panel"
-                  style={{ flex: `0 0 ${fileTreeWidthPx}px` }}
-                >
+                <div className="app-right-tree-panel" style={{ flex: `0 0 ${fileTreeWidthPx}px` }}>
                   <div className="app-right-tree-wrap">
                     <div className="app-right-tree-viewport" ref={treeContainerRef}>
                       {activeWorkspaceId === HOME_WORKSPACE_ID ? (

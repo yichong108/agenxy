@@ -135,7 +135,10 @@ async function closeSlot(serverId: string, slot: PooledSlot): Promise<void> {
   try {
     await slot.client.close()
   } catch (e) {
-    mcpLog.warn(`[mcp-pool] Failed to close connection ${serverId}:`, e instanceof Error ? e.message : e)
+    mcpLog.warn(
+      `[mcp-pool] Failed to close connection ${serverId}:`,
+      e instanceof Error ? e.message : e
+    )
   }
 }
 
@@ -246,7 +249,10 @@ export async function probeMcpServer(entry: McpServerEntry): Promise<McpProbeRes
     return await Promise.race([
       run(),
       new Promise<McpProbeResult>((_, reject) => {
-        setTimeout(() => reject(new Error(`Probe timeout (>${PROBE_TIMEOUT_MS}ms)`)), PROBE_TIMEOUT_MS)
+        setTimeout(
+          () => reject(new Error(`Probe timeout (>${PROBE_TIMEOUT_MS}ms)`)),
+          PROBE_TIMEOUT_MS
+        )
       })
     ])
   } catch (e) {

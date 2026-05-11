@@ -30,8 +30,8 @@ Reference architecture for generating slide presentations. Every presentation fo
         --accent-glow: rgba(0, 255, 204, 0.3);
 
         /* Typography — MUST use clamp() */
-        --font-display: "Clash Display", sans-serif;
-        --font-body: "Satoshi", sans-serif;
+        --font-display: 'Clash Display', sans-serif;
+        --font-body: 'Satoshi', sans-serif;
         --title-size: clamp(2rem, 6vw, 5rem);
         --subtitle-size: clamp(0.875rem, 2vw, 1.25rem);
         --body-size: clamp(0.75rem, 1.2vw, 1rem);
@@ -118,31 +118,31 @@ Reference architecture for generating slide presentations. Every presentation fo
            =========================================== */
       class SlidePresentation {
         constructor() {
-          this.slides = document.querySelectorAll(".slide");
-          this.totalPageNum = this.slides.length;
-          this.notes = this.collectNotes();
-          this.setupMeta();
-          this.currentSlide = 0;
-          this.setupIntersectionObserver();
-          this.setupKeyboardNav();
-          this.setupTouchNav();
-          this.setupProgressBar();
-          this.setupNavDots();
+          this.slides = document.querySelectorAll('.slide')
+          this.totalPageNum = this.slides.length
+          this.notes = this.collectNotes()
+          this.setupMeta()
+          this.currentSlide = 0
+          this.setupIntersectionObserver()
+          this.setupKeyboardNav()
+          this.setupTouchNav()
+          this.setupProgressBar()
+          this.setupNavDots()
         }
 
         collectNotes() {
           // One note per slide. Prefer data-note, then .speaker-note text, else empty.
           return Array.from(this.slides).map((slide) => {
-            const dataNote = slide.getAttribute("data-note");
-            if (dataNote && dataNote.trim()) return dataNote.trim();
+            const dataNote = slide.getAttribute('data-note')
+            if (dataNote && dataNote.trim()) return dataNote.trim()
 
-            const noteEl = slide.querySelector(".speaker-note");
+            const noteEl = slide.querySelector('.speaker-note')
             if (noteEl && noteEl.textContent && noteEl.textContent.trim()) {
-              return noteEl.textContent.trim();
+              return noteEl.textContent.trim()
             }
 
-            return "";
-          });
+            return ''
+          })
         }
 
         setupMeta() {
@@ -150,8 +150,8 @@ Reference architecture for generating slide presentations. Every presentation fo
           window.__META__ = {
             ...(window.__META__ || {}),
             totalPageNum: this.totalPageNum,
-            notes: this.notes,
-          };
+            notes: this.notes
+          }
         }
 
         setupIntersectionObserver() {
@@ -175,12 +175,12 @@ Reference architecture for generating slide presentations. Every presentation fo
           // IMPORTANT: Always clear before building — if outerHTML was
           // captured while dots were rendered, re-opening the file would
           // append a duplicate set on top of the existing ones.
-          this.navDotsContainer.innerHTML = "";
+          this.navDotsContainer.innerHTML = ''
           // Generate and manage navigation dots
         }
       }
 
-      new SlidePresentation();
+      new SlidePresentation()
     </script>
   </body>
 </html>
@@ -267,47 +267,44 @@ JS (three interaction methods):
 
 ```javascript
 // 1. Click handler on the toggle button
-document.getElementById("editToggle").addEventListener("click", () => {
-  editor.toggleEditMode();
-});
+document.getElementById('editToggle').addEventListener('click', () => {
+  editor.toggleEditMode()
+})
 
 // 2. Hotzone hover with 400ms grace period
-const hotzone = document.querySelector(".edit-hotzone");
-const editToggle = document.getElementById("editToggle");
-let hideTimeout = null;
+const hotzone = document.querySelector('.edit-hotzone')
+const editToggle = document.getElementById('editToggle')
+let hideTimeout = null
 
-hotzone.addEventListener("mouseenter", () => {
-  clearTimeout(hideTimeout);
-  editToggle.classList.add("show");
-});
-hotzone.addEventListener("mouseleave", () => {
+hotzone.addEventListener('mouseenter', () => {
+  clearTimeout(hideTimeout)
+  editToggle.classList.add('show')
+})
+hotzone.addEventListener('mouseleave', () => {
   hideTimeout = setTimeout(() => {
-    if (!editor.isActive) editToggle.classList.remove("show");
-  }, 400);
-});
-editToggle.addEventListener("mouseenter", () => {
-  clearTimeout(hideTimeout);
-});
-editToggle.addEventListener("mouseleave", () => {
+    if (!editor.isActive) editToggle.classList.remove('show')
+  }, 400)
+})
+editToggle.addEventListener('mouseenter', () => {
+  clearTimeout(hideTimeout)
+})
+editToggle.addEventListener('mouseleave', () => {
   hideTimeout = setTimeout(() => {
-    if (!editor.isActive) editToggle.classList.remove("show");
-  }, 400);
-});
+    if (!editor.isActive) editToggle.classList.remove('show')
+  }, 400)
+})
 
 // 3. Hotzone direct click
-hotzone.addEventListener("click", () => {
-  editor.toggleEditMode();
-});
+hotzone.addEventListener('click', () => {
+  editor.toggleEditMode()
+})
 
 // 4. Keyboard shortcut (E key, skip when editing text)
-document.addEventListener("keydown", (e) => {
-  if (
-    (e.key === "e" || e.key === "E") &&
-    !e.target.getAttribute("contenteditable")
-  ) {
-    editor.toggleEditMode();
+document.addEventListener('keydown', (e) => {
+  if ((e.key === 'e' || e.key === 'E') && !e.target.getAttribute('contenteditable')) {
+    editor.toggleEditMode()
   }
-});
+})
 ```
 
 **CRITICAL: `exportFile()` must strip edit state before capturing outerHTML.**
@@ -393,11 +390,7 @@ Save processed images with `_processed` suffix. Never overwrite originals.
 
 ```html
 <img src="assets/logo_round.png" alt="Logo" class="slide-image logo" />
-<img
-  src="assets/screenshot.png"
-  alt="Screenshot"
-  class="slide-image screenshot"
-/>
+<img src="assets/screenshot.png" alt="Screenshot" class="slide-image screenshot" />
 ```
 
 ```css

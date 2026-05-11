@@ -85,8 +85,7 @@ export function formatBuildIsoUtcHuman(iso: string): string | null {
 }
 
 export function formatAboutAppCopyText(info: AboutAppInfo): string {
-  const buildLine =
-    (formatBuildIsoUtcHuman(info.buildIso) ?? info.buildIso) || '(未知)'
+  const buildLine = (formatBuildIsoUtcHuman(info.buildIso) ?? info.buildIso) || '(未知)'
   return [
     info.productName,
     `版本: ${info.version}`,

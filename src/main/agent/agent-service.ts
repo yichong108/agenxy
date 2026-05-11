@@ -273,7 +273,7 @@ async function streamIntentSummary(
   const model = createLanguageModel(settings)
   const system = new SystemMessage(
     'You are an "intent thinking" assistant. Based only on the user\'s **latest message** (may contain technical terms), write 2-5 complete sentences in English explaining:\n' +
-      '(1) The user\'s general goal or problem type;\n' +
+      "(1) The user's general goal or problem type;\n" +
       '(2) If code/docs review or operations are needed, how you **plan to proceed** (outline approach only, do not list specific tool names, no Markdown headers or code blocks).\n' +
       'Keep tone concise and user-facing; do not repeat these system instructions.'
   )
@@ -464,7 +464,8 @@ function buildBaseAndWebTools(
     },
     {
       name: 'delete_file',
-      description: 'Delete a single regular file in workspace (path relative to workspace); cannot delete directories',
+      description:
+        'Delete a single regular file in workspace (path relative to workspace); cannot delete directories',
       schema: z.object({ path: z.string() }),
       execute: ({ path }) => deleteFileTool(root, path)
     },
@@ -695,7 +696,11 @@ export async function runUserMessage(
 
   const root = workspace?.path?.trim() || ''
   if (!root) {
-    emit({ type: 'error', sessionId, message: 'Current session workspace not bound to directory, please bind path first' })
+    emit({
+      type: 'error',
+      sessionId,
+      message: 'Current session workspace not bound to directory, please bind path first'
+    })
     return
   }
   const queue = getQueue()

@@ -29,28 +29,28 @@ npm run dev
 
 ## Scripts
 
-| Command | Description |
-| -------- | ----------- |
-| `npm run dev` | Start the app in development with HMR |
-| `npm run dev:debug` | Dev with Node/Electron inspector ports |
-| `npm run build` | Production build plus `electron-builder` |
-| `npm run build:app` | Build main/preload/renderer only (no installer) |
-| `npm run preview` | Preview the built renderer bundle |
-| `npm run typecheck` | TypeScript check for web and node configs |
-| `npm run lint` / `npm run lint:fix` | ESLint |
-| `npm run format` / `npm run format:check` | Prettier |
+| Command                                   | Description                                     |
+| ----------------------------------------- | ----------------------------------------------- |
+| `npm run dev`                             | Start the app in development with HMR           |
+| `npm run dev:debug`                       | Dev with Node/Electron inspector ports          |
+| `npm run build`                           | Production build plus `electron-builder`        |
+| `npm run build:app`                       | Build main/preload/renderer only (no installer) |
+| `npm run preview`                         | Preview the built renderer bundle               |
+| `npm run typecheck`                       | TypeScript check for web and node configs       |
+| `npm run lint` / `npm run lint:fix`       | ESLint                                          |
+| `npm run format` / `npm run format:check` | Prettier                                        |
 
 Built installers are emitted under `release/` (see `electron-builder` config in `package.json`).
 
 ## Repository layout
 
-| Path | Role |
-| ---- | ---- |
-| `src/main/` | Electron main process, agent service, MCP, tools, persistence |
-| `src/renderer/` | React UI |
-| `src/preload/` | Preload scripts and IPC bridges |
-| `src/shared/` | Types and code shared between processes |
-| `electron.vite.config.ts` | electron-vite bundling for main, preload, and renderer |
+| Path                      | Role                                                          |
+| ------------------------- | ------------------------------------------------------------- |
+| `src/main/`               | Electron main process, agent service, MCP, tools, persistence |
+| `src/renderer/`           | React UI                                                      |
+| `src/preload/`            | Preload scripts and IPC bridges                               |
+| `src/shared/`             | Types and code shared between processes                       |
+| `electron.vite.config.ts` | electron-vite bundling for main, preload, and renderer        |
 
 Contributing: see [CONTRIBUTING.md](CONTRIBUTING.md). Contributor notes for AI assistants and humans: see [AGENTS.md](AGENTS.md).
 
