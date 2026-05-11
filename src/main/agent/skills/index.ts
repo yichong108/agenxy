@@ -5,6 +5,8 @@ import path from 'node:path'
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
 
+import type { UserIntent } from '@/main/agent/intent-classifier'
+import { shouldLoadSkill } from '@/main/agent/intent-classifier'
 import {
   getBundledSkillsSourceDir,
   marketSkillsInstallRoot,
@@ -455,10 +457,31 @@ function toTool(def: SkillDefinition, ctx: SkillToolContext): SkillTool {
   return built as unknown as SkillTool
 }
 
-export async function buildSkillBundle(ctx: SkillToolContext): Promise<SkillBundle> {
+export type BuildSkillBundleOptions = {
+  /** 按意图过滤技能，空数组表示加载所有技能 */
+  filterIntents?: UserIntent[]
+}
+
+export async function buildSkillBundle(
+  ctx: SkillToolContext,
+  options?: BuildSkillBundleOptions
+): Promise<SkillBundle> {
+  const filterIntents = options?.filterIntents ?? []
+  const shouldFilter = filterIntents.length > 0 && !filterIntents.includes('general')
+
   const builtin = makeBuiltinSkillDefinitions(ctx)
   const fileSkills = await loadFileSkillDefinitions()
-  const mergedDefs = [...builtin, ...fileSkills]
+
+  let mergedDefs = [...builtin, ...fileSkills]
+
+  // 按意图过滤技能
+  if (shouldFilter) {
+    mergedDefs = mergedDefs.filter((def) => shouldLoadSkill(def.name, filterIntents))
+    mainLog.info(
+      `[buildSkillBundle] Filtered skills by intents [${filterIntents.join(', ')}]: ${mergedDefs.length} skills loaded`
+    )
+  }
+
   const merged = dedupeSkillDefinitionsFirstWins(mergedDefs)
   const tools = merged.map((item) => toTool(item, ctx))
   return {

@@ -8,6 +8,7 @@ import type { WebContents } from 'electron'
 import { z } from 'zod'
 
 import { StreamBatcher } from '@/main/agent/batcher'
+import { classifyIntent, type UserIntent } from '@/main/agent/intent-classifier'
 import { ConcurrencyQueue } from '@/main/agent/queue'
 import { buildSkillBundle } from '@/main/agent/skills/index'
 import { logScope } from '@/main/logger'
@@ -44,7 +45,7 @@ import {
   STREAM_FLUSH_MS
 } from '@/shared/ipc'
 
-const agentLog = logScope('agent')
+export const agentLog = logScope('agent')
 
 type SessionRuntime = {
   workspaceId: string
@@ -564,14 +565,24 @@ const askAgentStrategy: AgentStrategy = {
 }
 
 /** Build 智能体策略：完整工作区工具 + skill_* + MCP */
-const buildAgentStrategy: AgentStrategy = {
+type BuildAgentStrategyOptions = {
+  /** 按意图过滤技能 */
+  filterIntents?: UserIntent[]
+}
+
+const buildAgentStrategy: AgentStrategy & { options?: BuildAgentStrategyOptions } = {
   name: 'build',
+  options: {},
   async prepareTools(sessionId, root, settings, runCtx) {
     const termKey = `term:${sessionId}`
     const { baseTools, webSearchTools } = buildBaseAndWebTools(sessionId, root, settings, runCtx)
 
+    const filterIntents = this.options?.filterIntents
     const [skillBundle, mcpResult] = await Promise.all([
-      buildSkillBundle({ root, termKey, settings, runCtx, onTool: runCtx.onTool }),
+      buildSkillBundle(
+        { root, termKey, settings, runCtx, onTool: runCtx.onTool },
+        filterIntents ? { filterIntents } : undefined
+      ),
       buildMcpLangChainTools(settings, runCtx, runCtx.onTool)
     ])
 
@@ -749,8 +760,43 @@ export async function runUserMessage(
     try {
       let streamedChars = 0
 
-      // 获取对应策略并执行
+      // 意图分类：在 Build 模式下使用 LLM 进行意图分类
+      let detectedIntents: UserIntent[] = []
+      if (composerMode === 'build') {
+        try {
+          const classification = await classifyIntent(userText, settings, ac.signal)
+          if (classification.intent !== 'general' && classification.confidence > 0.6) {
+            detectedIntents = [classification.intent]
+          }
+          agentLog.info(
+            `[runUserMessage] Intent classified: ${classification.intent} (confidence: ${classification.confidence.toFixed(2)})`
+          )
+        } catch (e) {
+          if (isAbortError(e)) throw e
+          agentLog.warn('[runUserMessage] Intent classification failed:', e)
+          // 意图分类失败时通知 UI
+          const message = e instanceof Error ? e.message : String(e)
+          emit({
+            type: 'intent-classified',
+            sessionId,
+            runId,
+            traceId,
+            intent: 'general',
+            skillNames: [],
+            error: message
+          })
+        }
+      }
+      agentLog.info(`[runUserMessage] detectedIntents: ${JSON.stringify(detectedIntents, null, 2)}`)
+
+      // 获取对应策略并执行（Build 模式下传入意图过滤）
       const strategy = getAgentStrategy(composerMode)
+
+      // 如果是 Build 策略，设置意图过滤选项
+      if (composerMode === 'build' && 'options' in strategy) {
+        strategy.options = { filterIntents: detectedIntents }
+      }
+
       const tooling = await strategy.prepareTools(sessionId, root, settings, {
         runId,
         traceId,

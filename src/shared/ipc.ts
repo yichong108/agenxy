@@ -335,7 +335,7 @@ export const STREAM_FLUSH_MS = 32
 /** 流式 IPC 合并字符数（内置） */
 export const STREAM_FLUSH_CHARS = 320
 /** 终端/命令单条输出最大字符（内置） */
-export const MAX_TERMINAL_OUTPUT_CHARS = 2_0000
+export const MAX_TERMINAL_OUTPUT_CHARS = 10000
 
 export const defaultProviderProfiles = (): Record<ModelProviderId, ProviderProfile> => ({
   deepseek: {
@@ -561,6 +561,15 @@ export type StreamIntentEndEvent = StreamBase & {
   type: 'intent-end'
 }
 
+/** 意图分类完成（Build 模式下按意图加载技能子集） */
+export type StreamIntentClassifiedEvent = StreamBase &
+  RunRef & {
+    type: 'intent-classified'
+    intent: string
+    skillNames: string[]
+    error?: string
+  }
+
 export type StreamToolEvent = StreamBase & {
   type: 'tool'
   event: ToolTimelineEvent
@@ -593,6 +602,7 @@ export type StreamEvent =
   | StreamTextDeltaEvent
   | StreamIntentDeltaEvent
   | StreamIntentEndEvent
+  | StreamIntentClassifiedEvent
   | StreamToolEvent
   | StreamErrorEvent
   | StreamDoneEvent
