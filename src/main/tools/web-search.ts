@@ -1,6 +1,6 @@
 const TAVILY_SEARCH_URL = 'https://api.tavily.com/search'
 
-/** 设置项或环境变量 TAVILY_API_KEY 任一有值即视为已配置联网检索 */
+/** Consider Tavily configured if either settings or env var TAVILY_API_KEY has value */
 export function isTavilyConfigured(tavilyApiKeyFromSettings?: string): boolean {
   return Boolean(tavilyApiKeyFromSettings?.trim() || process.env.TAVILY_API_KEY?.trim())
 }
@@ -24,16 +24,16 @@ function formatTavilyResponse(data: TavilySearchJson): string {
     return `Tavily: ${err}`
   }
   const results = data.results ?? []
-  const parts: string[] = ['联网检索（Tavily）:']
+  const parts: string[] = ['Internet search (Tavily):']
   if (typeof data.answer === 'string' && data.answer.trim()) {
-    parts.push(`摘要:\n${data.answer.trim()}`, '')
+    parts.push(`Summary:\n${data.answer.trim()}`, '')
   }
   if (!results.length) {
-    parts.push('未返回网页条目。')
+    parts.push('No web pages returned.')
     return parts.join('\n')
   }
   const blocks = results.map((r, i) => {
-    const title = (r.title ?? '').trim() || '（无标题）'
+    const title = (r.title ?? '').trim() || '(no title)'
     const url = (r.url ?? '').trim()
     const text = (r.content ?? '').trim()
     const head = `${i + 1}. ${title}`
@@ -41,13 +41,13 @@ function formatTavilyResponse(data: TavilySearchJson): string {
     return body ? `${head}\n${body}` : head
   })
   parts.push(blocks.join('\n\n'))
-  parts.push('\n[说明] 以上为检索摘要，请核对原始来源后再作结论。')
+  parts.push('\n[Note] Above is search summary; please verify with original sources before drawing conclusions.')
   return parts.join('\n')
 }
 
 /**
- * 使用 Tavily Search API（https://tavily.com）联网检索。
- * apiKey 优先使用参数，否则读环境变量 TAVILY_API_KEY（便于本地调试）。
+ * Use Tavily Search API (https://tavily.com) for internet search.
+ * apiKey priority: parameter first, else read from env var TAVILY_API_KEY (for local debugging).
  */
 export async function tavilyWebSearch(
   query: string,
@@ -55,14 +55,14 @@ export async function tavilyWebSearch(
 ): Promise<string> {
   const q = query.trim()
   if (!q) {
-    return 'query 为空'
+    return 'query is empty'
   }
 
   const key = (options?.apiKey?.trim() || process.env.TAVILY_API_KEY?.trim()) ?? ''
   if (!key) {
     return [
-      '未配置 Tavily API Key，无法执行联网搜索。',
-      '请在应用「设置」中填写「Tavily API Key」，或设置环境变量 TAVILY_API_KEY；注册见 https://tavily.com 。'
+      'Tavily API Key not configured, cannot perform internet search.',
+      'Please fill in "Tavily API Key" in app Settings, or set environment variable TAVILY_API_KEY; register at https://tavily.com .'
     ].join('\n')
   }
 
@@ -81,7 +81,7 @@ export async function tavilyWebSearch(
       signal: AbortSignal.timeout(45_000)
     })
   } catch (e) {
-    return `Tavily 请求失败: ${(e as Error).message}`
+    return `Tavily request failed: ${(e as Error).message}`
   }
 
   const text = await res.text()
@@ -89,7 +89,7 @@ export async function tavilyWebSearch(
   try {
     data = JSON.parse(text) as TavilySearchJson
   } catch {
-    return `Tavily 响应非 JSON（HTTP ${res.status}）`
+    return `Tavily response is not valid JSON (HTTP ${res.status})`
   }
 
   if (!res.ok) {

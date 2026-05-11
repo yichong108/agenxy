@@ -37,7 +37,7 @@ export async function readFileTool(workspace: string, relPath: string): Promise<
   const file = resolveSafePath(relPath, root)
   const st = await fs.stat(file)
   if (!st.isFile()) {
-    return `不是文件: ${relPath}`
+    return `Not a file: ${relPath}`
   }
   if (st.size > MAX_READ) {
     const fh = await fs.open(file, 'r')
@@ -46,7 +46,7 @@ export async function readFileTool(workspace: string, relPath: string): Promise<
       const { bytesRead } = await fh.read(buf, 0, MAX_READ, 0)
       return (
         buf.subarray(0, bytesRead).toString('utf8') +
-        `\n\n[已截断：文件 ${st.size} 字节，仅读取前 ${MAX_READ} 字节]`
+        `\n\n[Truncated: file is ${st.size} bytes, only first ${MAX_READ} bytes read]`
       )
     } finally {
       await fh.close()
@@ -64,7 +64,7 @@ export async function writeFileTool(
   const file = resolveSafePath(relPath, root)
   await fs.mkdir(path.dirname(file), { recursive: true })
   await fs.writeFile(file, content, 'utf8')
-  return `已写入: ${path.relative(root, file)}`
+  return `Written: ${path.relative(root, file)}`
 }
 
 export async function deleteFileTool(workspace: string, relPath: string): Promise<string> {
@@ -76,15 +76,15 @@ export async function deleteFileTool(workspace: string, relPath: string): Promis
   } catch (e) {
     const code = (e as NodeJS.ErrnoException)?.code
     if (code === 'ENOENT') {
-      return `文件不存在: ${relPath}`
+      return `File does not exist: ${relPath}`
     }
     throw e
   }
   if (!st.isFile()) {
-    return `不是文件（未删除目录）: ${relPath}`
+    return `Not a file (directories not deleted): ${relPath}`
   }
   await fs.unlink(file)
-  return `已删除: ${path.relative(root, file)}`
+  return `Deleted: ${path.relative(root, file)}`
 }
 
 export async function listDirTool(
@@ -96,7 +96,7 @@ export async function listDirTool(
   const dir = resolveSafePath(relPath || '.', root)
   const st = await fs.stat(dir)
   if (!st.isDirectory()) {
-    return `不是目录: ${relPath}`
+    return `Not a directory: ${relPath}`
   }
   const depth = Math.min(options?.depth ?? 2, 5)
   const lines: string[] = []
@@ -108,7 +108,7 @@ export async function listDirTool(
       const full = path.join(d, e.name)
       if (e.isDirectory()) {
         if (skipDir.has(e.name)) {
-          lines.push(`${prefix}${e.name}/ (已省略子项)`)
+          lines.push(`${prefix}${e.name}/ (subitems omitted)`)
           continue
         }
         lines.push(`${prefix}${e.name}/`)
@@ -121,7 +121,7 @@ export async function listDirTool(
     }
   }
   await walk(dir, 0, '')
-  return lines.length ? lines.join('\n') : '(空目录)'
+  return lines.length ? lines.join('\n') : '(empty directory)'
 }
 
 export async function searchWorkspace(
@@ -134,7 +134,7 @@ export async function searchWorkspace(
   const results: string[] = []
   let count = 0
   if (!query.trim()) {
-    return 'query 为空'
+    return 'query is empty'
   }
   const lower = query.toLowerCase()
 
@@ -167,7 +167,7 @@ export async function searchWorkspace(
           const preview =
             lineIdx >= 0
               ? `L${lineIdx + 1}: ${text.split('\n')[lineIdx]!.trim().slice(0, 200)}`
-              : '匹配'
+              : 'match'
           results.push(`${rel}\n  ${preview}`)
           count++
         } catch {
@@ -179,7 +179,7 @@ export async function searchWorkspace(
   await walk(root)
   return results.length
     ? results.join('\n\n')
-    : `未找到含 "${query}" 的文本文件（已扫描，最多 ${maxFiles} 个匹配文件）`
+    : `No text files containing "${query}" found (scanned, max ${maxFiles} matching files)`
 }
 
 const GLOB_EXCLUDE = [
@@ -192,7 +192,7 @@ const GLOB_EXCLUDE = [
   '**/coverage/**'
 ] as const
 
-/** 用户数据根下额外排除（Electron/Chromium 缓存等） */
+/** Extra excludes under user data root (Electron/Chromium caches, etc.) */
 const GLOB_EXCLUDE_USERDATA_EXTRA = [
   '**/Cache/**',
   '**/GPUCache/**',
@@ -241,8 +241,8 @@ function rootsAreSame(a: string, b: string): boolean {
 }
 
 /**
- * 在工作区根与可选的 Electron userData 根下按文件名 glob 查找**文件**（不含目录）。
- * pattern 为相对各根目录的 Node glob（两处使用同一 pattern）。
+ * Glob find **files** (not directories) under workspace root and optional Electron userData root by filename pattern.
+ * Pattern is Node glob relative to each root (same pattern used for both locations).
  */
 export async function globFilesTool(
   workspace: string,
@@ -252,14 +252,14 @@ export async function globFilesTool(
   const root = ensureWorkspaceExists(workspace)
   const pat = pattern.trim()
   if (!pat) {
-    return 'pattern 为空'
+    return 'pattern is empty'
   }
   const norm = pat.replace(/\\/g, '/')
   if (path.isAbsolute(pat)) {
-    return '请使用相对根目录的 glob 模式（不要用绝对路径）'
+    return 'Please use relative glob patterns from root (do not use absolute paths)'
   }
   if (norm.split('/').some((seg) => seg === '..')) {
-    return 'pattern 中不得包含 .. 段'
+    return 'pattern cannot contain .. segments'
   }
 
   const maxFiles = Math.min(Math.max(options?.maxFiles ?? 200, 1), 500)
@@ -273,7 +273,7 @@ export async function globFilesTool(
     wsRel = ws.relPosix
     wsHitCap = ws.hitCap
   } catch (e) {
-    return `工作区 glob 失败: ${(e as Error).message}`
+    return `Workspace glob failed: ${(e as Error).message}`
   }
 
   let udRel: string[] = []
@@ -291,29 +291,29 @@ export async function globFilesTool(
           udHitCap = ud.hitCap
         } catch (e) {
           return (
-            (wsRel.length ? `【工作区】\n${wsRel.sort().join('\n')}\n\n` : '') +
-            `用户数据目录 glob 失败: ${(e as Error).message}`
+            (wsRel.length ? `【Workspace】\n${wsRel.sort().join('\n')}\n\n` : '') +
+            `User data directory glob failed: ${(e as Error).message}`
           )
         }
       }
     } catch {
-      // userData 不存在或不可读：忽略，仅返回工作区结果
+      // userData doesn't exist or unreadable: ignore, return workspace results only
     }
   }
 
   if (!wsRel.length && !udRel.length) {
-    return `未匹配到文件: ${pattern}`
+    return `No files matched: ${pattern}`
   }
 
   const lines: string[] = []
   if (wsRel.length) {
-    lines.push('【工作区】\n' + [...wsRel].sort().join('\n'))
+    lines.push('[Workspace]\n' + [...wsRel].sort().join('\n'))
   }
   if (udRel.length) {
-    lines.push('【用户数据】（相对 Electron userData 根）\n' + [...udRel].sort().join('\n'))
+    lines.push('[User Data] (relative to Electron userData root)\n' + [...udRel].sort().join('\n'))
   }
 
   const truncatedNote =
-    wsHitCap || udHitCap ? `\n（最多返回 ${maxFiles} 条，某一分区已满额截断）` : ''
+    wsHitCap || udHitCap ? `\n(max ${maxFiles} results returned, one partition capped)` : ''
   return lines.join('\n\n') + truncatedNote
 }

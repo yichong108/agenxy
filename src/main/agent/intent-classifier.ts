@@ -1,10 +1,20 @@
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { ChatOpenAI } from '@langchain/openai'
+import { z } from 'zod'
 
 import type { AppSettings } from '@/shared/ipc'
 import { getActiveProviderProfile } from '@/shared/ipc'
 
 import { agentLog } from './agent-service'
+
+/**
+ * 意图分类结果 schema
+ */
+const IntentClassificationSchema = z.object({
+  intent: z.enum(['coding', 'general']).describe('用户意图类型'),
+  confidence: z.number().min(0).max(1).describe('置信度 (0-1)'),
+  reasoning: z.string().describe('分类理由说明')
+})
 
 /**
  * 用户意图类型 - 粗粒度分类
@@ -93,69 +103,57 @@ function createLanguageModel(settings: AppSettings) {
 
 /**
  * 对用户输入进行意图分类
+ * 使用结构化输出确保可靠的 JSON 格式返回
  */
 export async function classifyIntent(
   userText: string,
   settings: AppSettings,
   signal?: AbortSignal
 ): Promise<IntentClassification> {
-  const model = createLanguageModel(settings)
+  const model = createLanguageModel(settings).withStructuredOutput(IntentClassificationSchema, {
+    name: 'classify_user_intent',
+    strict: true
+  })
 
-  const systemPrompt = `你是意图分类专家。分析用户输入，判断是编程相关任务还是通用任务。
+  const systemPrompt = `You are an intent classification expert. Analyze the user input and determine whether it is a programming-related task or a general task.
 
-可选意图类型：
-- coding: 编程相关任务（代码修改、Bug修复、功能开发、代码评审、故障排查、发布部署等）
-- general: 通用任务（幻灯片制作、问题分类、文档编写等）
+Available intent types:
+- coding: Programming-related tasks (code modification, bug fixes, feature development, code review, troubleshooting, deployment, etc.)
+- general: General tasks (slide creation, issue triage, documentation writing, etc.)
 
-分类规则：
-1. 如果涉及代码、程序、软件、Bug、功能开发、代码评审、故障排查、部署等，选择 coding
-2. 如果涉及PPT、幻灯片、演示文稿、问题分类、通用咨询等，选择 general
-3. 如果无法明确判断，选择 general
+Classification rules:
+1. If the input involves code, programs, software, bugs, feature development, code review, troubleshooting, deployment, etc., select "coding"
+2. If the input involves PPT, slides, presentations, issue triage, general inquiries, etc., select "general"
+3. If uncertain, select "general"
 
-返回格式必须是有效的 JSON 对象：
-{
-  "intent": "coding 或 general",
-  "confidence": 0.95,
-  "reasoning": "简短的理由说明"
-}`
+Output requirements:
+- The "reasoning" field must be written in English
+- Provide clear justification for the classification decision`
 
   try {
     const messages = [new SystemMessage(systemPrompt), new HumanMessage(userText)]
-    const response = await model.invoke(messages, { signal })
-    const content = typeof response.content === 'string' ? response.content : ''
+    const result = await model.invoke(messages, { signal })
 
-    // 尝试从响应中提取 JSON
-    const jsonMatch = content.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      agentLog.warn('[classifyIntent] No JSON found in response:', content)
-      return { intent: 'general', confidence: 0.5, reasoning: '解析失败，回退到通用意图' }
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]) as {
-      intent?: string
-      confidence?: number
-      reasoning?: string
-    }
-
-    const intent = validateIntent(parsed.intent)
-    const confidence = Math.max(0, Math.min(1, parsed.confidence ?? 0.5))
+    // Additional validation to ensure intent value is valid (handle unexpected enum values from model)
+    const intent = validateIntent(result.intent)
+    const confidence = Math.max(0, Math.min(1, result.confidence ?? 0.5))
 
     return {
       intent,
       confidence,
-      reasoning: parsed.reasoning || '基于内容分析'
+      reasoning: result.reasoning || 'Based on content analysis'
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') throw error
     agentLog.warn('[classifyIntent] Failed:', error instanceof Error ? error.message : error)
-    return { intent: 'general', confidence: 0.5, reasoning: '分类失败，回退到通用意图' }
+    return { intent: 'general', confidence: 0.5, reasoning: 'Classification failed, falling back to general intent' }
   }
 }
 
 function validateIntent(raw: unknown): UserIntent {
   if (typeof raw === 'string') {
     const normalized = raw.toLowerCase().trim()
-    if (normalized === 'coding' || normalized === 'code' || normalized.includes('编程')) {
+    if (normalized === 'coding' || normalized === 'code' || normalized.includes('programming')) {
       return 'coding'
     }
   }

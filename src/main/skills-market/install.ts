@@ -22,9 +22,9 @@ function assertHttpsZipUrl(url: string): void {
   try {
     u = new URL(url)
   } catch {
-    throw new Error('packageUrl 无效')
+    throw new Error('packageUrl is invalid')
   }
-  if (u.protocol !== 'https:') throw new Error('packageUrl 必须为 https')
+  if (u.protocol !== 'https:') throw new Error('packageUrl must be https')
 }
 
 async function downloadHttpsBuffer(url: string): Promise<Buffer> {
@@ -33,10 +33,10 @@ async function downloadHttpsBuffer(url: string): Promise<Buffer> {
   const timer = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS)
   try {
     const res = await fetch(url, { method: 'GET', signal: controller.signal })
-    if (!res.ok) throw new Error(`下载失败 HTTP ${res.status}`)
+    if (!res.ok) throw new Error(`Download failed HTTP ${res.status}`)
     const buf = Buffer.from(await res.arrayBuffer())
     if (buf.length > MAX_ZIP_DOWNLOAD_BYTES) {
-      throw new Error(`zip 超过 ${MAX_ZIP_DOWNLOAD_BYTES} 字节上限`)
+      throw new Error(`Zip exceeds ${MAX_ZIP_DOWNLOAD_BYTES} bytes limit`)
     }
     return buf
   } finally {
@@ -62,17 +62,17 @@ async function extractZipSafe(zipBuffer: Buffer, destDir: string): Promise<void>
     if (entry.isDirectory) continue
     const rel = safeRelativeZipPath(entry.entryName)
     if (!rel) {
-      throw new Error(`zip 包含非法路径：${entry.entryName}`)
+      throw new Error(`Zip contains illegal path: ${entry.entryName}`)
     }
     const data = entry.getData()
     uncompressedTotal += data.length
     if (uncompressedTotal > MAX_UNCOMPRESSED_BYTES) {
-      throw new Error(`解压后体积超过 ${MAX_UNCOMPRESSED_BYTES} 字节`)
+      throw new Error(`Uncompressed size exceeds ${MAX_UNCOMPRESSED_BYTES} bytes`)
     }
     const abs = path.resolve(path.join(resolvedDest, rel))
     const relToDest = path.relative(resolvedDest, abs)
     if (relToDest.startsWith('..') || path.isAbsolute(relToDest)) {
-      throw new Error('zip 路径逃逸被拒绝')
+      throw new Error('Zip path escape denied')
     }
     await fs.mkdir(path.dirname(abs), { recursive: true })
     await fs.writeFile(abs, data)

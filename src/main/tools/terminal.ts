@@ -9,13 +9,13 @@ const running = new Map<string, ChildProcess>()
 function truncate(s: string, max: number): { text: string; truncated: boolean } {
   if (s.length <= max) return { text: s, truncated: false }
   return {
-    text: s.slice(0, max) + `\n[输出已截断，原长度 ${s.length} 字符]`,
+    text: s.slice(0, max) + `\n[Output truncated, original length ${s.length} characters]`,
     truncated: true
   }
 }
 
 /**
- * 在工作区根目录执行 shell 命令（MVP: Windows 为 cmd 风格 / 无 PTY，跨平台用 shell）
+ * Execute shell command in workspace root directory (MVP: Windows cmd style / no PTY, cross-platform with shell)
  */
 export function runCommand(
   sessionKey: string,
@@ -37,13 +37,13 @@ export function runCommand(
     const push = (chunk: Buffer) => {
       out += chunk.toString('utf8')
       if (out.length > maxOutputChars * 2) {
-        // 先粗暴截断避免内存涨
+        // Rough truncation first to avoid memory growth
         out = out.slice(0, maxOutputChars * 2)
         child.stdout?.removeAllListeners('data')
         child.stderr?.removeAllListeners('data')
         void killCommand(sessionKey)
         const { text } = truncate(out, maxOutputChars)
-        resolve(text + '\n[进程因输出过长被终止]')
+        resolve(text + '\n[Process terminated due to excessive output]')
       }
     }
     child.stdout?.on('data', push)
@@ -51,11 +51,11 @@ export function runCommand(
     const done = (code: number | null) => {
       running.delete(sessionKey)
       const { text } = truncate(out, maxOutputChars)
-      resolve(text + (code && code !== 0 ? `\n[退出码 ${code}]` : ''))
+      resolve(text + (code && code !== 0 ? `\n[Exit code ${code}]` : ''))
     }
     child.on('error', (err) => {
       running.delete(sessionKey)
-      resolve(`子进程错误: ${err.message}`)
+      resolve(`Child process error: ${err.message}`)
     })
     child.on('close', (code) => done(code === null ? -1 : code))
   })
@@ -100,7 +100,7 @@ function isPathInsideWorkspace(workspaceRoot: string, targetPath: string): boole
 }
 
 /**
- * 为终端命令行提供基础路径补全（仅按最后一个 token 匹配）。
+ * Provide basic path completion for terminal command line (match only by last token).
  */
 export async function completeCommandInWorkspace(
   workspace: string,

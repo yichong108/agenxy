@@ -49,10 +49,10 @@ export const agentLog = logScope('agent')
 
 type SessionRuntime = {
   workspaceId: string
-  /** 不含 system；system 在每次请求时拼入 */
+  /** System prompt is not included; it's appended at each request */
   messages: BaseMessage[]
   controller: AbortController | null
-  /** 与终端 key 同会话一致 */
+  /** Consistent with terminal key for the session */
   terminalKey: string
 }
 
@@ -122,7 +122,7 @@ function toPersistedMessages(coreMessages: BaseMessage[]): ChatMessage[] {
       })
       continue
     }
-    // system prompt 不进入 UI 历史，避免干扰会话展示
+    // system prompt doesn't enter UI history to avoid interfering with session display
   }
   return trimPersistedMessages(out)
 }
@@ -186,7 +186,7 @@ function createLanguageModel(settings: AppSettings) {
   const profile = getActiveProviderProfile(settings)
   const isOllama = settings.provider === 'ollama'
   if (!isOllama && !profile.apiKey?.trim()) {
-    throw new Error('请先在「设置」中配置 API Key')
+    throw new Error('Please configure API Key in Settings first')
   }
   const apiKey = profile.apiKey?.trim() || 'ollama'
   const baseURL = openAiBaseUrlForProvider(settings.provider, profile.baseUrl)
@@ -203,51 +203,51 @@ function buildSystemPrompt(root: string, settings: AppSettings): string {
   const web = isTavilyConfigured(settings.tavilyApiKey)
   const mcpEnabled = (settings.mcpServers ?? []).filter((s) => s.enabled && s.command.trim())
   const mcpMeta =
-    '\n- **MCP 管理（元工具）**: `mcp_list_servers` 列出已配置 MCP 及脱敏后的 env；`mcp_inspect_server` 探测某台 MCP 暴露的工具列表。需要连接信息或工具名时优先调用二者，勿向用户索要已在应用中保存的密码。'
+    '\n- **MCP Management (Meta Tools)**: `mcp_list_servers` lists configured MCPs with sanitized env; `mcp_inspect_server` probes a specific MCP for exposed tools. Prioritize these when connection info or tool names are needed; do not ask users for passwords already saved in the app.'
   const mcpNote =
     mcpEnabled.length > 0
-      ? `${mcpMeta}\n- 已启用 MCP（stdio）服务器: ${mcpEnabled.map((s) => s.name || s.id).join('、')}。以 mcp_ 开头的工具名来自各 MCP；调用时传入 JSON 对象，键名与对应工具的 inputSchema 一致。`
+      ? `${mcpMeta}\n- Enabled MCP (stdio) servers: ${mcpEnabled.map((s) => s.name || s.id).join(', ')}. Tools starting with mcp_ are from each MCP; pass JSON objects when calling, with keys matching the tool's inputSchema.`
       : (settings.mcpServers?.length ?? 0) > 0
-        ? `${mcpMeta}\n- 当前 MCP 条目均未启用或 command 为空；用户启用后会出现 mcp_* 工具。`
+        ? `${mcpMeta}\n- Current MCP entries are not enabled or have empty command; mcp_* tools will appear after user enables them.`
         : mcpMeta
   const toolLine = web
-    ? 'read_file, write_file, delete_file, list_dir, glob, search_workspace, shell, web_search（Tavily 联网）, mcp_list_servers, mcp_inspect_server'
-    : 'read_file, write_file, delete_file, list_dir, glob, search_workspace, shell, mcp_list_servers, mcp_inspect_server（未配置 Tavily API Key 时无 web_search）'
+    ? 'read_file, write_file, delete_file, list_dir, glob, search_workspace, shell, web_search (Tavily internet search), mcp_list_servers, mcp_inspect_server'
+    : 'read_file, write_file, delete_file, list_dir, glob, search_workspace, shell, mcp_list_servers, mcp_inspect_server (no web_search without Tavily API Key)'
   const webRule = web
-    ? '- 用户询问**天气、气温、降雨、实时新闻、股价、政策**等需要站外最新信息时，必须先调用 **web_search** 再作答；不得凭记忆编造当日天气或「搜索失败」类说辞。'
-    : '- 当前**未**配置 Tavily，没有 web_search：若用户要今日天气等实时信息，请明确告知在应用「设置」中填写「Tavily API Key」或配置环境变量 TAVILY_API_KEY，并可建议中国天气网、手机天气 App；不要谎称「搜索引擎坏了」或「网络搜索功能不可用」。'
-  return `你是协助办公与软件开发的智能体。工作区根目录: ${root}。
-- 在工具中使用**相对工作区根**的路径（如 src/index.ts），不要使用 ../ 尝试逃出工作区。
-- 可调用工具: ${toolLine}，以及若干 skill_* 技能工具。${mcpNote}
-- **优先使用 skill_***：当用户意图与某个 skill 工具的描述明显相关时，必须先调用该 skill 获取流程、约束或产出，再按需组合 read_file、list_dir、search_workspace、shell、mcp_* 等；不要跳过匹配的 skill 直接用通用工具猜测。
-- shell 在沙盒目录（工作区根）下执行 shell 命令，等待进程结束后返回 stdout/stderr。Windows 为 cmd 风格。
-- 当用户要求“查看/读取工作区文件”或“列出目录”时，优先调用 read_file/list_dir 再回答。
-- 当用户明确要求删除工作区内的某个文件时，使用 delete_file（仅删普通文件，不删目录）。
-- 按文件名/路径模式找文件时用 glob（如 **/*.ts）：结果包含工作区与「用户数据」目录（技能市场安装等）；read_file/write 等仍限工作区内路径。
+    ? '- When users ask about **weather, temperature, rainfall, real-time news, stock prices, policies**, etc. requiring external info, you MUST call **web_search** first before answering; do not make up current weather or claim "search failed".'
+    : '- Tavily is **not** configured, web_search unavailable: If users request real-time info like today\'s weather, clearly inform them to set "Tavily API Key" in app Settings or configure TAVILY_API_KEY environment variable; suggest weather websites or apps; do not claim "search engine is broken" or "internet search unavailable".'
+  return `You are an intelligent agent assisting with office work and software development. Workspace root: ${root}.
+- Use **relative paths from workspace root** in tools (e.g., src/index.ts); do not use ../ to escape the workspace.
+- Available tools: ${toolLine}, and various skill_* tools.${mcpNote}
+- **Prioritize skill_***: When user intent clearly matches a skill tool's description, you MUST call that skill first to get workflow/constraints/output, then use read_file, list_dir, search_workspace, shell, mcp_* as needed; do not skip matching skills and guess with generic tools.
+- shell executes commands in the sandbox directory (workspace root), waits for completion, returns stdout/stderr. Windows uses cmd style.
+- When users ask to "view/read workspace files" or "list directory", prefer read_file/list_dir before answering.
+- When users explicitly request to delete a file in the workspace, use delete_file (for regular files only, not directories).
+- Use glob for filename/path pattern search (e.g., **/*.ts): results include workspace and "user data" directories (skill market installs, etc.); read_file/write remain limited to workspace paths.
 ${webRule}
-- 回答简洁、可执行；修改代码前先 read/list。
-- 先理解任务 → 必要时复述目标 → 再选工具。`
+- Keep responses concise and actionable; read/list before modifying code.
+- Understand task first → restate goal if needed → then select tools.`
 }
 
 const commonPrompt = `
-  当前日期时间（UTC）：${new Date().toLocaleString()}；
+  Current date/time (UTC): ${new Date().toLocaleString()};
 `
 
 function buildAskSystemPrompt(root: string, settings: AppSettings): string {
   const web = isTavilyConfigured(settings.tavilyApiKey)
   const toolLine = web
-    ? 'read_file, list_dir, glob, search_workspace, web_search（Tavily）'
-    : 'read_file, list_dir, glob, search_workspace（未配置 Tavily 时无 web_search）'
+    ? 'read_file, list_dir, glob, search_workspace, web_search (Tavily)'
+    : 'read_file, list_dir, glob, search_workspace (no web_search without Tavily)'
   const webRule = web
-    ? '- 需要站外最新信息时可调用 **web_search**；不得编造检索结果。'
-    : '- 当前未配置 Tavily：若用户要实时资讯，请如实说明并建议在「设置」中配置 Tavily。'
-  return `你是协助理解与讲解代码、架构与命令的助手（**Ask / 问答模式**）。工作区根目录: ${root}。
-- **不得**修改工作区文件、删除文件、执行 shell、调用 skill_* 或任何 mcp_*；本模式下这些工具不可用。
-- 仅可使用只读工具: ${toolLine}。路径均为相对工作区根。
-- 用户若要求「直接改代码 / 运行命令 / 应用补丁」，请说明这在 Ask 模式下无法自动执行，并给出可复制片段或步骤；需要自动落地时请切换到 **Build**（关闭 Ask）。
+    ? '- Call **web_search** when external info is needed; do not fabricate search results.'
+    : '- Tavily is not configured: If users need real-time info, be honest and suggest configuring Tavily in Settings.'
+  return `You are an assistant for understanding and explaining code, architecture, and commands (**Ask / Q&A Mode**). Workspace root: ${root}.
+- **DO NOT** modify workspace files, delete files, execute shell, or call skill_* or mcp_*; these tools are unavailable in this mode.
+- Read-only tools only: ${toolLine}. All paths are relative to workspace root.
+- If users request "directly modify code / run commands / apply patches", explain that Ask mode cannot auto-execute and provide copyable snippets or steps; to auto-apply, switch to **Build** (turn off Ask).
 ${webRule}
-- 回答清晰、可验证：需要引用仓库内容时先 read/list/search，再下结论。
-- 先理解意图 → 必要时复述目标
+- Keep responses clear and verifiable: read/list/search repo content first before drawing conclusions.
+- Understand intent first → restate goal if needed
 `
 }
 
@@ -261,7 +261,8 @@ function isAbortError(e: unknown): boolean {
 }
 
 /**
- * 在 ReAct / 主对话流之前做一次简短流式「意图思考」，供 UI 先展示再进入工具循环。
+ * Short streaming "intent thinking" before ReAct/main dialogue loop,
+ * displayed in UI before entering tool loop.
  */
 async function streamIntentSummary(
   settings: AppSettings,
@@ -271,12 +272,12 @@ async function streamIntentSummary(
 ): Promise<string> {
   const model = createLanguageModel(settings)
   const system = new SystemMessage(
-    '你是「意图思考」助手。仅根据用户的**最新消息**（可含技术词汇），用中文写 2～5 个完整句子，依次说明：\n' +
-      '（1）用户想达成的大致目标或问题类型；\n' +
-      '（2）若需要查阅代码/文档或执行操作，你**打算如何推进**（只概述思路，不要列举具体工具名，不要输出 Markdown 标题或代码块）。\n' +
-      '语气简洁、面向用户；不要复述本段系统说明。'
+    'You are an "intent thinking" assistant. Based only on the user\'s **latest message** (may contain technical terms), write 2-5 complete sentences in English explaining:\n' +
+      '(1) The user\'s general goal or problem type;\n' +
+      '(2) If code/docs review or operations are needed, how you **plan to proceed** (outline approach only, do not list specific tool names, no Markdown headers or code blocks).\n' +
+      'Keep tone concise and user-facing; do not repeat these system instructions.'
   )
-  const human = new HumanMessage(userText.trim() ? userText.trim() : '（空消息）')
+  const human = new HumanMessage(userText.trim() ? userText.trim() : '(empty message)')
   const deadline = Date.now() + INTENT_SUMMARY_TIMEOUT_MS
   let acc = ''
   try {
@@ -318,7 +319,7 @@ async function invokeAgentWithGuard(
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
       ac.abort()
-      reject(new Error(`模型-工具循环超时（>${timeoutMs}ms），已中止本次运行`))
+      reject(new Error(`Model-tool loop timeout (>${timeoutMs}ms), run aborted`))
     }, timeoutMs)
   })
   try {
@@ -362,7 +363,7 @@ async function invokeAgentWithGuard(
 }
 
 /**
- * 创建工具
+ * Create tools
  */
 const ASK_MODE_TOOL_NAMES = new Set([
   'read_file',
@@ -372,14 +373,14 @@ const ASK_MODE_TOOL_NAMES = new Set([
   'web_search'
 ])
 
-/** 工具执行器上下文 */
+/** Tool executor context */
 type ToolExecutorContext = {
   runId: string
   traceId: string
   onTool: (e: ToolTimelineEvent) => void
 }
 
-/** 简化工具定义：只需描述和执行逻辑 */
+/** Simplified tool definition: just need description and execution logic */
 type ToolDefinition<T extends z.ZodTypeAny> = {
   name: string
   description: string
@@ -389,7 +390,7 @@ type ToolDefinition<T extends z.ZodTypeAny> = {
   truncateTo?: number
 }
 
-/** 将 ToolDefinition 包装为带生命周期追踪的 NamedTool */
+/** Wrap ToolDefinition with lifecycle tracking as NamedTool */
 function defineTool<T extends z.ZodTypeAny>(
   def: ToolDefinition<T>,
   runCtx: ToolExecutorContext
@@ -438,7 +439,7 @@ function defineTool<T extends z.ZodTypeAny>(
   ) as unknown as NamedTool
 }
 
-/** 工作区基础工具 + 可选联网；Ask / Build 智能体共用 */
+/** Workspace base tools + optional web search; shared by Ask/Build agents */
 function buildBaseAndWebTools(
   sessionId: string,
   root: string,
@@ -450,26 +451,26 @@ function buildBaseAndWebTools(
   const baseToolDefs: ToolDefinition<z.ZodTypeAny>[] = [
     {
       name: 'read_file',
-      description: '读取工作区内 UTF-8 文本文件，path 为相对工作区',
+      description: 'Read UTF-8 text file in workspace, path is relative to workspace root',
       schema: z.object({ path: z.string() }),
       execute: ({ path }) => readFileTool(root, path),
       truncateTo: 1_000
     },
     {
       name: 'write_file',
-      description: '写入或覆盖工作区文件，自动创建父目录',
+      description: 'Write or overwrite workspace file, auto-creates parent directories',
       schema: z.object({ path: z.string(), content: z.string() }),
       execute: ({ path, content }) => writeFileTool(root, path, content)
     },
     {
       name: 'delete_file',
-      description: '删除工作区内单个普通文件（path 相对工作区）；不能删除目录',
+      description: 'Delete a single regular file in workspace (path relative to workspace); cannot delete directories',
       schema: z.object({ path: z.string() }),
       execute: ({ path }) => deleteFileTool(root, path)
     },
     {
       name: 'list_dir',
-      description: '列出目录，path 为相对或空为根，depth 1-3',
+      description: 'List directory, path is relative or empty for root, depth 1-3',
       schema: z.object({
         path: z.string().optional(),
         depth: z.number().int().min(1).max(3).optional()
@@ -479,7 +480,7 @@ function buildBaseAndWebTools(
     },
     {
       name: 'search_workspace',
-      description: '在文本类源码中按子串搜索，适合找符号',
+      description: 'Search by substring in text source files, good for finding symbols',
       schema: z.object({ query: z.string() }),
       execute: ({ query }) => searchWorkspace(root, query, { maxFiles: 50 }),
       truncateTo: 8_000
@@ -487,7 +488,7 @@ function buildBaseAndWebTools(
     {
       name: 'glob',
       description:
-        '在工作区根与 Electron 用户数据目录（userData）下按同一 pattern 做 glob，列出匹配的**文件**路径（仅文件）。返回分「工作区」「用户数据」两段，用户数据路径为相对 userData 根；pattern 使用 Node 风格如 **/*.ts、skills/**/*.md；两侧均排除 node_modules/.git/dist 及 Chromium 缓存等目录',
+        'Glob for files matching pattern under workspace root and Electron userData directory. Returns file paths only (no directories), split into "Workspace" and "User Data" sections; user data paths are relative to userData root. Pattern uses Node style like **/*.ts, skills/**/*.md; excludes node_modules/.git/dist and Chromium cache directories on both sides',
       schema: z.object({
         pattern: z.string(),
         max_results: z.number().int().min(1).max(500).optional()
@@ -499,7 +500,7 @@ function buildBaseAndWebTools(
     {
       name: 'shell',
       description:
-        '在工作区根目录执行一条 shell 命令并等待完成，返回合并的 stdout/stderr（长输出会被截断）。用于安装依赖、构建、测试、git 等。',
+        'Execute a shell command in workspace root directory and wait for completion, returns combined stdout/stderr (long output truncated). Used for installing dependencies, building, testing, git, etc.',
       schema: z.object({ command: z.string() }),
       execute: ({ command }) => runCommand(termKey, root, command, MAX_TERMINAL_OUTPUT_CHARS),
       truncateTo: 4_000
@@ -514,7 +515,7 @@ function buildBaseAndWebTools(
           {
             name: 'web_search',
             description:
-              '使用 Tavily 检索互联网公开网页（天气、新闻、文档等）。search_workspace 只搜工作区代码；需要站外最新信息时必须调用本工具。',
+              'Use Tavily to search public web pages (weather, news, docs, etc.). search_workspace only searches workspace code; call this tool when external info is needed.',
             schema: z.object({
               query: z.string(),
               max_results: z.number().int().min(1).max(20).optional()
@@ -532,14 +533,14 @@ function buildBaseAndWebTools(
   return { baseTools, webSearchTools }
 }
 
-/** 智能体工具集 */
+/** Agent tooling set */
 type AgentTooling = {
   tools: NamedTool[]
   skillHint: string
   mcpContextHints: string
 }
 
-/** 智能体策略接口 */
+/** Agent strategy interface */
 interface AgentStrategy {
   readonly name: AgentComposerMode
   prepareTools(
@@ -551,7 +552,7 @@ interface AgentStrategy {
   buildPrompt(root: string, settings: AppSettings, tooling: AgentTooling): string
 }
 
-/** Ask 智能体策略：仅只读工作区工具 + 可选 web_search；不加载 skill / MCP */
+/** Ask agent strategy: read-only workspace tools + optional web_search; no skill/MCP loading */
 const askAgentStrategy: AgentStrategy = {
   name: 'ask',
   prepareTools(sessionId, root, settings, runCtx) {
@@ -564,9 +565,9 @@ const askAgentStrategy: AgentStrategy = {
   }
 }
 
-/** Build 智能体策略：完整工作区工具 + skill_* + MCP */
+/** Build agent strategy: full workspace tools + skill_* + MCP */
 type BuildAgentStrategyOptions = {
-  /** 按意图过滤技能 */
+  /** Filter skills by intent */
   filterIntents?: UserIntent[]
 }
 
@@ -605,13 +606,13 @@ const buildAgentStrategy: AgentStrategy & { options?: BuildAgentStrategyOptions 
   }
 }
 
-/** 策略注册表 */
+/** Strategy registry */
 const agentStrategies: Record<AgentComposerMode, AgentStrategy> = {
   ask: askAgentStrategy,
   build: buildAgentStrategy
 }
 
-/** 获取智能体策略 */
+/** Get agent strategy */
 function getAgentStrategy(mode: AgentComposerMode): AgentStrategy {
   const strategy = agentStrategies[mode]
   if (!strategy) {
@@ -686,7 +687,7 @@ export async function runUserMessage(
 
   const existingSession = sessions.get(sessionId)
   if (!existingSession) {
-    emit({ type: 'error', sessionId, message: '会话不存在或已失效' })
+    emit({ type: 'error', sessionId, message: 'Session does not exist or has expired' })
     return
   }
   const workspace = getWorkspaceById(existingSession.workspaceId)
@@ -694,7 +695,7 @@ export async function runUserMessage(
 
   const root = workspace?.path?.trim() || ''
   if (!root) {
-    emit({ type: 'error', sessionId, message: '当前会话所属工作区未绑定目录，请先绑定路径' })
+    emit({ type: 'error', sessionId, message: 'Current session workspace not bound to directory, please bind path first' })
     return
   }
   const queue = getQueue()
@@ -702,11 +703,11 @@ export async function runUserMessage(
     onQueued(queue.waiting + 1)
   }
   await queue.run(async () => {
-    onQueued(0) // 0 = 已获执行权（不展示排队条）
+    onQueued(0) // 0 = obtained execution right (no queue bar displayed)
     const session = sessions.get(sessionId)
     if (!session) {
       agentLog.error(`[runUserMessage] session not found for sessionId: ${sessionId}`)
-      emit({ type: 'error', sessionId, message: '会话不存在或已失效' })
+      emit({ type: 'error', sessionId, message: 'Session does not exist or has expired' })
       return
     }
     const ac = new AbortController()
@@ -760,7 +761,7 @@ export async function runUserMessage(
     try {
       let streamedChars = 0
 
-      // 意图分类：在 Build 模式下使用 LLM 进行意图分类
+      // Intent classification: use LLM for intent classification in Build mode
       let detectedIntents: UserIntent[] = []
       if (composerMode === 'build') {
         try {
@@ -774,7 +775,7 @@ export async function runUserMessage(
         } catch (e) {
           if (isAbortError(e)) throw e
           agentLog.warn('[runUserMessage] Intent classification failed:', e)
-          // 意图分类失败时通知 UI
+          // Notify UI when intent classification fails
           const message = e instanceof Error ? e.message : String(e)
           emit({
             type: 'intent-classified',
@@ -789,10 +790,10 @@ export async function runUserMessage(
       }
       agentLog.info(`[runUserMessage] detectedIntents: ${JSON.stringify(detectedIntents, null, 2)}`)
 
-      // 获取对应策略并执行（Build 模式下传入意图过滤）
+      // Get corresponding strategy and execute (pass intent filtering in Build mode)
       const strategy = getAgentStrategy(composerMode)
 
-      // 如果是 Build 策略，设置意图过滤选项
+      // If Build strategy, set intent filtering options
       if (composerMode === 'build' && 'options' in strategy) {
         strategy.options = { filterIntents: detectedIntents }
       }

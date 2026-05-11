@@ -54,7 +54,7 @@ function formatCallToolResult(result: unknown): string {
     }
   }
   let out = parts.join('\n').slice(0, 24_000)
-  if (r.isError) out = `[MCP 工具错误] ${out}`
+  if (r.isError) out = `[MCP Tool Error] ${out}`
   return out || '(empty)'
 }
 
@@ -135,7 +135,7 @@ async function closeSlot(serverId: string, slot: PooledSlot): Promise<void> {
   try {
     await slot.client.close()
   } catch (e) {
-    mcpLog.warn(`[mcp-pool] 关闭连接失败 ${serverId}:`, e instanceof Error ? e.message : e)
+    mcpLog.warn(`[mcp-pool] Failed to close connection ${serverId}:`, e instanceof Error ? e.message : e)
   }
 }
 
@@ -149,7 +149,7 @@ function scheduleIdleClose(serverId: string, slot: PooledSlot): void {
 }
 
 async function ensurePooledSlot(entry: McpServerEntry): Promise<PooledSlot> {
-  if (!entry.command?.trim()) throw new Error('command 不能为空')
+  if (!entry.command?.trim()) throw new Error('command cannot be empty')
   return runEnsureSerialized(entry.id, async () => {
     const launchKey = mcpLaunchSignature(entry)
     const existing = pooledSlots.get(entry.id)
@@ -230,7 +230,7 @@ const PROBE_TIMEOUT_MS = 22_000
 
 export async function probeMcpServer(entry: McpServerEntry): Promise<McpProbeResult> {
   if (!entry.command?.trim()) {
-    return { ok: false, error: 'command 不能为空' }
+    return { ok: false, error: 'command cannot be empty' }
   }
   const run = async (): Promise<McpProbeResult> => {
     return await withMcpClient(entry, async (client) => {
@@ -246,7 +246,7 @@ export async function probeMcpServer(entry: McpServerEntry): Promise<McpProbeRes
     return await Promise.race([
       run(),
       new Promise<McpProbeResult>((_, reject) => {
-        setTimeout(() => reject(new Error(`探测超时（>${PROBE_TIMEOUT_MS}ms）`)), PROBE_TIMEOUT_MS)
+        setTimeout(() => reject(new Error(`Probe timeout (>${PROBE_TIMEOUT_MS}ms)`)), PROBE_TIMEOUT_MS)
       })
     ])
   } catch (e) {
@@ -281,7 +281,7 @@ export async function warmupMcpServers(settings: AppSettings): Promise<McpWarmup
         run(),
         new Promise<McpWarmupServerResult>((_, reject) => {
           setTimeout(
-            () => reject(new Error(`预热超时（>${PROBE_TIMEOUT_MS}ms）`)),
+            () => reject(new Error(`Warmup timeout (>${PROBE_TIMEOUT_MS}ms)`)),
             PROBE_TIMEOUT_MS
           )
         })
@@ -305,7 +305,7 @@ const MAX_MCP_TOOL_DESC_CHARS = 400
 
 type McpToolListItem = { name: string; description?: string | null }
 
-/** 单次连接内收集：initialize instructions、prompts 索引、tools 索引（多数服务器仅有 tools，此前会导致 hint 为空） */
+/** Collect within single connection: initialize instructions, prompts index, tools index (most servers only have tools, previously causing empty hint) */
 async function gatherMcpClientHints(
   client: Client,
   srv: McpServerEntry,
@@ -315,7 +315,7 @@ async function gatherMcpClientHints(
   const instr = client.getInstructions()?.trim()
   if (instr) {
     sections.push(
-      `**服务端指令（instructions）**\n${instr.slice(0, MAX_MCP_INSTRUCTIONS_CHARS)}${instr.length > MAX_MCP_INSTRUCTIONS_CHARS ? '\n…(已截断)' : ''}`
+      `**Server Instructions**\n${instr.slice(0, MAX_MCP_INSTRUCTIONS_CHARS)}${instr.length > MAX_MCP_INSTRUCTIONS_CHARS ? '\n...(truncated)' : ''}`
     )
   }
   try {
@@ -327,17 +327,17 @@ async function gatherMcpClientHints(
       })
       const more =
         prompts.length > MAX_MCP_PROMPTS_LIST
-          ? `\n… 另有 ${prompts.length - MAX_MCP_PROMPTS_LIST} 个未列出`
+          ? `\n... and ${prompts.length - MAX_MCP_PROMPTS_LIST} more not listed`
           : ''
       sections.push(
         [
-          '**服务端注册的提示模板（仅索引；展开内容需宿主调用 getPrompt）**',
+          '**Server Registered Prompt Templates (index only; call getPrompt to expand content)**',
           `${lines.join('\n')}${more}`
         ].join('\n')
       )
     }
   } catch {
-    // 未实现 prompts 能力的服务器会失败，忽略即可
+    // Servers without prompts capability will fail, ignore
   }
   let tools: McpToolListItem[] = prelistedTools ?? []
   if (!prelistedTools) {
@@ -359,11 +359,11 @@ async function gatherMcpClientHints(
     })
     const more =
       tools.length > MAX_MCP_TOOLS_LIST
-        ? `\n… 另有 ${tools.length - MAX_MCP_TOOLS_LIST} 个未列出`
+        ? `\n... and ${tools.length - MAX_MCP_TOOLS_LIST} more not listed`
         : ''
     sections.push(
       [
-        '**服务端注册的工具（名称与说明；参数以宿主绑定的工具 schema 为准）**',
+        '**Server Registered Tools (name and description; parameters use host-bound tool schema)**',
         `${lines.join('\n')}${more}`
       ].join('\n')
     )
@@ -372,7 +372,7 @@ async function gatherMcpClientHints(
   return `### ${srv.name}（id: ${srv.id}）\n${sections.join('\n\n')}`
 }
 
-/** 在未构建工具时单独拉取各 MCP 的 instructions / prompts / tools 索引，供纯对话模式注入上下文 */
+/** Fetch individual MCP instructions / prompts / tools index when tools are not built, for injection into pure dialogue mode context */
 export async function collectMcpServerContextHints(settings: AppSettings): Promise<string> {
   const servers = (settings.mcpServers ?? []).filter((s) => s.enabled && s.command.trim())
   const blocks: string[] = []
@@ -384,11 +384,11 @@ export async function collectMcpServerContextHints(settings: AppSettings): Promi
       })
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
-      mcpLog.warn(`[mcp] 收集服务端提示失败 ${srv.name} (${srv.id}): ${message}`)
+      mcpLog.warn(`[mcp] Failed to collect server hints ${srv.name} (${srv.id}): ${message}`)
     }
   }
   if (!blocks.length) return ''
-  return `## MCP 服务端上下文（instructions / prompts / tools 索引）\n\n${blocks.join('\n\n---\n\n')}`
+  return `## MCP Server Context (instructions / prompts / tools index)\n\n${blocks.join('\n\n---\n\n')}`
 }
 
 function truncateSchema(schema: unknown, max = 1800): string {
@@ -424,8 +424,8 @@ export async function buildMcpLangChainTools(
           idx += 1
           const schemaHint = t.inputSchema ? truncateSchema(t.inputSchema) : ''
           const descParts = [
-            t.description?.trim() || `MCP 工具 ${mcpToolName}`,
-            `服务器: ${srv.name}（stdio）`,
+            t.description?.trim() || `MCP tool ${mcpToolName}`,
+            `Server: ${srv.name} (stdio)`,
             schemaHint ? `inputSchema: ${schemaHint}` : ''
           ].filter(Boolean)
 
@@ -491,11 +491,11 @@ export async function buildMcpLangChainTools(
       })
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
-      mcpLog.warn(`[mcp] 跳过服务器 ${srv.name} (${srv.id}): ${message}`)
+      mcpLog.warn(`[mcp] Skipping server ${srv.name} (${srv.id}): ${message}`)
     }
   }
   const contextHints = hintBlocks.length
-    ? `## MCP 服务端上下文（instructions / prompts / tools 索引）\n\n${hintBlocks.join('\n\n---\n\n')}`
+    ? `## MCP Server Context (instructions / prompts / tools index)\n\n${hintBlocks.join('\n\n---\n\n')}`
     : ''
   return { tools: out, contextHints }
 }
