@@ -109,7 +109,7 @@ export const EVENTS = {
   MCP_WARMUP: 'mcp:warmup'
 } as const
 
-export type ModelProviderId = 'deepseek' | 'ollama'
+export type ModelProviderId = 'deepseek'
 
 /**
  * 主输入区发送模式（对齐 Cursor：Ask 只读问答，Build 可写文件、跑终端与技能/MCP）。
@@ -261,7 +261,6 @@ export type McpWarmupStatus = {
 export type ProviderProfile = {
   baseUrl: string
   model: string
-  /** 本地 Ollama 等可为空字符串 */
   apiKey: string
 }
 
@@ -341,11 +340,6 @@ export const defaultProviderProfiles = (): Record<ModelProviderId, ProviderProfi
     baseUrl: 'https://api.deepseek.com',
     model: 'deepseek-chat',
     apiKey: ''
-  },
-  ollama: {
-    baseUrl: 'http://127.0.0.1:11434',
-    model: 'qwen3.5:4b',
-    apiKey: ''
   }
 })
 
@@ -368,7 +362,6 @@ export type SettingsFormValues = Pick<
   AppSettings,
   'maxAgentLoopSteps' | 'agentRunTimeoutMs' | 'tavilyApiKey'
 > & {
-  provider: ModelProviderId
   baseUrl: string
   model: string
   apiKey: string
@@ -377,7 +370,6 @@ export type SettingsFormValues = Pick<
 export function settingsToFormValues(s: AppSettings): SettingsFormValues {
   const p = getActiveProviderProfile(s)
   return {
-    provider: s.provider,
     baseUrl: p.baseUrl,
     model: p.model,
     apiKey: p.apiKey,
@@ -393,13 +385,12 @@ export function mergeFormIntoProviderProfiles(
   form: SettingsFormValues
 ): Record<ModelProviderId, ProviderProfile> {
   const next: Record<ModelProviderId, ProviderProfile> = {
-    deepseek: { ...profiles.deepseek },
-    ollama: { ...profiles.ollama }
+    deepseek: { ...profiles.deepseek }
   }
-  next[form.provider] = {
+  next.deepseek = {
     baseUrl: form.baseUrl.trim(),
     model: form.model.trim(),
-    apiKey: form.provider === 'ollama' ? '' : (form.apiKey ?? '').trim()
+    apiKey: (form.apiKey ?? '').trim()
   }
   return next
 }
@@ -411,7 +402,7 @@ export function applySettingsForm(
 ): AppSettings {
   return {
     ...prev,
-    provider: form.provider,
+    provider: 'deepseek',
     providerProfiles,
     maxAgentLoopSteps: form.maxAgentLoopSteps,
     agentRunTimeoutMs: form.agentRunTimeoutMs,

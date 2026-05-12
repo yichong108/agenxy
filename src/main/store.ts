@@ -293,8 +293,7 @@ function normalizeSettings(
   const fromProfiles = inputRest.providerProfiles
 
   let providerProfiles: Record<ModelProviderId, ProviderProfile> = {
-    deepseek: { ...baseProfiles.deepseek, ...fromProfiles?.deepseek },
-    ollama: { ...baseProfiles.ollama, ...fromProfiles?.ollama }
+    deepseek: { ...baseProfiles.deepseek, ...fromProfiles?.deepseek }
   }
 
   const hadLegacyTopLevel =
@@ -305,7 +304,7 @@ function normalizeSettings(
   const looksNewProfileShape =
     fromProfiles != null &&
     typeof fromProfiles === 'object' &&
-    (fromProfiles.deepseek != null || fromProfiles.ollama != null)
+    fromProfiles.deepseek != null
 
   if (hadLegacyTopLevel && !looksNewProfileShape) {
     providerProfiles = {
@@ -325,11 +324,10 @@ function normalizeSettings(
     apiKey: p.apiKey ?? ''
   })
   providerProfiles = {
-    deepseek: finalizeProfile(providerProfiles.deepseek),
-    ollama: finalizeProfile(providerProfiles.ollama)
+    deepseek: finalizeProfile(providerProfiles.deepseek)
   }
 
-  const provider: ModelProviderId = inputRest.provider === 'ollama' ? 'ollama' : 'deepseek'
+  const provider: ModelProviderId = 'deepseek'
 
   const merged: AppSettings = {
     ...defaults,

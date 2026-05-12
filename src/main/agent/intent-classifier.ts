@@ -78,19 +78,14 @@ function ensureOpenAiV1BaseUrl(baseUrl: string, fallback: string): string {
   return `${u.replace(/\/+$/, '')}/v1`
 }
 
-function openAiBaseUrlForProvider(provider: string, rawBaseUrl: string): string {
+function openAiBaseUrlForProvider(_provider: string, rawBaseUrl: string): string {
   const deepseekDefault = 'https://api.deepseek.com/v1'
-  if (provider === 'ollama') {
-    const host = rawBaseUrl.trim() || 'http://127.0.0.1:11434'
-    return ensureOpenAiV1BaseUrl(host, 'http://127.0.0.1:11434/v1')
-  }
   return ensureOpenAiV1BaseUrl(rawBaseUrl, deepseekDefault)
 }
 
 function createLanguageModel(settings: AppSettings) {
   const profile = getActiveProviderProfile(settings)
-  const isOllama = settings.provider === 'ollama'
-  const apiKey = isOllama ? 'ollama' : profile.apiKey?.trim() || ''
+  const apiKey = profile.apiKey?.trim() || ''
   const baseURL = openAiBaseUrlForProvider(settings.provider, profile.baseUrl)
   return new ChatOpenAI({
     apiKey,
