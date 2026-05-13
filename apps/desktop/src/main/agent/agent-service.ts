@@ -12,7 +12,7 @@ import { StreamBatcher } from '@/main/agent/batcher'
 import { classifyIntent, type UserIntent } from '@/main/agent/intent-classifier'
 import { ConcurrencyQueue } from '@/main/agent/queue'
 import { buildSkillBundle } from '@/main/agent/skills/index'
-import { createLangfuseCallbackHandler } from '@/main/langfuse'
+import { createLangfuseCallbackHandler, flushLangfuseTracing } from '@/main/langfuse'
 import { logScope } from '@/main/logger'
 import { buildMcpLangChainTools } from '@/main/mcp/mcp-runtime'
 import {
@@ -329,7 +329,7 @@ async function invokeAgentWithGuard(
   })
   try {
     agentLog.info(`[invokeAgentWithGuard] options: ${JSON.stringify(options, null, 2)}`)
-    agentLog.info(`[invokeAgentWithGuard] messages: ${JSON.stringify(messages, null, 2)}`)
+    agentLog.info(`[invokeAgentWithGuard] langfuseHandler: ${langfuseHandler ? '已传递' : '未传递'}`)
 
     const result = await Promise.race([
       agent.invoke(
@@ -736,6 +736,7 @@ export async function runUserMessage(
         workspace_id: session.workspaceId
       }
     })
+    agentLog.info(`[runUserMessage] langfuseHandler: ${langfuseHandler ? '已创建' : '未创建'}`)
 
     agentLog.info(
       `[runUserMessage] run-start: ${runId}, traceId: ${traceId}, sessionId: ${sessionId}, timestampMs: ${runStartedAt}`
@@ -919,6 +920,8 @@ export async function runUserMessage(
     } finally {
       session.controller = null
       batcher.flush()
+      // Agent 运行结束后 flush Langfuse 数据（确保追踪数据被及时发送）
+      void flushLangfuseTracing()
     }
   })
 }

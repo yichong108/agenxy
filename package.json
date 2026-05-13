@@ -1,125 +1,36 @@
 {
   "name": "agenxy",
   "version": "1.0.0-alpha.1",
-  "description": "Agent 桌面应用 — Electron + Ant Design + AI SDK",
+  "description": "Agenxy — AI Agent 套件 (桌面应用 + 落地页 + 本地服务)",
   "author": "Wang Zhang",
   "license": "MIT",
-  "main": "out/main/index.js",
   "type": "module",
+  "private": true,
   "scripts": {
-    "dev": "electron-vite dev",
-    "dev:debug": "electron-vite dev --inspect=9229 --remoteDebuggingPort=9222 --sourcemap",
-    "build": "electron-vite build && electron-builder",
-    "build:app": "electron-vite build",
-    "preview": "electron-vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
-    "lint": "eslint . --ext .ts,.tsx",
-    "lint:fix": "eslint . --ext .ts,.tsx --fix",
-    "format": "prettier . --write",
-    "format:check": "prettier . --check"
-  },
-  "dependencies": {
-    "@ant-design/icons": "^5.6.1",
-    "@langchain/anthropic": "^1.3.27",
-    "@langchain/core": "^1.1.41",
-    "@langchain/openai": "^1.4.4",
-    "@langfuse/core": "^5.3.0",
-    "@langfuse/langchain": "^5.3.0",
-    "@langfuse/otel": "^5.3.0",
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "@monaco-editor/react": "^4.7.0",
-    "@opentelemetry/sdk-node": "^0.217.0",
-    "@xterm/addon-fit": "^0.11.0",
-    "@xterm/xterm": "^6.0.0",
-    "adm-zip": "^0.5.17",
-    "antd": "^5.24.6",
-    "dayjs": "^1.11.13",
-    "electron-log": "^5.4.3",
-    "electron-store": "^10.0.0",
-    "file-icons-js": "^1.1.0",
-    "highlight.js": "^11.11.1",
-    "langchain": "^1.3.4",
-    "mdast-util-find-and-replace": "^3.0.2",
-    "monaco-editor": "^0.55.1",
-    "monaco-themes": "^0.4.8",
-    "react": "^18.3.1",
-    "react-arborist": "^3.5.0",
-    "react-dom": "^18.3.1",
-    "react-markdown": "^10.1.0",
-    "react-use": "^17.6.0",
-    "rehype-highlight": "^7.0.2",
-    "remark-gfm": "^4.0.1",
-    "simplebar-react": "^3.3.2",
-    "strip-json-comments": "^3.1.1",
-    "zod": "^3.24.2",
-    "zustand": "^5.0.12"
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,json,md}\"",
+    "desktop:dev": "pnpm --filter @agenxy/desktop dev",
+    "desktop:build": "pnpm --filter @agenxy/desktop build",
+    "desktop:build:app": "pnpm --filter @agenxy/desktop build:app",
+    "desktop:preview": "pnpm --filter @agenxy/desktop preview",
+    "landing:dev": "pnpm --filter @agenxy/landing dev",
+    "landing:build": "pnpm --filter @agenxy/landing build",
+    "langfuse:init": "pnpm --filter @agenxy/langfuse-local run init",
+    "langfuse:start": "pnpm --filter @agenxy/langfuse-local run start",
+    "langfuse:stop": "pnpm --filter @agenxy/langfuse-local run stop",
+    "langfuse:status": "pnpm --filter @agenxy/langfuse-local run status",
+    "langfuse:logs": "pnpm --filter @agenxy/langfuse-local run logs",
+    "langfuse:reset": "pnpm --filter @agenxy/langfuse-local run reset"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.4",
-    "@types/adm-zip": "^0.5.8",
-    "@types/node": "^22.14.1",
-    "@types/react": "^18.3.20",
-    "@types/react-dom": "^18.3.6",
-    "@types/react-window": "^1.8.8",
-    "@vitejs/plugin-react": "^4.3.4",
-    "electron": "^35.1.5",
-    "electron-builder": "^26.0.12",
-    "electron-devtools-installer": "^4.0.0",
-    "electron-vite": "^5.0.0",
-    "eslint": "^9.39.4",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-import-resolver-alias": "^1.1.2",
-    "eslint-import-resolver-typescript": "^4.4.4",
-    "eslint-plugin-import": "^2.32.0",
-    "eslint-plugin-prettier": "^5.5.5",
-    "globals": "^17.5.0",
+    "@agenxy/config": "workspace:*",
     "prettier": "^3.8.3",
-    "sass": "^1.99.0",
-    "sharp": "^0.34.5",
-    "typescript": "^5.8.3",
-    "typescript-eslint": "^8.59.0",
-    "vite": "^6.2.6"
+    "turbo": "^2.0.0",
+    "typescript": "^5.8.3"
   },
-  "build": {
-    "appId": "com.agenxy.desktop",
-    "productName": "Agenxy",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "out/**/*",
-      "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "resources/app-icon.png",
-        "to": "app-icon.png"
-      },
-      {
-        "from": "src/skills",
-        "to": "skills",
-        "filter": [
-          "**/*"
-        ]
-      }
-    ],
-    "win": {
-      "target": [
-        "nsis"
-      ],
-      "icon": "resources/app-icon.png"
-    },
-    "mac": {
-      "target": [
-        "dmg"
-      ],
-      "icon": "resources/app-icon.png"
-    },
-    "linux": {
-      "target": [
-        "AppImage"
-      ],
-      "icon": "resources/app-icon.png"
-    }
-  }
+  "packageManager": "pnpm@9.0.0"
 }

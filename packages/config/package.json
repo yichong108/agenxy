@@ -1,0 +1,22 @@
+{
+  "name": "@agenxy/config",
+  "version": "1.0.0",
+  "description": "Shared configuration files for Agenxy monorepo",
+  "type": "module",
+  "main": "./eslint.config.js",
+  "exports": {
+    "./eslint": "./eslint.config.js",
+    "./prettier": "./prettier.config.js",
+    "./tsconfig": "./tsconfig.base.json"
+  },
+  "scripts": {
+    "lint": "echo 'No lint needed for config package'"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.3",
+    "typescript": "^5.8.3"
+  }
+}

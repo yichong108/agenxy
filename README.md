@@ -1,63 +1,86 @@
 # Agenxy
 
-[中文说明](README.zh-CN.md)
+Agenxy — AI Agent 套件，包含桌面应用、落地页和本地可观测性服务。
 
-**Agenxy** is an Electron desktop application for working with AI agents. The UI is built with React and Ant Design; the main process integrates LangChain providers and the Model Context Protocol (MCP) for tools and skills.
+## 项目结构 (Monorepo)
 
-## UI preview
-
-![Agenxy main window with workspace sidebar, session tree, and agent chat](assets/agenxy-ui-screenshot.png)
-
-## Features
-
-- Workspace-oriented layout (file tree, editor, agent chat)
-- MCP server management and runtime integration
-- Skills hub and skills market catalog
-- Terminal and filesystem tooling from the main process
-- Packaged installers for Windows (NSIS), macOS (DMG), and Linux (AppImage)
-
-## Requirements
-
-- [Node.js](https://nodejs.org/) (LTS recommended; aligns with `engines` if the project adds one)
-
-## Getting started
-
-```bash
-npm install
-npm run dev
+```
+agenxy/
+├── apps/
+│   ├── desktop/          # Electron 桌面应用
+│   └── landing/          # 落地页 (Next.js)
+├── packages/
+│   ├── shared-types/     # 共享类型定义
+│   ├── ui/               # 共享 UI 组件
+│   └── config/           # 共享配置 (ESLint, Prettier, TS)
+├── services/
+│   └── langfuse-local/   # 本地 Langfuse 服务
+├── docs/                 # 文档
+└── package.json          # Workspace root
 ```
 
-### Optional: Langfuse observability
+## 快速开始
 
-To enable Langfuse tracing locally, copy **`.env.example`** to **`.env.development.local`** (gitignored), add your project public and secret keys, then restart the app. See [docs/langfuse.md](docs/langfuse.md).
+### 前置要求
 
-## Scripts
+- [Node.js](https://nodejs.org/) 18+
+- [pnpm](https://pnpm.io/) 9+
+- [Docker](https://www.docker.com/) (如需本地 Langfuse 服务)
 
-| Command                                   | Description                                     |
-| ----------------------------------------- | ----------------------------------------------- |
-| `npm run dev`                             | Start the app in development with HMR           |
-| `npm run dev:debug`                       | Dev with Node/Electron inspector ports          |
-| `npm run build`                           | Production build plus `electron-builder`        |
-| `npm run build:app`                       | Build main/preload/renderer only (no installer) |
-| `npm run preview`                         | Preview the built renderer bundle               |
-| `npm run typecheck`                       | TypeScript check for web and node configs       |
-| `npm run lint` / `npm run lint:fix`       | ESLint                                          |
-| `npm run format` / `npm run format:check` | Prettier                                        |
+### 安装依赖
 
-Built installers are emitted under `release/` (see `electron-builder` config in `package.json`).
+```bash
+pnpm install
+```
 
-## Repository layout
+### 开发桌面应用
 
-| Path                      | Role                                                          |
-| ------------------------- | ------------------------------------------------------------- |
-| `src/main/`               | Electron main process, agent service, MCP, tools, persistence |
-| `src/renderer/`           | React UI                                                      |
-| `src/preload/`            | Preload scripts and IPC bridges                               |
-| `src/shared/`             | Types and code shared between processes                       |
-| `electron.vite.config.ts` | electron-vite bundling for main, preload, and renderer        |
+```bash
+# 启动桌面应用
+pnpm desktop:dev
 
-Contributing: see [CONTRIBUTING.md](CONTRIBUTING.md). Contributor notes for AI assistants and humans: see [AGENTS.md](AGENTS.md).
+# 调试模式
+pnpm --filter @agenxy/desktop dev:debug
+```
+
+### 开发落地页
+
+```bash
+# 启动落地页
+pnpm landing:dev
+```
+
+### 本地 Langfuse 服务
+
+```bash
+# 初始化配置
+pnpm langfuse:init
+
+# 启动服务
+pnpm langfuse:start
+
+# 查看状态
+pnpm langfuse:status
+```
+
+## 常用命令
+
+| 命令 | 说明 |
+|------|------|
+| `pnpm dev` | 并行启动所有应用的开发服务器 |
+| `pnpm build` | 构建所有应用 |
+| `pnpm lint` | 运行所有包的 lint |
+| `pnpm typecheck` | 运行所有包的类型检查 |
+| `pnpm format` | 格式化所有代码 |
+
+## 文档
+
+- [Langfuse 配置说明](./docs/langfuse.md)
+
+## 贡献
+
+请阅读 [AGENTS.md](./AGENTS.md) 了解代码规范。
 
 ## License
 
-[MIT](LICENSE)
+MIT

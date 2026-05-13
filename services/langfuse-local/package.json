@@ -1,0 +1,15 @@
+{
+  "name": "@agenxy/langfuse-local",
+  "version": "1.0.0",
+  "description": "Local Langfuse observability service (Docker Compose)",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "init": "node setup-langfuse-local.js init",
+    "start": "node setup-langfuse-local.js start",
+    "stop": "node setup-langfuse-local.js stop",
+    "status": "node setup-langfuse-local.js status",
+    "logs": "node setup-langfuse-local.js logs",
+    "reset": "node setup-langfuse-local.js reset"
+  }
+}

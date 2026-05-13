@@ -1,14 +1,37 @@
+# Dependencies
 node_modules
-.deps-staging
+.pnpm-store
+
+# Build outputs
 out
 release
 dist
-.DS_Store
-*.log
-.idea/
-workspace_demo
+*.tsbuildinfo
 
-# Local env files (secrets). Use `.env.example` as a template; never commit real keys.
+# Logs
+*.log
+npm-debug.log*
+
+# IDE
+.DS_Store
+.idea/
+.vscode/settings.json
+
+# Env files (secrets)
 .env
 .env.*
 !.env.example
+
+# Misc
+.deps-staging
+workspace_demo
+
+# Turbo
+.turbo
+
+# Next.js
+.next
+.vercel
+
+# Testing
+coverage
