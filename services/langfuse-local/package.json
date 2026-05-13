@@ -5,11 +5,11 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "init": "node setup-langfuse-local.js init",
-    "start": "node setup-langfuse-local.js start",
-    "stop": "node setup-langfuse-local.js stop",
-    "status": "node setup-langfuse-local.js status",
-    "logs": "node setup-langfuse-local.js logs",
-    "reset": "node setup-langfuse-local.js reset"
+    "start": "docker-compose --env-file .env.local up -d",
+    "stop": "docker-compose stop",
+    "down": "docker-compose down",
+    "status": "docker-compose ps",
+    "logs": "docker-compose logs -f",
+    "reset": "docker-compose down -v"
   }
 }

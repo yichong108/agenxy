@@ -24,9 +24,12 @@ workspace_demo
 # Turbo
 .turbo
 
-# Next.js
-.next
-.vercel
-
 # Testing
 coverage
+
+# Env files (secrets)
+.env
+.env.*
+!.env.example
+
+

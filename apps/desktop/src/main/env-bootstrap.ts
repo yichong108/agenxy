@@ -1,40 +1,24 @@
 /**
- * 在其它主进程模块之前执行：加载 apps/desktop 目录下的 `.env*` 到 `process.env`。
+ * 在其它主进程模块之前执行：动态加载 apps/desktop 目录下的 `.env*` 到 `process.env`。
  * 只读取 desktop 自身目录的配置，不向父级查找。
  *
- * 优先级顺序（高到低）：
- * 1. `.env.development.local` - 本地特定配置（最高优先级，覆盖所有）
- * 2. `.env.development` - 开发环境配置（覆盖 .env）
- * 3. `.env` - 基础配置（只在变量未定义时设置）
+ * 支持任意 `.env.*` 文件，自动识别并排序加载。优先级遵循 Vite 规范：
+ *   高优先级（后加载，可覆盖）：.env.[mode].local > .env.[mode] > .env.local
+ *   低优先级（先加载）：.env
+ *
+ * 例如：.env.production.local > .env.production > .env.local > .env
  *
  * 合并完成后关闭 LangChain 内置追踪（不使用 LangSmith / langsmith 客户端）。
  * Langfuse 见 `LANGFUSE_*` 环境变量，在 `index.ts` 中于本模块之后启动 OpenTelemetry。
  */
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parse } from 'dotenv'
 
 function disableLangChainBuiltInTracing(): void {
   process.env.LANGCHAIN_TRACING_V2 = 'false'
   process.env.LANGSMITH_TRACING_V2 = 'false'
-}
-
-function parseDotEnv(content: string): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const rawLine of content.split(/\r?\n/)) {
-    const line = rawLine.trim()
-    if (!line || line.startsWith('#')) continue
-    const eq = line.indexOf('=')
-    if (eq <= 0) continue
-    const key = line.slice(0, eq).trim()
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue
-    let val = line.slice(eq + 1).trim()
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-      val = val.slice(1, -1)
-    }
-    out[key] = val
-  }
-  return out
 }
 
 const mainDir = dirname(fileURLToPath(import.meta.url))
@@ -45,16 +29,69 @@ const mainDir = dirname(fileURLToPath(import.meta.url))
  */
 const desktopDir = resolve(mainDir, '../..')
 
-// 合并到 process.env（.env.development 和 .env.development.local 优先级更高，可以覆盖已存在的值）
-// 优先级顺序: .env.development.local > .env.development > .env
-const envFiles = ['.env', '.env.development', '.env.development.local']
+/**
+ * 动态扫描并排序环境文件
+ * 遵循 Vite 优先级规范（高到低）：
+ *   .env.[mode].local > .env.[mode] > .env.local > .env
+ *
+ * 例如：
+ *   .env.production.local (最高 - 生产环境本地配置)
+ *   .env.production       (高 - 生产环境配置)
+ *   .env.local            (中 - 通用本地配置)
+ *   .env                   (低 - 基础配置)
+ */
+function getEnvFiles(dir: string): string[] {
+  if (!existsSync(dir)) return []
+
+  const allFiles = readdirSync(dir)
+  const envFiles = allFiles.filter(name => {
+    // 匹配 .env 或 .env.* 但不包括 .env.example
+    if (name === '.env.example') return false
+    return name === '.env' || name.startsWith('.env.')
+  })
+
+  // 解析文件名：.env.[mode].local 或 .env.[mode] 或 .env.local
+  const parseEnvFile = (name: string): { mode: string | null; isLocal: boolean } => {
+    if (name === '.env') return { mode: null, isLocal: false }
+    if (name === '.env.local') return { mode: null, isLocal: true }
+
+    // 去掉前缀 .env.
+    const rest = name.slice(5)
+    const isLocal = rest.endsWith('.local')
+    const mode = isLocal ? rest.slice(0, -6) || null : rest || null
+
+    return { mode, isLocal }
+  }
+
+  // 计算优先级分数（分数越低，排序越靠前，加载越早）
+  // 加载顺序：低优先级先加载，高优先级后加载（覆盖前者）
+  const getPriority = (name: string): number => {
+    const { mode, isLocal } = parseEnvFile(name)
+
+    if (name === '.env') return 0                    // 基础配置：最早加载
+    if (name === '.env.local') return 10             // 通用本地
+    if (mode && !isLocal) return 20                   // .env.[mode]
+    if (mode && isLocal) return 30                    // .env.[mode].local：最晚加载（最高优先级）
+    return 15                                         // 其他 .env.xxx
+  }
+
+  return envFiles.sort((a, b) => getPriority(a) - getPriority(b))
+}
+
+// 获取排序后的环境文件列表
+const envFiles = getEnvFiles(desktopDir)
+
+// 合并到 process.env（优先级高的文件可以覆盖已存在的值）
 for (const file of envFiles) {
   const full = join(desktopDir, file)
   if (!existsSync(full)) continue
-  const parsed = parseDotEnv(readFileSync(full, 'utf8'))
+
+  const content = readFileSync(full, 'utf8')
+  const parsed = parse(content)
+
   for (const [k, v] of Object.entries(parsed)) {
-    // .env.development 和 .env.development.local 可以覆盖已有值
-    // .env 只在变量未定义时才设置
+    // .env 基础文件只在变量未定义时才设置
+    // 其他文件可以覆盖已有值
     if (file === '.env') {
       if (process.env[k] === undefined) {
         process.env[k] = v

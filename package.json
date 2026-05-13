@@ -19,7 +19,6 @@
     "desktop:preview": "pnpm --filter @agenxy/desktop preview",
     "landing:dev": "pnpm --filter @agenxy/landing dev",
     "landing:build": "pnpm --filter @agenxy/landing build",
-    "langfuse:init": "pnpm --filter @agenxy/langfuse-local run init",
     "langfuse:start": "pnpm --filter @agenxy/langfuse-local run start",
     "langfuse:stop": "pnpm --filter @agenxy/langfuse-local run stop",
     "langfuse:status": "pnpm --filter @agenxy/langfuse-local run status",

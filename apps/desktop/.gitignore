@@ -17,6 +17,11 @@ npm-debug.log*
 .idea/
 .vscode/settings.json
 
+# Env files (secrets)
+.env
+.env.*
+!.env.example
+
 # Misc
 .deps-staging
 workspace_demo

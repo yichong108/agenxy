@@ -1,5 +1,4 @@
 # Langfuse Local Service
-
 本地 Langfuse 可观测性服务，基于 Docker Compose 部署。
 
 ## 目录
@@ -16,9 +15,7 @@
 
 ```bash
 # 从项目根目录运行
-
-# 1. 初始化配置
-pnpm langfuse:init
+# 1. 先初始化配置（参考.env.example创建环境变量文件.env.local）
 
 # 2. 启动服务
 pnpm langfuse:start
@@ -30,7 +27,6 @@ pnpm langfuse:start
 
 | 命令 | 说明 |
 |------|------|
-| `pnpm langfuse:init` | 创建 .env.langfuse.local |
 | `pnpm langfuse:start` | 启动所有服务 |
 | `pnpm langfuse:stop` | 停止所有服务 |
 | `pnpm langfuse:status` | 查看服务状态 |
