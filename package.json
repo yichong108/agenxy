@@ -11,8 +11,12 @@
     "dev": "turbo run dev --parallel",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
-    "format:check": "prettier --check \"**/*.{ts,tsx,json,md}\"",
+    "format": "turbo run format",
+    "format:check": "turbo run format:check",
+    "format:desktop": "pnpm --filter @agenxy/desktop run format",
+    "format:check:desktop": "pnpm --filter @agenxy/desktop run format:check",
+    "format:landing": "pnpm --filter @agenxy/landing run format",
+    "format:check:landing": "pnpm --filter @agenxy/landing run format:check",
     "desktop:dev": "pnpm --filter @agenxy/desktop dev",
     "desktop:build": "pnpm --filter @agenxy/desktop build",
     "desktop:build:app": "pnpm --filter @agenxy/desktop build:app",
@@ -23,13 +27,9 @@
     "langfuse:stop": "pnpm --filter @agenxy/langfuse-local run stop",
     "langfuse:status": "pnpm --filter @agenxy/langfuse-local run status",
     "langfuse:logs": "pnpm --filter @agenxy/langfuse-local run logs",
-    "langfuse:reset": "pnpm --filter @agenxy/langfuse-local run reset",
-    "prepare": "husky"
+    "langfuse:reset": "pnpm --filter @agenxy/langfuse-local run reset"
   },
   "devDependencies": {
-    "husky": "^9.1.7",
-    "lint-staged": "^17.0.4",
-    "prettier": "^3.8.3",
     "turbo": "^2.0.0"
   },
   "packageManager": "pnpm@9.0.0"

@@ -14,7 +14,9 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
     "lint": "eslint . --ext .ts,.tsx",
-    "lint:fix": "eslint . --ext .ts,.tsx --fix"
+    "lint:fix": "eslint . --ext .ts,.tsx --fix",
+    "format": "prettier --write \"**/*.{ts,tsx,mjs,cjs,js,json,md,scss,css}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,mjs,cjs,js,json,md,scss,css}\""
   },
   "dependencies": {
     "@ant-design/icons": "^5.6.1",

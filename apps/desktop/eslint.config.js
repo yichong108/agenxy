@@ -12,7 +12,14 @@ const repoRoot = fileURLToPath(new URL('.', import.meta.url))
 
 export default tseslint.config(
   {
-    ignores: ['out/**', 'release/**', 'node_modules/**', 'eslint.config.js', 'src/extensions/**', "src/skills/**"]
+    ignores: [
+      'out/**',
+      'release/**',
+      'node_modules/**',
+      'eslint.config.js',
+      'src/extensions/**',
+      'src/skills/**'
+    ]
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

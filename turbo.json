@@ -15,6 +15,14 @@
     },
     "typecheck": {
       "cache": false
+    },
+    "format": {
+      "cache": true,
+      "outputs": []
+    },
+    "format:check": {
+      "cache": true,
+      "outputs": []
     }
   }
 }

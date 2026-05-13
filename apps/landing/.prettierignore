@@ -1,0 +1,11 @@
+src/skills/**/*
+dist/**/*
+release/**/*
+node_modules/**/*
+.turbo/**/*
+.vscode/**/*
+.git/**/*
+.gitignore
+.prettierignore
+.prettierrc
+public/**/*

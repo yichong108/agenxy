@@ -48,7 +48,7 @@ export default defineConfig({
   preload: {
     resolve: {
       alias: {
-        '@': aliasSrc,
+        '@': aliasSrc
       }
     },
     plugins: [externalizeDepsPlugin()],
