@@ -34,24 +34,6 @@ export type IntentClassification = {
 }
 
 /**
- * 意图与技能名的映射
- * coding 意图加载所有编程相关技能
- * general 意图不限制技能（加载所有）
- */
-export const INTENT_TO_SKILLS: Record<UserIntent, string[]> = {
-  // coding 意图加载所有编程相关技能
-  coding: [
-    'skill_bug_fix',
-    'skill_feature_implement',
-    'skill_code_review',
-    'skill_debug_workflow',
-    'skill_release_workflow'
-  ],
-  // general 意图加载所有技能（不限制）
-  general: []
-}
-
-/**
  * 所有技能的意图标签（用于反向映射）
  * 技能名格式：skill_<name>（sanitizeToolName 转换后）
  */
@@ -162,16 +144,6 @@ function validateIntent(raw: unknown): UserIntent {
     }
   }
   return 'general'
-}
-
-/**
- * 根据意图获取应加载的技能名列表
- * - general 意图返回空数组（表示加载所有技能）
- * - coding 意图返回编程相关技能列表
- */
-export function getSkillNamesForIntent(intent: UserIntent): string[] {
-  if (intent === 'general') return []
-  return INTENT_TO_SKILLS[intent] || []
 }
 
 /**

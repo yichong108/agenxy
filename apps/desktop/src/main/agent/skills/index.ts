@@ -37,6 +37,22 @@ const MAX_LOADED_SKILLS = 96
 
 export const MAX_SKILL_MD_SIZE_BYTES = 10 * 1024 * 1024
 
+export type SkillTagEntry = {
+  id: string
+  tags: UserIntent[]
+}
+
+export const SKILLS_WITH_TAGS: readonly SkillTagEntry[] = [
+  { id: 'bug_fix', tags: ['coding'] },
+  { id: 'code_review', tags: ['coding'] },
+  { id: 'debug_workflow', tags: ['coding'] },
+  { id: 'feature_implement', tags: ['coding'] },
+  { id: 'release_workflow', tags: ['coding'] },
+  { id: 'triage_workflow', tags: ['coding'] },
+  { id: 'frontend_slides', tags: ['general'] },
+  { id: 'frontend_slides_ppt_controlled', tags: ['general'] }
+]
+
 type MarkdownCollectOpts = {
   /** Only skip these top-level subdirectories when `current === rootAbs` */
   rootAbs: string
