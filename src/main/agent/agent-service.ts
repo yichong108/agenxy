@@ -4,6 +4,7 @@ import { AIMessage, HumanMessage, SystemMessage, type BaseMessage } from '@langc
 import { tool } from '@langchain/core/tools'
 import { createReactAgent } from '@langchain/langgraph/prebuilt'
 import { ChatOpenAI } from '@langchain/openai'
+import type { CallbackHandler } from '@langfuse/langchain'
 import type { WebContents } from 'electron'
 import { z } from 'zod'
 
@@ -11,6 +12,7 @@ import { StreamBatcher } from '@/main/agent/batcher'
 import { classifyIntent, type UserIntent } from '@/main/agent/intent-classifier'
 import { ConcurrencyQueue } from '@/main/agent/queue'
 import { buildSkillBundle } from '@/main/agent/skills/index'
+import { createLangfuseCallbackHandler } from '@/main/langfuse'
 import { logScope } from '@/main/logger'
 import { buildMcpLangChainTools } from '@/main/mcp/mcp-runtime'
 import {
@@ -263,7 +265,8 @@ async function streamIntentSummary(
   settings: AppSettings,
   userText: string,
   ac: AbortController,
-  intentBatcher: StreamBatcher
+  intentBatcher: StreamBatcher,
+  langfuseHandler?: CallbackHandler | null
 ): Promise<string> {
   const model = createLanguageModel(settings)
   const system = new SystemMessage(
@@ -276,7 +279,10 @@ async function streamIntentSummary(
   const deadline = Date.now() + INTENT_SUMMARY_TIMEOUT_MS
   let acc = ''
   try {
-    const stream = await model.stream([system, human], { signal: ac.signal })
+    const stream = await model.stream([system, human], {
+      signal: ac.signal,
+      ...(langfuseHandler ? { callbacks: [langfuseHandler] } : {})
+    })
     for await (const chunk of stream) {
       if (Date.now() > deadline) break
       const piece = contentToText((chunk as { content?: unknown }).content)
@@ -307,9 +313,13 @@ async function invokeAgentWithGuard(
   messages: BaseMessage[],
   ac: AbortController,
   onToken: (token: string) => void,
-  options: { recursionLimit: number; timeoutMs: number }
+  options: {
+    recursionLimit: number
+    timeoutMs: number
+    langfuseHandler?: CallbackHandler | null
+  }
 ): Promise<unknown> {
-  const { recursionLimit, timeoutMs } = options
+  const { recursionLimit, timeoutMs, langfuseHandler } = options
   let timer: ReturnType<typeof setTimeout> | null = null
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
@@ -332,7 +342,8 @@ async function invokeAgentWithGuard(
               handleLLMNewToken(token: string) {
                 onToken(token)
               }
-            }
+            },
+            ...(langfuseHandler ? [langfuseHandler] : [])
           ]
         }
       ),
@@ -716,6 +727,16 @@ export async function runUserMessage(
     const runStartedAt = Date.now()
     session.controller = ac
 
+    const langfuseHandler = createLangfuseCallbackHandler({
+      sessionId,
+      tags: ['agenxy', composerMode],
+      traceMetadata: {
+        run_id: runId,
+        trace_id: traceId,
+        workspace_id: session.workspaceId
+      }
+    })
+
     agentLog.info(
       `[runUserMessage] run-start: ${runId}, traceId: ${traceId}, sessionId: ${sessionId}, timestampMs: ${runStartedAt}`
     )
@@ -745,7 +766,13 @@ export async function runUserMessage(
     })
     let intentThinking = ''
     try {
-      intentThinking = await streamIntentSummary(settings, userText, ac, intentBatcher)
+      intentThinking = await streamIntentSummary(
+        settings,
+        userText,
+        ac,
+        intentBatcher,
+        langfuseHandler
+      )
     } catch (e) {
       intentBatcher.flush()
       emit({ type: 'intent-end', sessionId, runId, traceId })
@@ -765,7 +792,12 @@ export async function runUserMessage(
       let detectedIntents: UserIntent[] = []
       if (composerMode === 'build') {
         try {
-          const classification = await classifyIntent(userText, settings, ac.signal)
+          const classification = await classifyIntent(
+            userText,
+            settings,
+            ac.signal,
+            langfuseHandler
+          )
           if (classification.intent !== 'general' && classification.confidence > 0.6) {
             detectedIntents = [classification.intent]
           }
@@ -822,7 +854,11 @@ export async function runUserMessage(
         streamedChars += token.length
         batcher.push(token)
       }
-      const agentInvokeOpts = { recursionLimit, timeoutMs: invokeTimeoutMs }
+      const agentInvokeOpts = {
+        recursionLimit,
+        timeoutMs: invokeTimeoutMs,
+        langfuseHandler
+      }
 
       const result = await invokeAgentWithGuard(
         agent,

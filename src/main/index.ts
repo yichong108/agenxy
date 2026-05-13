@@ -3,6 +3,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import '@/main/env-bootstrap'
+
 import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron'
 
 import { bindAgentIpc, cancelRun, runUserMessage } from '@/main/agent/agent-service'
@@ -12,6 +14,7 @@ import {
   uninstallLegacySkillFolder,
   uninstallMarketSkillFolder
 } from '@/main/agent/skills'
+import { shutdownLangfuseTracing, startLangfuseTracingIfConfigured } from '@/main/langfuse'
 import { mainLog } from '@/main/logger'
 import { disposeMcpConnectionPool, probeMcpServer, warmupMcpServers } from '@/main/mcp/mcp-runtime'
 import {
@@ -64,6 +67,8 @@ import {
   type WebEditAction,
   type WindowChromeAction
 } from '@/shared/ipc'
+
+startLangfuseTracingIfConfigured()
 
 mainLog.info('Electron 主进程启动')
 
@@ -702,6 +707,7 @@ app.whenReady().then(() => {
 app.on('before-quit', () => {
   applicationIsQuitting = true
   void disposeMcpConnectionPool()
+  void shutdownLangfuseTracing()
 })
 
 app.on('window-all-closed', () => {

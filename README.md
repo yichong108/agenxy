@@ -27,6 +27,10 @@ npm install
 npm run dev
 ```
 
+### Optional: Langfuse observability
+
+To enable Langfuse tracing locally, copy **`.env.example`** to **`.env.development.local`** (gitignored), add your project public and secret keys, then restart the app. See [docs/langfuse.md](docs/langfuse.md).
+
 ## Scripts
 
 | Command                                   | Description                                     |

@@ -27,6 +27,10 @@ npm install
 npm run dev
 ```
 
+### 可选：Langfuse 可观测性
+
+若需在本地启用 Langfuse 上报，可复制根目录 **`.env.example`** 为 **`.env.development.local`**（该模式已被 `.gitignore` 忽略），填入项目公钥与私钥后重启应用。详细说明见 [docs/langfuse.md](docs/langfuse.md)。
+
 ## 常用脚本
 
 | 命令                                      | 说明                                          |

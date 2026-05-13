@@ -1,5 +1,6 @@
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { ChatOpenAI } from '@langchain/openai'
+import type { CallbackHandler } from '@langfuse/langchain'
 import { z } from 'zod'
 
 import type { AppSettings } from '@/shared/ipc'
@@ -103,7 +104,8 @@ function createLanguageModel(settings: AppSettings) {
 export async function classifyIntent(
   userText: string,
   settings: AppSettings,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  langfuseHandler?: CallbackHandler | null
 ): Promise<IntentClassification> {
   const model = createLanguageModel(settings).withStructuredOutput(IntentClassificationSchema, {
     name: 'classify_user_intent',
@@ -127,7 +129,10 @@ Output requirements:
 
   try {
     const messages = [new SystemMessage(systemPrompt), new HumanMessage(userText)]
-    const result = await model.invoke(messages, { signal })
+    const result = await model.invoke(messages, {
+      signal,
+      ...(langfuseHandler ? { callbacks: [langfuseHandler] } : {})
+    })
 
     // Additional validation to ensure intent value is valid (handle unexpected enum values from model)
     const intent = validateIntent(result.intent)

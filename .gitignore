@@ -5,7 +5,10 @@ release
 dist
 .DS_Store
 *.log
-.env
-.env.*
 .idea/
 workspace_demo
+
+# Local env files (secrets). Use `.env.example` as a template; never commit real keys.
+.env
+.env.*
+!.env.example
