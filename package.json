@@ -2,6 +2,18 @@
   "name": "agenxy",
   "version": "1.0.0-alpha.1",
   "description": "Agenxy — AI Agent 套件 (桌面应用 + 落地页 + 本地服务)",
+  "keywords": [
+    "agenxy",
+    "ai",
+    "agent",
+    "desktop",
+    "landing",
+    "langfuse"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agenxy/agenxy.git"
+  },
   "author": "Wang Zhang",
   "license": "MIT",
   "type": "module",

@@ -1,86 +1,117 @@
 # Agenxy
 
-Agenxy — AI Agent 套件，包含桌面应用、落地页和本地可观测性服务。
+[简体中文说明](README.zh-CN.md)
 
-## 项目结构 (Monorepo)
+**Agenxy** is an AI agent suite in a **pnpm + Turborepo** monorepo: an **Electron** desktop client, a **Next.js** marketing site, and an optional **local Langfuse** stack for observability.
+
+## Preview
+
+![Agenxy main UI: workspace sidebar, session tree, and chat](assets/agenxy-ui-screenshot.png)
+
+## Highlights (desktop)
+
+- Workspace-oriented layout: file tree, editor, and chat
+- **MCP (Model Context Protocol)** server management and runtime integration
+- Skills hub and skills marketplace
+- Main-process capabilities such as terminal and filesystem tools
+- Installers: **Windows (NSIS)**, **macOS (DMG)**, **Linux (AppImage)** — output under `apps/desktop/release/`
+
+## Repository layout
+
+The workspace is defined in `pnpm-workspace.yaml` (`apps/*`, `packages/*`, `services/*`). Current first-party packages live under `apps/` and `services/`.
 
 ```
 agenxy/
 ├── apps/
-│   ├── desktop/          # Electron 桌面应用
-│   └── landing/          # 落地页 (Next.js)
-├── packages/
-│   ├── shared-types/     # 共享类型定义
-│   ├── ui/               # 共享 UI 组件
-│   └── config/           # 共享配置 (ESLint, Prettier, TS)
+│   ├── desktop/              # Electron app (electron-vite, React, Ant Design)
+│   └── landing/              # Next.js landing page
 ├── services/
-│   └── langfuse-local/   # 本地 Langfuse 服务
-├── docs/                 # 文档
-└── package.json          # Workspace root
+│   └── langfuse-local/       # Docker Compose Langfuse stack
+├── assets/                   # Shared images (e.g. screenshots)
+├── package.json              # Root scripts (Turbo orchestration)
+└── turbo.json
 ```
 
-## 快速开始
+Desktop source layout:
 
-### 前置要求
+| Path | Role |
+| --- | --- |
+| `apps/desktop/src/main/` | Electron main process: agents, MCP, tools, storage |
+| `apps/desktop/src/renderer/` | React UI |
+| `apps/desktop/src/preload/` | Preload and IPC bridge |
+| `apps/desktop/src/shared/` | Shared types and logic across processes |
 
-- [Node.js](https://nodejs.org/) 18+
-- [pnpm](https://pnpm.io/) 9+
-- [Docker](https://www.docker.com/) (如需本地 Langfuse 服务)
+## Prerequisites
 
-### 安装依赖
+- [Node.js](https://nodejs.org/) **18+**
+- [pnpm](https://pnpm.io/) **9** (see `packageManager` in root `package.json`)
+- [Docker](https://www.docker.com/) — only if you run **local Langfuse** (`services/langfuse-local`)
+
+## Install
 
 ```bash
 pnpm install
 ```
 
-### 开发桌面应用
+## Development
+
+### Desktop app
 
 ```bash
-# 启动桌面应用
 pnpm desktop:dev
-
-# 调试模式
-pnpm --filter @agenxy/desktop dev:debug
 ```
 
-### 开发落地页
+Debug build (inspect / remote debugging ports):
 
 ```bash
-# 启动落地页
+pnpm --filter @agenxy/desktop run dev:debug
+```
+
+### Landing page
+
+```bash
 pnpm landing:dev
 ```
 
-### 本地 Langfuse 服务
+### Run everything in dev mode
 
 ```bash
-# 初始化配置
-pnpm langfuse:init
-
-# 启动服务
-pnpm langfuse:start
-
-# 查看状态
-pnpm langfuse:status
+pnpm dev
 ```
 
-## 常用命令
+(Turbo runs all `dev` tasks in parallel.)
 
-| 命令             | 说明                         |
-| ---------------- | ---------------------------- |
-| `pnpm dev`       | 并行启动所有应用的开发服务器 |
-| `pnpm build`     | 构建所有应用                 |
-| `pnpm lint`      | 运行所有包的 lint            |
-| `pnpm typecheck` | 运行所有包的类型检查         |
-| `pnpm format`    | 格式化所有代码               |
+## Local Langfuse (optional)
 
-## 文档
+1. Copy `services/langfuse-local/.env.example` to `services/langfuse-local/.env.local` and adjust values.
+2. From the repo root: `pnpm langfuse:start` (and `pnpm langfuse:stop`, `status`, `logs`, `reset` as needed).
 
-- [Langfuse 配置说明](./docs/langfuse.md)
+See [services/langfuse-local/README.md](services/langfuse-local/README.md) for ports and details.
 
-## 贡献
+To send traces from the **desktop app** to that stack, copy `apps/desktop/.env.example` to `apps/desktop/.env.local` and set `LANGFUSE_BASE_URL`, `LANGFUSE_PUBLIC_KEY`, and `LANGFUSE_SECRET_KEY`, then restart the app.
 
-请阅读 [AGENTS.md](./AGENTS.md) 了解代码规范。
+## Common scripts (root)
+
+| Command | Description |
+| --- | --- |
+| `pnpm dev` | Dev servers for all packages that define `dev` |
+| `pnpm build` | Production build via Turbo |
+| `pnpm lint` | ESLint across the workspace |
+| `pnpm typecheck` | TypeScript checks across the workspace |
+| `pnpm format` / `pnpm format:check` | Prettier (all); or `pnpm format:desktop` / `pnpm format:landing` for a single app |
+
+### Desktop-only (from root)
+
+| Command | Description |
+| --- | --- |
+| `pnpm desktop:build` | `electron-vite build` + `electron-builder` |
+| `pnpm desktop:build:app` | Build only (no installer) |
+| `pnpm desktop:preview` | Preview the built renderer bundle |
+
+## Contributing
+
+See [AGENTS.md](AGENTS.md) for maintainer and AI-assistant conventions (including English commit messages and PR metadata).
 
 ## License
 
-MIT
+[MIT](LICENSE)
