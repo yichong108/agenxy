@@ -23,9 +23,13 @@
     "langfuse:stop": "pnpm --filter @agenxy/langfuse-local run stop",
     "langfuse:status": "pnpm --filter @agenxy/langfuse-local run status",
     "langfuse:logs": "pnpm --filter @agenxy/langfuse-local run logs",
-    "langfuse:reset": "pnpm --filter @agenxy/langfuse-local run reset"
+    "langfuse:reset": "pnpm --filter @agenxy/langfuse-local run reset",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.4",
+    "prettier": "^3.8.3",
     "turbo": "^2.0.0"
   },
   "packageManager": "pnpm@9.0.0"
