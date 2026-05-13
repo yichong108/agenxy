@@ -150,6 +150,54 @@ services:
       # 可选: 关闭遥测
       TELEMETRY_ENABLED: "${TELEMETRY_ENABLED:-false}"
 
+  # Langfuse Worker (处理 ingestion 队列)
+  langfuse-worker:
+    image: langfuse/langfuse-worker:latest
+    container_name: langfuse-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      langfuse-web:
+        condition: service_started
+    environment:
+      # 数据库配置
+      DATABASE_URL: postgresql://${POSTGRES_USER:-langfuse}:${POSTGRES_PASSWORD:-langfuse}@postgres:5432/${POSTGRES_DB:-langfuse}
+
+      # ClickHouse 配置
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000/default
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+
+      # Redis 配置
+      REDIS_CONNECTION_STRING: redis://default:${REDIS_PASSWORD:-langfuse}@redis:6379/0
+
+      # salt
+      SALT: ${SALT:-salt123456789012345678901234567890}
+
+      # 加密密钥
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-4ed05349fab9c8c937b3d1f3014bfd93050bf7438c34dafb7cd73f48614d4a69}
+
+      # S3/MinIO 配置
+      LANGFUSE_S3_EVENT_UPLOAD_ENABLED: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio}
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minio123}
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+
+      # 可选: 关闭遥测
+      TELEMETRY_ENABLED: "${TELEMETRY_ENABLED:-false}"
+
 volumes:
   langfuse-postgres-data:
   langfuse-redis-data:
