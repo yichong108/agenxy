@@ -4,6 +4,7 @@ import path from 'node:path'
 import { app } from 'electron'
 import Store from 'electron-store'
 
+import { removeWorkspaceSessions } from '@/main/sessions'
 import {
   defaultProviderProfiles,
   defaultRendererUiState,
@@ -302,9 +303,7 @@ function normalizeSettings(
     typeof legacy.apiKey === 'string'
 
   const looksNewProfileShape =
-    fromProfiles != null &&
-    typeof fromProfiles === 'object' &&
-    fromProfiles.deepseek != null
+    fromProfiles != null && typeof fromProfiles === 'object' && fromProfiles.deepseek != null
 
   if (hadLegacyTopLevel && !looksNewProfileShape) {
     providerProfiles = {
@@ -479,8 +478,6 @@ export function upsertWorkspaceByPath(dir: string): WorkspaceInfo {
   const next = [...list, workspace]
   store.set('workspaces', next)
   if (listWasEmpty && getSessionsMeta(DEFAULT_WORKSPACE_ID).length > 0) {
-    const { removeWorkspaceSessions } =
-      require('@/main/sessions') as typeof import('@/main/sessions')
     removeWorkspaceSessions(DEFAULT_WORKSPACE_ID, workspace.id)
   }
   return workspace

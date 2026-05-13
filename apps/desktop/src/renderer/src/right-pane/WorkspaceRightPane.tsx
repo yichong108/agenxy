@@ -7,11 +7,11 @@ import {
   RightOutlined
 } from '@ant-design/icons'
 import Editor, { loader } from '@monaco-editor/react'
+import githubLightThemeJson from '@monaco-themes/github-light'
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
 import { App as AntdApp, Button, Spin, Tag, Typography } from 'antd'
 import { getClassWithColor } from 'file-icons-js'
-import githubLightThemeJson from '@monaco-themes/github-light'
 import * as monaco from 'monaco-editor'
 import {
   useCallback,

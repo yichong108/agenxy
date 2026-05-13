@@ -65,13 +65,13 @@ pnpm langfuse:status
 
 ## 常用命令
 
-| 命令 | 说明 |
-|------|------|
-| `pnpm dev` | 并行启动所有应用的开发服务器 |
-| `pnpm build` | 构建所有应用 |
-| `pnpm lint` | 运行所有包的 lint |
-| `pnpm typecheck` | 运行所有包的类型检查 |
-| `pnpm format` | 格式化所有代码 |
+| 命令             | 说明                         |
+| ---------------- | ---------------------------- |
+| `pnpm dev`       | 并行启动所有应用的开发服务器 |
+| `pnpm build`     | 构建所有应用                 |
+| `pnpm lint`      | 运行所有包的 lint            |
+| `pnpm typecheck` | 运行所有包的类型检查         |
+| `pnpm format`    | 格式化所有代码               |
 
 ## 文档
 

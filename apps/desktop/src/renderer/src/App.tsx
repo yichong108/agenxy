@@ -36,8 +36,8 @@ import SimpleBar from 'simplebar-react'
 import 'simplebar-react/dist/simplebar.min.css'
 import 'highlight.js/styles/github.css'
 
-import agenxyLogoUrl from '@/renderer/src/assets/agenxy-logo.png'
 import { AboutAgenxyModal } from '@/renderer/src/AboutAgenxyModal'
+import agenxyLogoUrl from '@/renderer/src/assets/agenxy-logo.png'
 import { WorkspaceLeftPane } from '@/renderer/src/left-pane'
 import {
   installCaptionBlockingOverlayObserver,

@@ -36,20 +36,20 @@ export default function Home() {
         </div>
       </div>
     </main>
-  )
+  );
 }
 
 function FeatureCard({
   title,
-  description
+  description,
 }: {
-  title: string
-  description: string
+  title: string;
+  description: string;
 }) {
   return (
     <div className="p-6 border border-gray-200 rounded-lg">
       <h3 className="text-lg font-semibold mb-2">{title}</h3>
       <p className="text-gray-600">{description}</p>
     </div>
-  )
+  );
 }

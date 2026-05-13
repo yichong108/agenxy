@@ -14,6 +14,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
 import { parse } from 'dotenv'
 
 function disableLangChainBuiltInTracing(): void {
@@ -44,7 +45,7 @@ function getEnvFiles(dir: string): string[] {
   if (!existsSync(dir)) return []
 
   const allFiles = readdirSync(dir)
-  const envFiles = allFiles.filter(name => {
+  const envFiles = allFiles.filter((name) => {
     // 匹配 .env 或 .env.* 但不包括 .env.example
     if (name === '.env.example') return false
     return name === '.env' || name.startsWith('.env.')
@@ -68,11 +69,11 @@ function getEnvFiles(dir: string): string[] {
   const getPriority = (name: string): number => {
     const { mode, isLocal } = parseEnvFile(name)
 
-    if (name === '.env') return 0                    // 基础配置：最早加载
-    if (name === '.env.local') return 10             // 通用本地
-    if (mode && !isLocal) return 20                   // .env.[mode]
-    if (mode && isLocal) return 30                    // .env.[mode].local：最晚加载（最高优先级）
-    return 15                                         // 其他 .env.xxx
+    if (name === '.env') return 0 // 基础配置：最早加载
+    if (name === '.env.local') return 10 // 通用本地
+    if (mode && !isLocal) return 20 // .env.[mode]
+    if (mode && isLocal) return 30 // .env.[mode].local：最晚加载（最高优先级）
+    return 15 // 其他 .env.xxx
   }
 
   return envFiles.sort((a, b) => getPriority(a) - getPriority(b))

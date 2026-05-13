@@ -329,7 +329,9 @@ async function invokeAgentWithGuard(
   })
   try {
     agentLog.info(`[invokeAgentWithGuard] options: ${JSON.stringify(options, null, 2)}`)
-    agentLog.info(`[invokeAgentWithGuard] langfuseHandler: ${langfuseHandler ? '已传递' : '未传递'}`)
+    agentLog.info(
+      `[invokeAgentWithGuard] langfuseHandler: ${langfuseHandler ? '已传递' : '未传递'}`
+    )
 
     const result = await Promise.race([
       agent.invoke(

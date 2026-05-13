@@ -19,7 +19,6 @@ function readGitShortHash(cwd: string): string {
   }
 }
 const aliasSrc = resolve(__dirname, 'src')
-const aliasShared = resolve(__dirname, 'src/shared')
 /** monaco-themes 未在 package exports 中暴露 themes/，需直连磁盘路径供 Vite 解析 */
 const monacoGithubLightThemeJson = resolve(
   rootDir,
@@ -34,8 +33,7 @@ export default defineConfig({
     },
     resolve: {
       alias: {
-        '@': aliasSrc,
-        '@shared': aliasShared
+        '@': aliasSrc
       }
     },
     plugins: [externalizeDepsPlugin()],
@@ -51,7 +49,6 @@ export default defineConfig({
     resolve: {
       alias: {
         '@': aliasSrc,
-        '@shared': aliasShared
       }
     },
     plugins: [externalizeDepsPlugin()],
@@ -74,7 +71,6 @@ export default defineConfig({
     resolve: {
       alias: {
         '@': aliasSrc,
-        '@shared': aliasShared,
         '@monaco-themes/github-light': monacoGithubLightThemeJson
       }
     },

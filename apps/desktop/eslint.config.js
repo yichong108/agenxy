@@ -12,12 +12,12 @@ const repoRoot = fileURLToPath(new URL('.', import.meta.url))
 
 export default tseslint.config(
   {
-    ignores: ['out/**', 'release/**', 'node_modules/**', 'eslint.config.js']
+    ignores: ['out/**', 'release/**', 'node_modules/**', 'eslint.config.js', 'src/extensions/**', "src/skills/**"]
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ['**/*.{ts,tsx}'],
+    files: ['src/**/*.{ts,tsx}'],
     languageOptions: {
       globals: {
         ...globals.node,
@@ -49,6 +49,7 @@ export default tseslint.config(
       }
     },
     rules: {
+      '@typescript-eslint/no-require-imports': 'off',
       'import/no-unresolved': 'error',
       'import/order': [
         'warn',

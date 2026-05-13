@@ -1,4 +1,5 @@
 # Langfuse Local Service
+
 本地 Langfuse 可观测性服务，基于 Docker Compose 部署。
 
 ## 目录
@@ -25,13 +26,13 @@ pnpm langfuse:start
 
 ## 命令
 
-| 命令 | 说明 |
-|------|------|
-| `pnpm langfuse:start` | 启动所有服务 |
-| `pnpm langfuse:stop` | 停止所有服务 |
-| `pnpm langfuse:status` | 查看服务状态 |
-| `pnpm langfuse:logs` | 查看日志 |
-| `pnpm langfuse:reset` | 重置所有数据 ⚠️ |
+| 命令                   | 说明            |
+| ---------------------- | --------------- |
+| `pnpm langfuse:start`  | 启动所有服务    |
+| `pnpm langfuse:stop`   | 停止所有服务    |
+| `pnpm langfuse:status` | 查看服务状态    |
+| `pnpm langfuse:logs`   | 查看日志        |
+| `pnpm langfuse:reset`  | 重置所有数据 ⚠️ |
 
 ## 服务说明
 

@@ -65,16 +65,24 @@ Work through each item in order. Skip items that don't apply to the user's codeb
 ### Correlating attributes (both SDKs)
 
 **Before:**
+
 ```python
 # Python
 langfuse.update_current_trace(name="trace-name", user_id="user-123", session_id="session-abc", tags=["tag1"])
 ```
+
 ```typescript
 // JS/TS
-updateActiveTrace({ name: "trace-name", userId: "user-123", sessionId: "session-456", tags: ["prod"] });
+updateActiveTrace({
+  name: "trace-name",
+  userId: "user-123",
+  sessionId: "session-456",
+  tags: ["prod"],
+});
 ```
 
 **After:**
+
 ```python
 # Python
 from langfuse import propagate_attributes
@@ -82,25 +90,35 @@ from langfuse import propagate_attributes
 with propagate_attributes(trace_name="trace-name", user_id="user-123", session_id="session-abc", tags=["tag1"]):
     result = call_llm("hello")
 ```
+
 ```typescript
 // JS/TS
 import { propagateAttributes } from "langfuse";
 
 await propagateAttributes(
-  { traceName: "trace-name", userId: "user-123", sessionId: "session-456", tags: ["prod"] },
-  async () => { /* traced code */ }
+  {
+    traceName: "trace-name",
+    userId: "user-123",
+    sessionId: "session-456",
+    tags: ["prod"],
+  },
+  async () => {
+    /* traced code */
+  },
 );
 ```
 
 ### Span/Generation creation (Python)
 
 **Before:**
+
 ```python
 langfuse.start_span(name="x")
 langfuse.start_generation(name="x", model="gpt-4")
 ```
 
 **After:**
+
 ```python
 langfuse.start_observation(name="x")
 langfuse.start_observation(name="x", as_type="generation", model="gpt-4")
@@ -109,6 +127,7 @@ langfuse.start_observation(name="x", as_type="generation", model="gpt-4")
 ### Dataset experiments (Python)
 
 **Before:**
+
 ```python
 for item in dataset.items:
     with item.run(run_name="my-run") as span:
@@ -117,6 +136,7 @@ for item in dataset.items:
 ```
 
 **After:**
+
 ```python
 def my_task(*, item, **kwargs):
     return my_llm(item.input)
@@ -132,9 +152,12 @@ To restore pre-upgrade "export all" behavior:
 # Python
 langfuse = Langfuse(should_export_span=lambda span: True)
 ```
+
 ```typescript
 // JS/TS
-const spanProcessor = new LangfuseSpanProcessor({ shouldExportSpan: () => true });
+const spanProcessor = new LangfuseSpanProcessor({
+  shouldExportSpan: () => true,
+});
 ```
 
 To extend defaults with custom scopes:
@@ -150,25 +173,27 @@ langfuse = Langfuse(
     )
 )
 ```
+
 ```typescript
 // JS/TS
 import { isDefaultExportSpan } from "@langfuse/otel";
 
 shouldExportSpan: ({ otelSpan }) =>
-  isDefaultExportSpan(otelSpan) || otelSpan.instrumentationScope.name.startsWith("my_framework")
+  isDefaultExportSpan(otelSpan) ||
+  otelSpan.instrumentationScope.name.startsWith("my_framework");
 ```
 
 ## Common Pitfalls
 
-| Pitfall | Impact | Fix |
-| --- | --- | --- |
-| Dropping intermediate spans via filtering | Breaks trace trees — child spans become orphaned | Use `is_default_export_span` as base and only add/remove specific scopes |
-| Metadata with non-string values | Values silently coerced or dropped | Ensure all metadata values are strings ≤200 characters |
-| Setting attributes outside `propagate_attributes()` callback | Attributes don't attach to observations | Wrap all traced code inside the callback |
-| Using deprecated `set_current_trace_io()` for new code | Will be removed in future versions | Set input/output directly on the root observation |
-| Forgetting Pydantic v2 upgrade (Python) | Import errors or runtime failures | Upgrade Pydantic or use `pydantic.v1` shim |
-| `release`/`environment` still passed as parameters | Silently ignored | Use `LANGFUSE_RELEASE` and `LANGFUSE_TRACING_ENVIRONMENT` env vars |
-| LangChain/OpenAI attribute propagation direction changed | Attributes propagate downward only, not upward to parent traces | Wrap outer call in `propagate_attributes()` |
+| Pitfall                                                      | Impact                                                          | Fix                                                                      |
+| ------------------------------------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Dropping intermediate spans via filtering                    | Breaks trace trees — child spans become orphaned                | Use `is_default_export_span` as base and only add/remove specific scopes |
+| Metadata with non-string values                              | Values silently coerced or dropped                              | Ensure all metadata values are strings ≤200 characters                   |
+| Setting attributes outside `propagate_attributes()` callback | Attributes don't attach to observations                         | Wrap all traced code inside the callback                                 |
+| Using deprecated `set_current_trace_io()` for new code       | Will be removed in future versions                              | Set input/output directly on the root observation                        |
+| Forgetting Pydantic v2 upgrade (Python)                      | Import errors or runtime failures                               | Upgrade Pydantic or use `pydantic.v1` shim                               |
+| `release`/`environment` still passed as parameters           | Silently ignored                                                | Use `LANGFUSE_RELEASE` and `LANGFUSE_TRACING_ENVIRONMENT` env vars       |
+| LangChain/OpenAI attribute propagation direction changed     | Attributes propagate downward only, not upward to parent traces | Wrap outer call in `propagate_attributes()`                              |
 
 ## Best Practices
 

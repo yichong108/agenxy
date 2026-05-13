@@ -14,11 +14,7 @@ import {
   uninstallLegacySkillFolder,
   uninstallMarketSkillFolder
 } from '@/main/agent/skills'
-import {
-  shutdownLangfuseTracing,
-  startLangfuseTracingIfConfigured,
-  flushLangfuseTracing
-} from '@/main/langfuse'
+import { shutdownLangfuseTracing, startLangfuseTracingIfConfigured } from '@/main/langfuse'
 import { mainLog } from '@/main/logger'
 import { disposeMcpConnectionPool, probeMcpServer, warmupMcpServers } from '@/main/mcp/mcp-runtime'
 import {
