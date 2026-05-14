@@ -4,11 +4,7 @@ import path from 'node:path'
 
 import AdmZip from 'adm-zip'
 
-import {
-  collectOccupiedSkillToolNames,
-  previewPackageSkillToolNames,
-  validateSkillPackageLayout
-} from '@/main/agent/skills/index'
+import { previewPackageSkillToolNames, validateSkillPackageLayout } from '@/main/agent/skills/index'
 import { marketSkillsInstallRoot } from '@/main/agent/skills/paths'
 import { mainLog } from '@/main/logger'
 import type { SkillsInstallResult, SkillsMarketCatalogItem } from '@/shared/ipc'
@@ -123,15 +119,6 @@ export async function installSkillFromMarketItem(
     const previewNames = await previewPackageSkillToolNames(tmpRoot)
     if (!previewNames.length) {
       return { ok: false, error: '包内未解析到任何 skill 工具名' }
-    }
-
-    const occupied = await collectOccupiedSkillToolNames({ excludeMarketFolderId: folderId })
-    const conflicts = previewNames.filter((n) => occupied.has(n))
-    if (conflicts.length) {
-      return {
-        ok: false,
-        error: `与现有技能工具名冲突：${conflicts.join(', ')}（请先卸载冲突项或修改包内名称）`
-      }
     }
 
     await fs.rm(dest, { recursive: true, force: true })

@@ -7,6 +7,7 @@ import type { AppSettings } from '@/shared/ipc'
 import { getActiveProviderProfile } from '@/shared/ipc'
 
 import { agentLog } from './agent-service'
+import { SKILLS_WITH_TAGS } from '@/main/agent/skills'
 
 /**
  * 意图分类结果 schema
@@ -35,19 +36,19 @@ export type IntentClassification = {
 
 /**
  * 所有技能的意图标签（用于反向映射）
- * 技能名格式：skill_<name>（sanitizeToolName 转换后）
+ * 键为注册工具名：文件技能经 sanitizeToolName 后与 frontmatter/目录名一致（不自动加 skill_ 前缀）；内置代码技能仍为 skill_* 名称。
  */
 export const SKILL_INTENT_TAGS: Record<string, UserIntent[]> = {
-  // 编程相关技能
-  skill_bug_fix: ['coding'],
-  skill_feature_implement: ['coding'],
-  skill_code_review: ['coding'],
-  skill_debug_workflow: ['coding'],
-  skill_release_workflow: ['coding'],
+  // 编程相关技能（打包 skill.md）
+  bug_fix: ['coding'],
+  feature_implement: ['coding'],
+  code_review: ['coding'],
+  debug_workflow: ['coding'],
+  release_workflow: ['coding'],
   // 非编程技能
-  skill_frontend_slides: ['general'],
-  skill_frontend_slides_ppt_controlled: ['general'],
-  skill_triage_workflow: ['general'],
+  frontend_slides: ['general'],
+  frontend_slides_ppt_controlled: ['general'],
+  triage_workflow: ['general'],
   // 内置技能（所有意图都可用）
   skill_inspect_workspace: ['coding', 'general'],
   skill_write_file: ['coding', 'general'],
@@ -148,17 +149,16 @@ function validateIntent(raw: unknown): UserIntent {
 
 /**
  * 检查技能是否应该被加载
+ *
+ * 技能没有定义标签的话，默认就是general
  * @param skillName 技能名
  * @param targetIntents 目标意图列表（空表示加载所有）
  */
 export function shouldLoadSkill(skillName: string, targetIntents: UserIntent[]): boolean {
   if (targetIntents.length === 0 || targetIntents.includes('general')) return true
 
-  const skillIntents = SKILL_INTENT_TAGS[skillName] || ['general']
-
-  // 如果技能标记为 general，且目标意图包含 general，则加载
-  if (skillIntents.includes('general') && targetIntents.includes('general')) return true
+  const tags = SKILLS_WITH_TAGS.find((el) => el.id === skillName)?.tags || ['general']
 
   // 检查技能和目标意图是否有交集
-  return skillIntents.some((si) => targetIntents.includes(si))
+  return tags.some((el) => targetIntents.includes(el))
 }

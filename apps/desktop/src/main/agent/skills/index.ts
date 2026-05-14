@@ -112,13 +112,14 @@ type ScanRoot = {
   markdownCollect?: MarkdownCollectOpts
 }
 
+/** Normalize to a valid LangChain tool name; does not add a skill_ prefix unless present in the source. */
 export function sanitizeToolName(input: string): string {
   const normalized = input
     .toLowerCase()
     .replace(/[^a-z0-9_]+/g, '_')
     .replace(/^_+|_+$/g, '')
-  if (!normalized) return 'skill_custom'
-  return normalized.startsWith('skill_') ? normalized : `skill_${normalized}`
+  if (!normalized) return 'custom'
+  return normalized
 }
 
 function applyTemplate(raw: string, question: string): string {
@@ -197,83 +198,6 @@ function makeToolEventStart(name: string, args: unknown, runCtx: RunContext): To
     timestampMs: Date.now(),
     durationMs: 0
   }
-}
-
-export function makeBuiltinSkillDefinitions(ctx: SkillToolContext): SkillDefinition[] {
-  const inspectSchema = z.object({
-    path: z.string().optional(),
-    depth: z.number().int().min(1).max(3).optional(),
-    query: z.string().optional()
-  })
-  const writeSchema = z.object({
-    path: z.string(),
-    content: z.string(),
-    mode: z.enum(['overwrite', 'append']).optional()
-  })
-  const runSchema = z.object({
-    command: z.string()
-  })
-
-  return [
-    {
-      name: 'skill_inspect_workspace',
-      description:
-        'Skill: List directory then search code as needed. Good for "understanding project structure / locating files" scenarios.',
-      source: 'builtin',
-      schema: inspectSchema,
-      execute: async (args) => {
-        const pathArg = typeof args.path === 'string' && args.path.trim() ? args.path.trim() : '.'
-        const depthArg =
-          typeof args.depth === 'number' && Number.isFinite(args.depth) ? Math.trunc(args.depth) : 2
-        const lines: string[] = []
-        lines.push(`## Directory Preview (${pathArg})`)
-        lines.push(await listDirTool(ctx.root, pathArg, { depth: depthArg }))
-        const queryArg = typeof args.query === 'string' ? args.query.trim() : ''
-        if (queryArg) {
-          lines.push('')
-          lines.push(`## Search Results (${queryArg})`)
-          lines.push(await searchWorkspace(ctx.root, queryArg, { maxFiles: 30 }))
-        }
-        return lines.join('\n')
-      }
-    },
-    {
-      name: 'skill_write_file',
-      description:
-        'Skill: Write or append file content. Suitable for implementing solutions into workspace files.',
-      source: 'builtin',
-      schema: writeSchema,
-      execute: async (args) => {
-        const targetPath = String(args.path || '').trim()
-        const content = typeof args.content === 'string' ? args.content : ''
-        if (!targetPath) throw new Error('path cannot be empty')
-        const mode = args.mode === 'append' ? 'append' : 'overwrite'
-        if (mode === 'append') {
-          let previous = ''
-          try {
-            previous = await readFileTool(ctx.root, targetPath)
-          } catch {
-            previous = ''
-          }
-          const merged = previous ? `${previous}\n${content}` : content
-          return await writeFileTool(ctx.root, targetPath, merged)
-        }
-        return await writeFileTool(ctx.root, targetPath, content)
-      }
-    },
-    {
-      name: 'skill_run_terminal',
-      description:
-        'Skill: Execute terminal commands in workspace root directory and return output. Suitable for installing dependencies, running builds or tests.',
-      source: 'builtin',
-      schema: runSchema,
-      execute: async (args) => {
-        const command = String(args.command || '').trim()
-        if (!command) throw new Error('command cannot be empty')
-        return await runCommand(ctx.termKey, ctx.root, command, MAX_TERMINAL_OUTPUT_CHARS)
-      }
-    }
-  ]
 }
 
 async function buildSkillScanRoots(excludeMarketFolderId?: string): Promise<ScanRoot[]> {
@@ -405,6 +329,10 @@ async function loadFileSkillDefinitions(
   return dedupeSkillDefinitionsFirstWins(defs)
 }
 
+/**
+ * 函数名里的 FirstWins 就是「同名时先出现的胜出」。顺序上：结果里各条目的相对顺序，大致等于每个 name 第一次出现时在原数组里的顺序（Map 的迭代顺序与插入顺序一致）。
+ * @param defs
+ */
 function dedupeSkillDefinitionsFirstWins(defs: SkillDefinition[]): SkillDefinition[] {
   const byName = new Map<string, SkillDefinition>()
   for (const item of defs) {
@@ -415,9 +343,9 @@ function dedupeSkillDefinitionsFirstWins(defs: SkillDefinition[]): SkillDefiniti
 
 function makeSkillHint(defs: SkillDefinition[]): string {
   if (!defs.length) return ''
-  const top = defs.slice(0, 20)
+  const top = defs.slice(0, 10)
   const lines = top.map((item) => `- ${item.name}: ${item.description} (source: ${item.source})`)
-  return `Available skill tools (auto-called):\n${lines.join('\n')}\nWhen user intent matches any of the above descriptions, you MUST call the corresponding skill_* tool first (can pass question summarizing user request), then use other tools as needed; do not skip matching skills and guess with generic tools.`
+  return `Available skill tools (auto-called):\n${lines.join('\n')}\nWhen user intent matches any of the above descriptions, you MUST call the corresponding skill tool (by exact name above) first (can pass question summarizing user request), then use other tools as needed; do not skip matching skills and guess with generic tools.`
 }
 
 function toTool(def: SkillDefinition, ctx: SkillToolContext): SkillTool {
@@ -487,20 +415,13 @@ export async function buildSkillBundle(
   options?: BuildSkillBundleOptions
 ): Promise<SkillBundle> {
   const filterIntents = options?.filterIntents ?? []
-  const shouldFilter = filterIntents.length > 0 && !filterIntents.includes('general')
-
-  const builtin = makeBuiltinSkillDefinitions(ctx)
   const fileSkills = await loadFileSkillDefinitions()
+  let mergedDefs = [...fileSkills]
 
-  let mergedDefs = [...builtin, ...fileSkills]
-
-  // Filter skills by intent
-  if (shouldFilter) {
-    mergedDefs = mergedDefs.filter((def) => shouldLoadSkill(def.name, filterIntents))
-    mainLog.info(
-      `[buildSkillBundle] Filtered skills by intents [${filterIntents.join(', ')}]: ${mergedDefs.length} skills loaded`
-    )
-  }
+  mergedDefs = mergedDefs.filter((def) => shouldLoadSkill(def.name, filterIntents))
+  mainLog.info(
+    `[buildSkillBundle] Filtered skills by intents [${filterIntents.join(', ')}]: ${mergedDefs.length} skills loaded`
+  )
 
   const merged = dedupeSkillDefinitionsFirstWins(mergedDefs)
   const tools = merged.map((item) => toTool(item, ctx))
@@ -551,19 +472,6 @@ async function extractToolNamesFromScanRoot(scan: ScanRoot): Promise<string[]> {
 export async function previewPackageSkillToolNames(packageAbsDir: string): Promise<string[]> {
   const scan: ScanRoot = { absRoot: packageAbsDir, sourcePrefix: 'preview' }
   return extractToolNamesFromScanRoot(scan)
-}
-
-/** Return currently occupied skill tool names from file skills + built-in code names (optionally exclude a market directory for overlay install) */
-export async function collectOccupiedSkillToolNames(params: {
-  excludeMarketFolderId?: string
-}): Promise<Set<string>> {
-  const set = new Set<string>()
-  for (const d of makeBuiltinSkillDefinitions(dummySkillToolContext())) {
-    set.add(d.name)
-  }
-  const files = await loadFileSkillDefinitions(params.excludeMarketFolderId)
-  for (const d of files) set.add(d.name)
-  return set
 }
 
 function dummySkillToolContext(): SkillToolContext {
@@ -672,15 +580,6 @@ async function mdEntriesForUi(scan: ScanRoot): Promise<SkillUiEntry[]> {
 }
 
 export async function gatherSkillsRuntimeState(): Promise<SkillsRuntimeState> {
-  const builtinCode = makeBuiltinSkillDefinitions(dummySkillToolContext()).map((d) => ({
-    key: `builtin-code:${d.name}`,
-    kind: 'builtin_code' as const,
-    toolName: d.name,
-    title: d.name,
-    description: d.description,
-    sourceLabel: 'Built-in (code)'
-  }))
-
   const builtinPackaged: SkillUiEntry[] = []
   const installedMarket: SkillUiEntry[] = []
   const legacyUser: SkillUiEntry[] = []
@@ -695,7 +594,7 @@ export async function gatherSkillsRuntimeState(): Promise<SkillsRuntimeState> {
     }
   }
 
-  return { builtinCode, builtinPackaged, installedMarket, legacyUser }
+  return { builtinCode: [], builtinPackaged, installedMarket, legacyUser }
 }
 
 export async function uninstallMarketSkillFolder(
