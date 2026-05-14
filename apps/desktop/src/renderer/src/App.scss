@@ -48,7 +48,7 @@
   --aw-color-border: rgb(24 24 27 / 0.09);
   --aw-color-border-secondary: rgb(24 24 27 / 0.055);
   --aw-color-border-strong: rgb(24 24 27 / 0.14);
-  /* 可拖拽分割条：与全局 1px 边框同色，仅悬停/拖拽略加深，避免同色深造成“变粗”观感 */
+  /* 可拖拽分割条：与全局 1px 边框同色，仅悬停/拖拽略加深，避免同色深造成"变粗"观感 */
   --aw-color-splitter: var(--aw-color-border);
   --aw-color-splitter-hover: var(--aw-color-border-strong);
   --aw-color-splitter-active: rgb(24 24 27 / 0.2);
@@ -258,7 +258,7 @@ html[data-aw-wco-suppressed='1'] .app-win-titlebar {
   border-right: none;
 }
 
-/* 可拖区域 3px，可见分隔仅为居中 ::before 1px */
+/* 可拖区域 3px，可见分隔仅为居中 ::before 0.4px */
 .app-sidebar-resizer {
   width: 3px;
   min-width: 3px;
@@ -279,9 +279,9 @@ html[data-aw-wco-suppressed='1'] .app-win-titlebar {
   top: 0;
   bottom: 0;
   left: 50%;
-  width: 1px;
-  min-width: 1px;
-  max-width: 1px;
+  width: 0.5px;
+  min-width: 0.5px;
+  max-width: 0.5px;
   transform: translateX(-50%);
   background: var(--aw-color-splitter);
   transition: background-color 0.15s ease;
