@@ -337,6 +337,21 @@ export function useWorkspaceLeftPane() {
     workspacesWithComposerHomeStub
   ])
 
+  /** Ctrl+N / Cmd+N：与侧栏「新会话」一致，基于当前工作区打开空白对话 */
+  useEffect(() => {
+    if (!preloadOk) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat || e.isComposing) return
+      if (!(e.ctrlKey || e.metaKey)) return
+      if (e.key.toLowerCase() !== 'n') return
+      if (e.altKey || e.shiftKey) return
+      e.preventDefault()
+      openBlankConversationForActiveWorkspace()
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [openBlankConversationForActiveWorkspace, preloadOk])
+
   const handleSessionRenameRequest = useCallback((session: SessionInfo) => {
     setRenameId(session.id)
     setRenameName(session.name)
