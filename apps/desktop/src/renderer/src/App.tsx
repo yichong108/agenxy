@@ -82,6 +82,33 @@ function formatWorkedDuration(ms: number): string {
   return `${h}h ${rm}m`
 }
 
+/** 按用户消息切分轮次，便于用户气泡在滚动助手回复时 sticky 置顶（Cursor 风格） */
+type MessageTurn = { key: string; messages: ChatMessage[] }
+
+function buildMessageTurns(messages: ChatMessage[]): MessageTurn[] {
+  const turns: MessageTurn[] = []
+  let batch: ChatMessage[] = []
+
+  const flush = () => {
+    if (batch.length === 0) return
+    turns.push({ key: batch[0]!.id, messages: batch })
+    batch = []
+  }
+
+  for (const m of messages) {
+    if (m.role === 'user') {
+      flush()
+      batch = [m]
+    } else if (batch.length === 0) {
+      batch = [m]
+    } else {
+      batch.push(m)
+    }
+  }
+  flush()
+  return turns
+}
+
 import '@/renderer/src/App.scss'
 import { renderLog } from './logger'
 
@@ -809,6 +836,7 @@ export function App() {
     () => (activeId ? (messages[activeId] ?? []) : []),
     [activeId, messages]
   )
+  const messageTurns = useMemo(() => buildMessageTurns(currentMessages), [currentMessages])
   const currentTimeline = useMemo(
     () => (activeId ? (timeline[activeId] ?? []) : []),
     [activeId, timeline]
@@ -1188,7 +1216,9 @@ export function App() {
                     }}
                   >
                     <div className="app-messages-inner">
-                      {currentMessages.map((m) => {
+                      {messageTurns.map((turn) => (
+                        <div key={turn.key} className="app-message-turn">
+                          {turn.messages.map((m) => {
                         const isLatestAssistant =
                           m.role === 'assistant' && m.id === latestAssistantMessageId
                         const showTimelineAccordion =
@@ -1202,12 +1232,13 @@ export function App() {
                           timelineOpenOverride[m.id] !== undefined
                             ? timelineOpenOverride[m.id]!
                             : Boolean(isRun && showTimelineAccordion)
+                        const isUser = m.role === 'user'
                         return (
                           <Card
                             key={m.id}
                             size="small"
-                            bordered={m.role === 'user'}
-                            className={`app-message-card ${m.role === 'user' ? 'is-user' : 'is-assistant'}`}
+                            bordered={isUser}
+                            className={`app-message-card ${isUser ? 'is-user is-sticky-prompt' : 'is-assistant'}`}
                           >
                             <div className="app-message-content">
                               {m.role === 'assistant' ? (
@@ -1302,7 +1333,9 @@ export function App() {
                             </div>
                           </Card>
                         )
-                      })}
+                          })}
+                        </div>
+                      ))}
                       <div ref={messagesBottomRef} />
                     </div>
                   </SimpleBar>

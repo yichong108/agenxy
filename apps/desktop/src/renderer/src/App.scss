@@ -910,6 +910,16 @@ html[data-aw-wco-suppressed='1'] .app-win-titlebar {
   box-sizing: border-box;
 }
 
+/* 一轮对话 = 用户提问 + 助手回复；用户气泡在滚动助手长文时 sticky 置顶（Cursor 风格） */
+.app-message-turn {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-message-turn + .app-message-turn .app-message-card.is-user {
+  margin-top: 14px;
+}
+
 .app-message-card {
   margin-bottom: 10px;
   width: 100%;
@@ -931,9 +941,10 @@ html[data-aw-wco-suppressed='1'] .app-win-titlebar {
   background: var(--aw-color-bg-container);
 }
 
-/* 第二条及之后的用户气泡：与上一条助手区（含免责声明块）拉开顶距 */
-.app-message-card.is-user ~ .app-message-card.is-user {
-  margin-top: 14px;
+.app-message-card.is-user.is-sticky-prompt {
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .app-message-card.is-assistant {
