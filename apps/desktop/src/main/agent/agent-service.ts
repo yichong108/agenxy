@@ -616,85 +616,56 @@ type AgentTooling = {
   mcpContextHints: string
 }
 
-/** Agent strategy interface */
-interface AgentStrategy {
-  readonly name: AgentComposerMode
-  prepareTools(
-    sessionId: string,
-    root: string,
-    settings: AppSettings,
-    runCtx: ToolExecutorContext
-  ): Promise<AgentTooling> | AgentTooling
-  buildPrompt(root: string, settings: AppSettings, tooling: AgentTooling): string
-}
-
-/** Ask agent strategy: read-only workspace tools + optional web_search; no skill/MCP loading */
-const askAgentStrategy: AgentStrategy = {
-  name: 'ask',
-  prepareTools(sessionId, root, settings, runCtx) {
-    const { baseTools, webSearchTools } = buildBaseAndWebTools(sessionId, root, settings, runCtx)
-    const tools = [...baseTools, ...webSearchTools].filter((t) => ASK_MODE_TOOL_NAMES.has(t.name))
-    return { tools, skillHint: '', mcpContextHints: '' }
-  },
-  buildPrompt(root, settings) {
-    return [buildAskSystemPrompt(root, settings), commonPrompt].filter(Boolean).join('\n\n')
-  }
-}
-
-/** Build agent strategy: full workspace tools + skill_* + MCP */
-type BuildAgentStrategyOptions = {
-  /** Filter skills by intent */
+type PrepareAgentToolingOptions = {
+  /** Build mode: filter skills by intent (empty = load all) */
   filterIntents?: UserIntent[]
 }
 
-const buildAgentStrategy: AgentStrategy & { options?: BuildAgentStrategyOptions } = {
-  name: 'build',
-  options: {},
-  async prepareTools(sessionId, root, settings, runCtx) {
-    const termKey = `term:${sessionId}`
-    const { baseTools, webSearchTools } = buildBaseAndWebTools(sessionId, root, settings, runCtx)
+/** Assemble tools/skills/MCP for the composer mode (single ReAct agent, mode selects capabilities). */
+async function prepareAgentTooling(
+  mode: AgentComposerMode,
+  sessionId: string,
+  root: string,
+  settings: AppSettings,
+  runCtx: ToolExecutorContext,
+  options?: PrepareAgentToolingOptions
+): Promise<AgentTooling> {
+  const { baseTools, webSearchTools } = buildBaseAndWebTools(sessionId, root, settings, runCtx)
 
-    const filterIntents = this.options?.filterIntents
-    const [skillBundle, mcpResult] = await Promise.all([
-      buildSkillBundle(
-        { root, termKey, settings, runCtx, onTool: runCtx.onTool },
-        filterIntents ? { filterIntents } : undefined
-      ),
-      buildMcpLangChainTools(settings, runCtx, runCtx.onTool)
-    ])
+  if (mode === 'ask') {
+    const tools = [...baseTools, ...webSearchTools].filter((t) => ASK_MODE_TOOL_NAMES.has(t.name))
+    return { tools, skillHint: '', mcpContextHints: '' }
+  }
 
-    const tools = [...skillBundle.tools, ...baseTools, ...webSearchTools, ...mcpResult.tools]
-    return {
-      tools,
-      skillHint: skillBundle.hint,
-      mcpContextHints: mcpResult.contextHints
-    }
-  },
-  buildPrompt(root, settings, tooling) {
-    return [
-      buildSystemPrompt(root, settings),
-      tooling.skillHint,
-      tooling.mcpContextHints,
-      commonPrompt
-    ]
-      .filter(Boolean)
-      .join('\n\n')
+  const termKey = `term:${sessionId}`
+  const filterIntents = options?.filterIntents
+  const [skillBundle, mcpResult] = await Promise.all([
+    buildSkillBundle(
+      { root, termKey, settings, runCtx, onTool: runCtx.onTool },
+      filterIntents !== undefined ? { filterIntents } : undefined
+    ),
+    buildMcpLangChainTools(settings, runCtx, runCtx.onTool)
+  ])
+  const tools = [...skillBundle.tools, ...baseTools, ...webSearchTools, ...mcpResult.tools]
+  return {
+    tools,
+    skillHint: skillBundle.hint,
+    mcpContextHints: mcpResult.contextHints
   }
 }
 
-/** Strategy registry */
-const agentStrategies: Record<AgentComposerMode, AgentStrategy> = {
-  ask: askAgentStrategy,
-  build: buildAgentStrategy
-}
-
-/** Get agent strategy */
-function getAgentStrategy(mode: AgentComposerMode): AgentStrategy {
-  const strategy = agentStrategies[mode]
-  if (!strategy) {
-    throw new Error(`Unknown agent mode: ${mode}`)
+function buildAgentRunPrompt(
+  mode: AgentComposerMode,
+  root: string,
+  settings: AppSettings,
+  tooling: AgentTooling
+): string {
+  if (mode === 'ask') {
+    return [buildAskSystemPrompt(root, settings), commonPrompt].filter(Boolean).join('\n\n')
   }
-  return strategy
+  return [buildSystemPrompt(root, settings), tooling.skillHint, tooling.mcpContextHints, commonPrompt]
+    .filter(Boolean)
+    .join('\n\n')
 }
 
 function contentToText(content: unknown): string {
@@ -995,26 +966,21 @@ export async function runUserMessage(
       }
       agentLog.info(`[runUserMessage] detectedIntents: ${JSON.stringify(detectedIntents, null, 2)}`)
 
-      // Get corresponding strategy and execute (pass intent filtering in Build mode)
-      const strategy = getAgentStrategy(composerMode)
-
-      // If Build strategy, set intent filtering options
-      if (composerMode === 'build' && 'options' in strategy) {
-        strategy.options = { filterIntents: detectedIntents }
-      }
-
-      const tooling = await strategy.prepareTools(sessionId, root, settings, {
-        runId,
-        traceId,
-        onTool
-      })
+      const tooling = await prepareAgentTooling(
+        composerMode,
+        sessionId,
+        root,
+        settings,
+        { runId, traceId, onTool },
+        composerMode === 'build' ? { filterIntents: detectedIntents } : undefined
+      )
       const { tools } = tooling
 
       const model = createLanguageModel(settings).bindTools(tools as never[])
-      const runPrompt = strategy.buildPrompt(root, settings, tooling)
+      const runPrompt = buildAgentRunPrompt(composerMode, root, settings, tooling)
 
       agentLog.info(
-        `[runUserMessage] agent=${strategy.name} runPrompt: ${JSON.stringify(runPrompt, null, 2)}`
+        `[runUserMessage] mode=${composerMode} runPrompt: ${JSON.stringify(runPrompt, null, 2)}`
       )
 
       const agent = createReactAgent({
