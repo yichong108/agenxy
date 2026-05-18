@@ -56,6 +56,19 @@ import {
   type WorkspaceInfo
 } from '@/shared/ipc'
 
+function assistantDisplayTimeline(
+  message: ChatMessage,
+  latestAssistantId: string | null,
+  isRun: boolean,
+  liveTimeline: ToolTimelineEvent[]
+): ToolTimelineEvent[] {
+  if (message.role !== 'assistant') return []
+  if (message.id === latestAssistantId && isRun) return liveTimeline
+  if (message.toolEvents && message.toolEvents.length > 0) return message.toolEvents
+  if (message.id === latestAssistantId && liveTimeline.length > 0) return liveTimeline
+  return []
+}
+
 function filterSessionsForSidebar(
   list: SessionInfo[] | undefined,
   hiddenIds: string[] | undefined
@@ -529,6 +542,50 @@ export function App() {
       if (e.type === 'intent-end') {
         return
       }
+      if (e.type === 'plan-step-start') {
+        setTimeline((t) => {
+          const list = [...(t[e.sessionId] ?? [])]
+          list.push({
+            kind: 'plan',
+            id: e.stepId,
+            afterToolId: e.afterToolId,
+            toolName: e.toolName,
+            status: 'streaming',
+            text: '',
+            runId: e.runId,
+            traceId: e.traceId,
+            timestampMs: Date.now()
+          })
+          return { ...t, [e.sessionId]: list }
+        })
+        return
+      }
+      if (e.type === 'plan-delta') {
+        setTimeline((t) => {
+          const list = [...(t[e.sessionId] ?? [])]
+          const idx = list.findIndex((x) => x.kind === 'plan' && x.id === e.stepId)
+          if (idx < 0) return t
+          const row = list[idx]
+          if (row?.kind !== 'plan') return t
+          const next = [...list]
+          next[idx] = { ...row, text: row.text + e.text }
+          return { ...t, [e.sessionId]: next }
+        })
+        return
+      }
+      if (e.type === 'plan-step-end') {
+        setTimeline((t) => {
+          const list = [...(t[e.sessionId] ?? [])]
+          const idx = list.findIndex((x) => x.kind === 'plan' && x.id === e.stepId)
+          if (idx < 0) return t
+          const row = list[idx]
+          if (row?.kind !== 'plan') return t
+          const next = [...list]
+          next[idx] = { ...row, status: 'end' }
+          return { ...t, [e.sessionId]: next }
+        })
+        return
+      }
       if (e.type === 'text-delta') {
         streamBuf.current[e.sessionId] = (streamBuf.current[e.sessionId] ?? '') + e.text
         const buf = streamBuf.current[e.sessionId]!
@@ -618,9 +675,10 @@ export function App() {
         streamBuf.current[e.sessionId] = ''
         intentBuf.current[e.sessionId] = ''
         assistantMsgId.current[e.sessionId] = null
+        void ensureSessionMessages(e.sessionId, true)
       }
     },
-    [msgApi]
+    [ensureSessionMessages, msgApi]
   )
 
   useEffect(() => {
@@ -1221,8 +1279,13 @@ export function App() {
                           {turn.messages.map((m) => {
                         const isLatestAssistant =
                           m.role === 'assistant' && m.id === latestAssistantMessageId
-                        const showTimelineAccordion =
-                          isLatestAssistant && currentTimeline.length > 0
+                        const displayTimeline = assistantDisplayTimeline(
+                          m,
+                          latestAssistantMessageId,
+                          Boolean(isRun && isLatestAssistant),
+                          currentTimeline
+                        )
+                        const showTimelineAccordion = displayTimeline.length > 0
                         const intentText = m.intentThinking?.trim()
                         const intentThinkingExpanded =
                           intentThinkingOpenOverride[m.id] !== undefined
@@ -1290,13 +1353,26 @@ export function App() {
                                       </button>
                                       {timelineExpanded ? (
                                         <div className="app-timeline-wrap">
-                                          {currentTimeline.map((e, idx) => (
+                                          {displayTimeline.map((e, idx) => (
                                             <div
                                               key={`${e.kind}-${'id' in e ? e.id : idx}-${idx}`}
-                                              className="app-timeline-item"
+                                              className={`app-timeline-item${e.kind === 'plan' ? ' is-plan' : ''}`}
                                             >
                                               {e.kind === 'error' ? (
                                                 <Text type="danger">{e.message}</Text>
+                                              ) : e.kind === 'plan' ? (
+                                                <>
+                                                  <Text type="secondary" className="app-timeline-plan-label">
+                                                    下一步
+                                                    {e.toolName ? (
+                                                      <Text type="secondary"> · after {e.toolName}</Text>
+                                                    ) : null}
+                                                  </Text>
+                                                  <div className="app-timeline-plan">
+                                                    {e.text ||
+                                                      (e.status === 'streaming' ? '…' : '')}
+                                                  </div>
+                                                </>
                                               ) : (
                                                 <>
                                                   <Text code>

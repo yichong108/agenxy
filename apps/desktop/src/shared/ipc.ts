@@ -537,7 +537,17 @@ export type ToolErrorEvent = {
   errorCode?: string
 } & RunMeta
 
-export type ToolTimelineEvent = ToolCallEvent | ToolErrorEvent
+/** 单次工具完成后的「下一步计划」（对齐 Cursor plan next step） */
+export type ToolPlanStepEvent = {
+  kind: 'plan'
+  id: string
+  afterToolId: string
+  toolName: string
+  status: 'streaming' | 'end'
+  text: string
+} & RunMeta
+
+export type ToolTimelineEvent = ToolCallEvent | ToolErrorEvent | ToolPlanStepEvent
 
 type StreamBase = {
   sessionId: string
@@ -595,12 +605,34 @@ export type StreamRunStartEvent = StreamBase & {
   timestampMs?: number
 }
 
+/** 工具结果回灌后，开始流式「下一步计划」 */
+export type StreamPlanStepStartEvent = StreamBase & {
+  type: 'plan-step-start'
+  stepId: string
+  afterToolId: string
+  toolName: string
+}
+
+export type StreamPlanDeltaEvent = StreamBase & {
+  type: 'plan-delta'
+  stepId: string
+  text: string
+}
+
+export type StreamPlanStepEndEvent = StreamBase & {
+  type: 'plan-step-end'
+  stepId: string
+}
+
 /** StreamEvent 根据 Agent 一次 run 生命周期的阶段变化定义。 */
 export type StreamEvent =
   | StreamTextDeltaEvent
   | StreamIntentDeltaEvent
   | StreamIntentEndEvent
   | StreamIntentClassifiedEvent
+  | StreamPlanStepStartEvent
+  | StreamPlanDeltaEvent
+  | StreamPlanStepEndEvent
   | StreamToolEvent
   | StreamErrorEvent
   | StreamDoneEvent

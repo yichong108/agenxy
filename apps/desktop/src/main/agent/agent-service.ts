@@ -39,6 +39,7 @@ import {
   type ChatMessage,
   type ModelProviderId,
   type StreamEvent,
+  type ToolCallEvent,
   type ToolTimelineEvent,
   getActiveProviderProfile,
   MAX_CONCURRENT_AGENT_STREAMS,
@@ -152,15 +153,23 @@ function persistSessionMessages(
   workspaceId: string,
   sessionId: string,
   coreMessages: BaseMessage[],
-  opts?: { intentThinkingForLastAssistant?: string }
+  opts?: {
+    intentThinkingForLastAssistant?: string
+    toolEventsForLastAssistant?: ToolTimelineEvent[]
+  }
 ): void {
   const list = toPersistedMessages(coreMessages)
   const intent = opts?.intentThinkingForLastAssistant?.trim()
-  if (intent) {
+  const toolEvents = opts?.toolEventsForLastAssistant
+  if (intent || (toolEvents && toolEvents.length > 0)) {
     for (let i = list.length - 1; i >= 0; i -= 1) {
       const row = list[i]
       if (row?.role === 'assistant') {
-        list[i] = { ...row, intentThinking: intent }
+        list[i] = {
+          ...row,
+          ...(intent ? { intentThinking: intent } : {}),
+          ...(toolEvents && toolEvents.length > 0 ? { toolEvents } : {})
+        }
         break
       }
     }
@@ -250,6 +259,9 @@ ${webRule}
 
 const INTENT_SUMMARY_TIMEOUT_MS = 18_000
 const INTENT_SUMMARY_MAX_CHARS = 900
+const PLAN_STEP_TIMEOUT_MS = 14_000
+const PLAN_STEP_MAX_CHARS = 480
+const MAX_PLAN_STEPS_PER_RUN = 16
 
 function isAbortError(e: unknown): boolean {
   return (
@@ -294,6 +306,61 @@ async function streamIntentSummary(
   } catch (e) {
     if (isAbortError(e)) throw e
     agentLog.warn('[streamIntentSummary] failed:', e instanceof Error ? e.message : e)
+  }
+  return acc.trim()
+}
+
+type PlanAfterToolContext = {
+  toolName: string
+  args?: string
+  result?: string
+}
+
+/**
+ * After a tool returns, stream a short "next step" plan (Cursor-style) before the ReAct loop continues.
+ */
+async function streamPlanAfterTool(
+  settings: AppSettings,
+  userText: string,
+  ctx: PlanAfterToolContext,
+  ac: AbortController,
+  planBatcher: StreamBatcher,
+  langfuseHandler?: CallbackHandler | null
+): Promise<string> {
+  const model = createLanguageModel(settings)
+  const system = new SystemMessage(
+    'You are a "next step planning" assistant. The coding agent just finished one tool call and will continue the same user task.\n' +
+      'Based on the user goal and the tool output, write 1-3 short complete sentences in English describing what you will do **next** (high-level outline only; do not name specific tool functions; no Markdown headers or code blocks).\n' +
+      'If the output looks empty, failed, or unexpected, briefly say how you will recover. Keep tone concise and user-facing.'
+  )
+  const human = new HumanMessage(
+    [
+      `User message:\n${userText.trim() || '(empty message)'}`,
+      `Tool completed: ${ctx.toolName}`,
+      ctx.args ? `Arguments: ${ctx.args}` : '',
+      ctx.result ? `Output (truncated):\n${ctx.result.slice(0, 700)}` : ''
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+  )
+  const deadline = Date.now() + PLAN_STEP_TIMEOUT_MS
+  let acc = ''
+  try {
+    const stream = await model.stream([system, human], {
+      signal: ac.signal,
+      ...(langfuseHandler ? { callbacks: [langfuseHandler] } : {})
+    })
+    for await (const chunk of stream) {
+      if (Date.now() > deadline) break
+      const piece = contentToText((chunk as { content?: unknown }).content)
+      if (!piece) continue
+      acc += piece
+      planBatcher.push(piece)
+      if (acc.length >= PLAN_STEP_MAX_CHARS) break
+    }
+  } catch (e) {
+    if (isAbortError(e)) throw e
+    agentLog.warn('[streamPlanAfterTool] failed:', e instanceof Error ? e.message : e)
   }
   return acc.trim()
 }
@@ -745,7 +812,11 @@ export async function runUserMessage(
     )
     emit({ type: 'run-start', sessionId, runId, traceId, timestampMs: runStartedAt })
 
-    const onTool = (e: ToolTimelineEvent) => {
+    const runToolEvents: ToolTimelineEvent[] = []
+    let planStepsThisRun = 0
+    let planChain: Promise<void> = Promise.resolve()
+
+    const emitTool = (e: ToolTimelineEvent) => {
       emit({
         type: 'tool',
         sessionId,
@@ -758,6 +829,105 @@ export async function runUserMessage(
           timestampMs: e.timestampMs ?? Date.now()
         }
       })
+    }
+
+    type ToolEndedCall = ToolCallEvent & { status: 'end' }
+
+    const schedulePlanAfterTool = (ended: ToolEndedCall) => {
+      if (ac.signal.aborted) return
+      if (planStepsThisRun >= MAX_PLAN_STEPS_PER_RUN) return
+      planStepsThisRun += 1
+      const stepId = `plan-${ended.id}`
+      const startedAt = Date.now()
+
+      planChain = planChain
+        .then(async () => {
+          if (ac.signal.aborted) return
+          emit({
+            type: 'plan-step-start',
+            sessionId,
+            runId,
+            traceId,
+            stepId,
+            afterToolId: ended.id,
+            toolName: ended.name
+          })
+
+          const planRecord = {
+            kind: 'plan' as const,
+            id: stepId,
+            afterToolId: ended.id,
+            toolName: ended.name,
+            status: 'streaming' as const,
+            text: '',
+            runId,
+            traceId,
+            timestampMs: startedAt
+          }
+          runToolEvents.push(planRecord)
+
+          const planBatcher = new StreamBatcher(STREAM_FLUSH_MS, STREAM_FLUSH_CHARS, (t) => {
+            emit({ type: 'plan-delta', sessionId, stepId, text: t, runId, traceId })
+            const idx = runToolEvents.findIndex((x) => x.kind === 'plan' && x.id === stepId)
+            if (idx >= 0) {
+              const row = runToolEvents[idx]
+              if (row?.kind === 'plan') {
+                runToolEvents[idx] = { ...row, text: row.text + t }
+              }
+            }
+          })
+
+          let text = ''
+          try {
+            text = await streamPlanAfterTool(
+              settings,
+              userText,
+              { toolName: ended.name, args: ended.args, result: ended.result },
+              ac,
+              planBatcher,
+              langfuseHandler
+            )
+          } catch (e) {
+            planBatcher.flush()
+            if (isAbortError(e)) throw e
+            throw e
+          }
+          planBatcher.flush()
+
+          const idx = runToolEvents.findIndex((x) => x.kind === 'plan' && x.id === stepId)
+          if (idx >= 0) {
+            const prev = runToolEvents[idx]
+            const prevText = prev?.kind === 'plan' ? prev.text : ''
+            runToolEvents[idx] = {
+              kind: 'plan',
+              id: stepId,
+              afterToolId: ended.id,
+              toolName: ended.name,
+              status: 'end',
+              text: text || prevText,
+              runId,
+              traceId,
+              timestampMs: startedAt,
+              durationMs: Date.now() - startedAt
+            }
+          }
+          emit({ type: 'plan-step-end', sessionId, stepId, runId, traceId })
+        })
+        .catch((e) => {
+          if (isAbortError(e)) return
+          agentLog.warn(
+            '[schedulePlanAfterTool] failed:',
+            e instanceof Error ? e.message : e
+          )
+        })
+    }
+
+    const onTool = (e: ToolTimelineEvent) => {
+      runToolEvents.push(e)
+      emitTool(e)
+      if (e.kind === 'tool' && e.status === 'end') {
+        schedulePlanAfterTool(e as ToolEndedCall)
+      }
     }
     const recursionLimit = settings.maxAgentLoopSteps
     const invokeTimeoutMs = settings.agentRunTimeoutMs
@@ -863,13 +1033,10 @@ export async function runUserMessage(
         langfuseHandler
       }
 
-      const result = await invokeAgentWithGuard(
-        agent,
-        session.messages,
-        ac,
-        onStreamToken,
-        agentInvokeOpts
-      )
+      const result = await Promise.all([
+        invokeAgentWithGuard(agent, session.messages, ac, onStreamToken, agentInvokeOpts),
+        planChain
+      ]).then(([agentResult]) => agentResult)
       const maybeMessages = (result as { messages?: BaseMessage[] }).messages
       if (Array.isArray(maybeMessages) && maybeMessages.length > 0) {
         session.messages = maybeMessages
@@ -886,7 +1053,8 @@ export async function runUserMessage(
       }
       batcher.flush()
       persistSessionMessages(session.workspaceId, sessionId, session.messages, {
-        intentThinkingForLastAssistant: intentThinking
+        intentThinkingForLastAssistant: intentThinking,
+        toolEventsForLastAssistant: runToolEvents
       })
       emit({
         type: 'done',
@@ -917,7 +1085,8 @@ export async function runUserMessage(
         durationMs: Date.now() - runStartedAt
       })
       persistSessionMessages(session.workspaceId, sessionId, session.messages, {
-        intentThinkingForLastAssistant: intentThinking
+        intentThinkingForLastAssistant: intentThinking,
+        toolEventsForLastAssistant: runToolEvents
       })
     } finally {
       session.controller = null

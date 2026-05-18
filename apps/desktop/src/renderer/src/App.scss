@@ -1132,6 +1132,25 @@ html[data-aw-wco-suppressed='1'] .app-win-titlebar {
   margin-bottom: 8px;
 }
 
+.app-timeline-item.is-plan {
+  padding-left: 10px;
+  border-left: 2px solid var(--aw-color-border-secondary);
+}
+
+.app-timeline-plan-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: var(--aw-font-caption);
+}
+
+.app-timeline-plan {
+  color: var(--aw-color-text);
+  line-height: var(--aw-line-relaxed);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--aw-font-body);
+}
+
 .app-timeline-result {
   margin-top: 8px;
   margin-bottom: 0;
