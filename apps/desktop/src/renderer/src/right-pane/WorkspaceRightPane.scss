@@ -313,9 +313,12 @@
   overflow: hidden;
   background: var(--aw-color-bg-layout);
   box-shadow: none;
+  -webkit-app-region: no-drag;
 }
 
+/* 勿改 xterm-rows / screen 宽度：xterm 按字符网格定位，拉伸会破坏鼠标拖选 */
 .app-right-terminal-canvas .xterm {
+  width: 100%;
   height: 100%;
   padding: 0;
 }
@@ -327,11 +330,6 @@
 .app-right-terminal-canvas .xterm-viewport {
   overflow-y: auto !important;
   background: var(--aw-color-bg-layout);
-}
-
-.app-right-terminal-canvas .xterm-screen,
-.app-right-terminal-canvas .xterm-rows {
-  width: 100% !important;
 }
 
 .app-right-preview-header {

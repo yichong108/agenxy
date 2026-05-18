@@ -56,6 +56,35 @@ function readStoredTreeWidthPx(): number {
   }
 }
 
+function isTerminalEnter(data: string): boolean {
+  return data === '\r' || data === '\n' || data === '\r\n'
+}
+
+function isTerminalCtrlC(data: string): boolean {
+  return data === '\u0003' || data.includes('\u0003')
+}
+
+/** 关闭 PTY/子进程可能开启的鼠标追踪，避免拖选被当作鼠标上报 */
+const TERMINAL_MOUSE_TRACKING_OFF = '\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l'
+
+function resetTerminalMouseTracking(term: Terminal): void {
+  term.write(TERMINAL_MOUSE_TRACKING_OFF)
+}
+
+/** 粘贴进当前输入行：换行压成空格，去掉不可见控制符 */
+function writeTerminalStreamChunk(term: Terminal, chunk: string): void {
+  if (!chunk) return
+  term.write(chunk.replace(/\r?\n/g, '\r\n'))
+}
+
+function normalizePastedTerminalText(raw: string): string {
+  return raw
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\n/g, ' ')
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
+}
+
 function clampTreeWidthPx(treePx: number, contentWidth: number): number {
   if (!(contentWidth > 0)) return treePx
   const maxW = contentWidth - FILE_TREE_SPLITTER_PX - FILE_TREE_MIN_PREVIEW_PX
@@ -250,6 +279,8 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
   const terminalFitAddonRef = useRef<FitAddon | null>(null)
   const terminalInputBufferRef = useRef('')
   const terminalRunningRef = useRef(false)
+  const terminalCancelledRef = useRef(false)
+  const activeWorkspaceIdRef = useRef(activeWorkspaceId)
   const terminalPromptPrefixRef = useRef(terminalPromptPrefix)
   const terminalHistoryRef = useRef<string[]>([])
   const terminalHistoryIndexRef = useRef<number | null>(null)
@@ -460,6 +491,100 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
     [activePanel]
   )
 
+  const insertTerminalPastedText = useCallback((term: Terminal, raw: string) => {
+    const text = normalizePastedTerminalText(raw)
+    if (!text) return
+    terminalHistoryIndexRef.current = null
+    terminalInputBufferRef.current += text
+    term.write(text)
+  }, [])
+
+  const pasteTerminalClipboard = useCallback(
+    async (term: Terminal): Promise<boolean> => {
+      if (terminalRunningRef.current) return false
+      try {
+        const text = navigator.clipboard?.readText
+          ? await navigator.clipboard.readText()
+          : ''
+        if (text) {
+          insertTerminalPastedText(term, text)
+          return true
+        }
+      } catch {
+        /* fall through to webEdit */
+      }
+      try {
+        term.focus()
+        await bridge.webEdit('paste')
+        return true
+      } catch {
+        msgApi.error('粘贴失败')
+        return false
+      }
+    },
+    [bridge, insertTerminalPastedText, msgApi]
+  )
+
+  const copyTerminalSelection = useCallback(
+    async (term: Terminal): Promise<boolean> => {
+      if (!term.hasSelection()) return false
+      const text = term.getSelection()
+      if (!text) return false
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text)
+        } else {
+          await bridge.webEdit('copy')
+        }
+      } catch {
+        try {
+          await bridge.webEdit('copy')
+        } catch {
+          msgApi.error('复制失败')
+          return false
+        }
+      }
+      term.clearSelection()
+      return true
+    },
+    [bridge, msgApi]
+  )
+
+  const handleTerminalContextMenu = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      const term = terminalRef.current
+      if (!term) return
+      if (term.hasSelection()) {
+        void copyTerminalSelection(term)
+        return
+      }
+      if (!terminalRunningRef.current) {
+        void pasteTerminalClipboard(term)
+      }
+    },
+    [copyTerminalSelection, pasteTerminalClipboard]
+  )
+
+  const interruptTerminalCommand = useCallback(() => {
+    const term = terminalRef.current
+    if (!term || !terminalRunningRef.current) return
+    terminalCancelledRef.current = true
+    const workspaceId = activeWorkspaceIdRef.current
+    const finishInterrupt = () => {
+      terminalRunningRef.current = false
+      terminalInputBufferRef.current = ''
+      term.write('^C\r\n[命令已取消]\r\n')
+      resetTerminalMouseTracking(term)
+      writeTerminalPrompt(term)
+    }
+    if (!workspaceId || workspaceId === HOME_WORKSPACE_ID) {
+      finishInterrupt()
+      return
+    }
+    void bridge.cancelTerminalCommand(workspaceId).then(finishInterrupt)
+  }, [bridge, writeTerminalPrompt])
+
   const runTerminalCommand = useCallback(
     async (commandText: string) => {
       const term = terminalRef.current
@@ -481,27 +606,61 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
         writeTerminalPrompt(term)
         return
       }
+      terminalCancelledRef.current = false
       terminalRunningRef.current = true
+      let receivedStream = false
+      const stopTerminalOutput = bridge.onTerminalOutput((payload) => {
+        if (payload.workspaceId !== activeWorkspaceIdRef.current) return
+        if (terminalCancelledRef.current) return
+        receivedStream = true
+        writeTerminalStreamChunk(term, payload.chunk)
+      })
+      term.write('\r\n')
       try {
         const { output } = await bridge.runTerminalCommand(activeWorkspaceId, command)
-        const normalizedOutput = (output || '[无输出]').replace(/\r?\n/g, '\r\n')
-        term.write('\r\n')
-        term.write(normalizedOutput)
-        if (!normalizedOutput.endsWith('\r\n')) {
-          term.write('\r\n')
+        if (terminalCancelledRef.current) return
+        const tail = (output || '').replace(/\r?\n/g, '\r\n')
+        if (tail) {
+          term.write(tail)
+          if (!tail.endsWith('\r\n')) term.write('\r\n')
+        } else if (!receivedStream) {
+          term.write('[无输出]\r\n')
         }
+        resetTerminalMouseTracking(term)
       } catch (error) {
+        if (terminalCancelledRef.current) return
         const msg = error instanceof Error ? error.message : String(error)
         msgApi.error(`命令执行失败：${msg}`)
         term.write(`\r\n命令执行失败：${msg}\r\n`)
       } finally {
-        terminalRunningRef.current = false
-        terminalInputBufferRef.current = ''
-        writeTerminalPrompt(term)
+        stopTerminalOutput()
+        if (!terminalCancelledRef.current) {
+          terminalRunningRef.current = false
+          terminalInputBufferRef.current = ''
+          resetTerminalMouseTracking(term)
+          writeTerminalPrompt(term)
+        }
       }
     },
     [activeWorkspaceId, activeWorkspacePath, bridge, msgApi, writeTerminalPrompt]
   )
+
+  const interruptTerminalCommandRef = useRef(interruptTerminalCommand)
+  const runTerminalCommandRef = useRef(runTerminalCommand)
+  const completeTerminalInputRef = useRef(completeTerminalInput)
+  const navigateTerminalHistoryRef = useRef(navigateTerminalHistory)
+  const writeTerminalPromptRef = useRef(writeTerminalPrompt)
+  const copyTerminalSelectionRef = useRef(copyTerminalSelection)
+  const pasteTerminalClipboardRef = useRef(pasteTerminalClipboard)
+  const insertTerminalPastedTextRef = useRef(insertTerminalPastedText)
+  interruptTerminalCommandRef.current = interruptTerminalCommand
+  runTerminalCommandRef.current = runTerminalCommand
+  completeTerminalInputRef.current = completeTerminalInput
+  navigateTerminalHistoryRef.current = navigateTerminalHistory
+  writeTerminalPromptRef.current = writeTerminalPrompt
+  copyTerminalSelectionRef.current = copyTerminalSelection
+  pasteTerminalClipboardRef.current = pasteTerminalClipboard
+  insertTerminalPastedTextRef.current = insertTerminalPastedText
 
   useEffect(() => {
     if (activePanel !== 'file') return
@@ -536,9 +695,18 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
   }, [terminalPromptPrefix])
 
   useEffect(() => {
-    if (activePanel !== 'terminal') return
+    activeWorkspaceIdRef.current = activeWorkspaceId
+  }, [activeWorkspaceId])
+
+  useEffect(() => {
+    if (activePanel !== 'terminal' || isCollapsed) return
     const container = terminalContainerRef.current
-    if (!container || terminalRef.current) return
+    if (!container) return
+    if (terminalRef.current) {
+      terminalRef.current.dispose()
+      terminalRef.current = null
+      terminalFitAddonRef.current = null
+    }
     const term = new Terminal({
       convertEol: true,
       cursorBlink: true,
@@ -546,55 +714,70 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
       lineHeight: 1.5,
       fontFamily: "Consolas, 'Courier New', monospace",
       scrollback: 5000,
+      rightClickSelectsWord: true,
       theme: {
         background: '#f4f4f5',
         foreground: '#18181b',
         cursor: '#27272a',
         cursorAccent: '#f4f4f5',
-        selectionBackground: 'rgb(10 10 10 / 0.14)'
+        selectionBackground: 'rgb(37 99 235 / 0.35)',
+        selectionForeground: '#18181b',
+        selectionInactiveBackground: 'rgb(24 24 27 / 0.16)'
       }
     })
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     term.open(container)
     fitAddon.fit()
+    term.focus()
     terminalRef.current = term
     terminalFitAddonRef.current = fitAddon
     terminalInputBufferRef.current = ''
     terminalRunningRef.current = false
+    terminalCancelledRef.current = false
     // 首行提示符仅由下方「activePanel / activeWorkspaceId」effect 统一写入，避免与
     // term.reset() 后的 write 在 xterm 异步解析队列中叠加成「PS …> PS …>」。
 
     const disposable = term.onData((data) => {
       const activeTerm = terminalRef.current
       if (!activeTerm) return
-      if (terminalRunningRef.current) {
-        if (data === '\u0003' && activeWorkspaceId) {
-          void bridge.cancelTerminalCommand(activeWorkspaceId).then(() => {
-            terminalRunningRef.current = false
-            terminalInputBufferRef.current = ''
-            activeTerm.write('^C\r\n[命令已取消]\r\n')
-            writeTerminalPrompt(activeTerm)
-          })
+      if (isTerminalCtrlC(data)) {
+        if (activeTerm.hasSelection()) {
+          void copyTerminalSelectionRef.current(activeTerm)
+          return
+        }
+        if (terminalRunningRef.current) {
+          interruptTerminalCommandRef.current()
+        } else if (terminalInputBufferRef.current.length > 0) {
+          const len = terminalInputBufferRef.current.length
+          terminalInputBufferRef.current = ''
+          activeTerm.write('\b \b'.repeat(len))
+          activeTerm.write('^C\r\n')
+          writeTerminalPromptRef.current(activeTerm)
         }
         return
       }
-      if (data === '\r') {
+      if (terminalRunningRef.current) return
+      if (data.length > 1 && !data.startsWith('\u001b')) {
+        insertTerminalPastedTextRef.current(activeTerm, data)
+        return
+      }
+      if (isTerminalEnter(data)) {
         const command = terminalInputBufferRef.current
         terminalInputBufferRef.current = ''
-        void runTerminalCommand(command)
+        void runTerminalCommandRef.current(command)
         return
       }
       if (data === '\u001b[A') {
-        navigateTerminalHistory(activeTerm, 'up')
+        navigateTerminalHistoryRef.current(activeTerm, 'up')
         return
       }
       if (data === '\u001b[B') {
-        navigateTerminalHistory(activeTerm, 'down')
+        navigateTerminalHistoryRef.current(activeTerm, 'down')
         return
       }
       if (data === '\t') {
-        void completeTerminalInput()
+        void completeTerminalInputRef.current()
         return
       }
       if (data === '\u007f') {
@@ -612,41 +795,106 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
       }
     })
 
+    const handleTerminalKeyDown = (event: KeyboardEvent) => {
+      const activeTerm = terminalRef.current
+      if (!activeTerm) return
+      const mod = event.ctrlKey || event.metaKey
+      if (mod && event.key.toLowerCase() === 'a') {
+        event.preventDefault()
+        activeTerm.selectAll()
+        return
+      }
+      const wantsCopy =
+        (mod && event.key.toLowerCase() === 'c') || (event.ctrlKey && event.key === 'Insert')
+      if (wantsCopy && activeTerm.hasSelection()) {
+        event.preventDefault()
+        event.stopPropagation()
+        void copyTerminalSelectionRef.current(activeTerm)
+        return
+      }
+      const wantsPaste =
+        (mod && event.key.toLowerCase() === 'v') ||
+        (event.shiftKey && event.key === 'Insert' && !event.ctrlKey)
+      if (wantsPaste && !terminalRunningRef.current) {
+        event.preventDefault()
+        event.stopPropagation()
+        void pasteTerminalClipboardRef.current(activeTerm)
+      }
+    }
+
+    const handleTerminalPaste = (event: ClipboardEvent) => {
+      if (terminalRunningRef.current) {
+        event.preventDefault()
+        return
+      }
+      const text = event.clipboardData?.getData('text/plain')
+      if (!text) return
+      event.preventDefault()
+      const activeTerm = terminalRef.current
+      if (!activeTerm) return
+      insertTerminalPastedTextRef.current(activeTerm, text)
+    }
+
+    container.addEventListener('keydown', handleTerminalKeyDown, true)
+    container.addEventListener('paste', handleTerminalPaste)
+
     const resizeObserver = new ResizeObserver(() => {
       terminalFitAddonRef.current?.fit()
     })
     resizeObserver.observe(container)
+    resetTerminalMouseTracking(term)
+    writeTerminalPromptRef.current(term)
 
     return () => {
+      container.removeEventListener('keydown', handleTerminalKeyDown, true)
+      container.removeEventListener('paste', handleTerminalPaste)
       resizeObserver.disconnect()
       disposable.dispose()
       term.dispose()
       terminalRef.current = null
       terminalFitAddonRef.current = null
+      terminalRunningRef.current = false
+      terminalCancelledRef.current = false
     }
-  }, [
-    activePanel,
-    activeWorkspaceId,
-    bridge,
-    completeTerminalInput,
-    navigateTerminalHistory,
-    runTerminalCommand,
-    writeTerminalPrompt
-  ])
+  }, [activePanel, isCollapsed])
 
   useEffect(() => {
-    if (activePanel !== 'terminal') return
-    const term = terminalRef.current
-    if (!term) return
-    terminalInputBufferRef.current = ''
-    terminalRunningRef.current = false
-    terminalHistoryRef.current = []
-    terminalHistoryIndexRef.current = null
-    terminalHistoryDraftRef.current = ''
-    term.reset()
-    writeTerminalPrompt(term)
-    terminalFitAddonRef.current?.fit()
-  }, [activePanel, activeWorkspaceId, writeTerminalPrompt])
+    if (activePanel !== 'terminal' || isCollapsed) return
+    let cancelled = false
+    const applyWorkspaceReset = () => {
+      if (cancelled) return
+      const term = terminalRef.current
+      if (!term) {
+        requestAnimationFrame(applyWorkspaceReset)
+        return
+      }
+      if (terminalRunningRef.current) {
+        interruptTerminalCommandRef.current()
+      }
+      terminalInputBufferRef.current = ''
+      terminalRunningRef.current = false
+      terminalCancelledRef.current = false
+      terminalHistoryRef.current = []
+      terminalHistoryIndexRef.current = null
+      terminalHistoryDraftRef.current = ''
+      term.reset()
+      resetTerminalMouseTracking(term)
+      writeTerminalPrompt(term)
+      terminalFitAddonRef.current?.fit()
+      term.focus()
+    }
+    applyWorkspaceReset()
+    return () => {
+      cancelled = true
+    }
+  }, [activeWorkspaceId, isCollapsed, writeTerminalPrompt])
+
+  useEffect(() => {
+    if (activePanel !== 'terminal' || isCollapsed) return
+    requestAnimationFrame(() => {
+      terminalRef.current?.focus()
+    })
+  }, [activePanel, isCollapsed])
 
   return (
     <aside
@@ -786,7 +1034,12 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
               </>
             ) : (
               <div className="app-right-terminal-panel">
-                <div ref={terminalContainerRef} className="app-right-terminal-canvas" />
+                <div
+                  ref={terminalContainerRef}
+                  className="app-right-terminal-canvas"
+                  onClick={() => terminalRef.current?.focus()}
+                  onContextMenu={handleTerminalContextMenu}
+                />
               </div>
             )}
           </div>

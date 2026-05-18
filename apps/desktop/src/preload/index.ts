@@ -21,6 +21,7 @@ import {
   type SkillsUninstallResult,
   type StreamEvent,
   type TerminalCompleteResult,
+  type TerminalOutputEvent,
   type TerminalRunResult,
   type WebEditAction,
   type WindowChromeAction,
@@ -140,6 +141,13 @@ const api = {
     ipcRenderer.on(EVENTS.SETTINGS_SYNC, h)
     return () => {
       ipcRenderer.removeListener(EVENTS.SETTINGS_SYNC, h)
+    }
+  },
+  onTerminalOutput: (cb: (e: TerminalOutputEvent) => void) => {
+    const h = (_: Electron.IpcRendererEvent, p: TerminalOutputEvent) => cb(p)
+    ipcRenderer.on(EVENTS.TERMINAL_OUTPUT, h)
+    return () => {
+      ipcRenderer.removeListener(EVENTS.TERMINAL_OUTPUT, h)
     }
   },
   getSkillsState: () => ipcRenderer.invoke(IPC.SKILLS_STATE) as Promise<SkillsRuntimeState>,

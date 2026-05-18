@@ -106,8 +106,16 @@ export const EVENTS = {
   SESSIONS_SYNC: 'sessions:sync',
   SETTINGS_SYNC: 'settings:sync',
   /** 池化预热完成（启动、保存 MCP 或手动触发后） */
-  MCP_WARMUP: 'mcp:warmup'
+  MCP_WARMUP: 'mcp:warmup',
+  /** 右侧栏终端命令的实时 stdout/stderr 片段 */
+  TERMINAL_OUTPUT: 'terminal:output'
 } as const
+
+export type TerminalOutputEvent = {
+  workspaceId: string
+  chunk: string
+  stream: 'stdout' | 'stderr'
+}
 
 export type ModelProviderId = 'deepseek'
 

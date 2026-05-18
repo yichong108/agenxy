@@ -64,6 +64,7 @@ import {
   type SkillsUninstallPayload,
   type AboutAppInfo,
   type StreamEvent,
+  type TerminalOutputEvent,
   type WebEditAction,
   type WindowChromeAction
 } from '@/shared/ipc'
@@ -386,7 +387,7 @@ function registerIpc(): void {
     }
     return await readWorkspaceFileContent(workspace.path, relPath)
   })
-  ipcMain.handle(IPC.TERMINAL_RUN, async (_e, workspaceId: string, command: string) => {
+  ipcMain.handle(IPC.TERMINAL_RUN, async (event, workspaceId: string, command: string) => {
     const trimmed = String(command ?? '').trim()
     if (!trimmed) return { output: '请输入命令后再执行。' }
     const targetWorkspace = listWorkspaces().find((x) => x.id === workspaceId)
@@ -395,7 +396,17 @@ function registerIpc(): void {
       return { output: '当前工作区未绑定目录，无法执行命令。' }
     }
     const sessionKey = `right-pane:${workspaceId}`
-    const output = await runCommand(sessionKey, workspacePath, trimmed, MAX_TERMINAL_OUTPUT_CHARS)
+    const sender = event.sender
+    const output = await runCommand(sessionKey, workspacePath, trimmed, MAX_TERMINAL_OUTPUT_CHARS, {
+      onChunk: (chunk, stream) => {
+        if (sender.isDestroyed()) return
+        sender.send(EVENTS.TERMINAL_OUTPUT, {
+          workspaceId,
+          chunk,
+          stream
+        } satisfies TerminalOutputEvent)
+      }
+    })
     return { output }
   })
   ipcMain.handle(IPC.TERMINAL_CANCEL, async (_e, workspaceId: string) => {

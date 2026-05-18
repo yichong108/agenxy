@@ -18,6 +18,7 @@ import type {
   SkillsUninstallResult,
   StreamEvent,
   TerminalCompleteResult,
+  TerminalOutputEvent,
   TerminalRunResult,
   WebEditAction,
   WindowChromeAction,
@@ -46,6 +47,7 @@ type Api = {
   readWorkspaceFile: (relPath: string) => Promise<WorkspaceFileContentResult>
   runTerminalCommand: (workspaceId: string, command: string) => Promise<TerminalRunResult>
   cancelTerminalCommand: (workspaceId: string) => Promise<{ ok: true }>
+  onTerminalOutput: (cb: (e: TerminalOutputEvent) => void) => () => void
   completeTerminalCommand: (
     workspaceId: string,
     commandLine: string
