@@ -19,7 +19,9 @@ import {
   buildRejectionStateMessages,
   extractPendingToolCalls,
   formatToolArgs,
+  HITL_EXEMPT_TOOL_NAMES,
   isPausedBeforeTools,
+  partitionPendingToolCalls,
   isRejectedToolResult,
   makeHitlId,
   submitHitlDecision,
@@ -54,7 +56,9 @@ import { runCommand, killCommand } from '@/main/tools/terminal'
 import { isTavilyConfigured, tavilyWebSearch } from '@/main/tools/web-search'
 import {
   EVENTS,
+  normalizeComposerMode,
   type AgentComposerMode,
+  type AgentSendOptions,
   type AppSettings,
   type ChatMessage,
   type ModelProviderId,
@@ -154,10 +158,15 @@ function toPersistedMessages(coreMessages: BaseMessage[]): ChatMessage[] {
     const msg = visible[i]!
     const messageType = getBaseMessageType(msg)
     if (messageType === 'human') {
+      const kw = (msg as { additional_kwargs?: Record<string, unknown> }).additional_kwargs
+      const display =
+        typeof kw?.[AGENXY_USER_DISPLAY_KW] === 'string'
+          ? (kw[AGENXY_USER_DISPLAY_KW] as string)
+          : contentToText(msg.content)
       out.push({
         id: `u-${Date.now()}-${Math.random().toString(16).slice(2)}`,
         role: 'user',
-        content: contentToText(msg.content)
+        content: display
       })
       continue
     }
@@ -284,6 +293,24 @@ const commonPrompt = `
   Current date/time (UTC): ${new Date().toLocaleString()};
 `
 
+/** 持久化用户消息时优先使用该展示文案（Plan 执行等场景） */
+export const AGENXY_USER_DISPLAY_KW = 'agenxy_user_display'
+
+function buildAgentMessageWithPlan(userText: string, planContext: string): string {
+  const userPart = userText.trim() || '（用户未附加说明，请严格按计划步骤实施。）'
+  return [
+    'The user confirmed the following plan from **Plan mode** and switched to **Build** to implement it.',
+    'Follow the plan unless the user message clearly revises, narrows, or reorders scope.',
+    '',
+    '--- Plan ---',
+    planContext.trim(),
+    '--- End plan ---',
+    '',
+    'User message:',
+    userPart
+  ].join('\n')
+}
+
 function buildAskSystemPrompt(root: string, settings: AppSettings): string {
   const web = isTavilyConfigured(settings.tavilyApiKey)
   const toolLine = web
@@ -300,6 +327,38 @@ ${webRule}
 - Keep responses clear and verifiable: read/list/search repo content first before drawing conclusions.
 - Understand intent first → restate goal if needed
 `
+}
+
+function buildPlanSystemPrompt(root: string, settings: AppSettings): string {
+  const web = isTavilyConfigured(settings.tavilyApiKey)
+  const toolLine = web
+    ? 'read_file, list_dir, glob, search_workspace, web_search (Tavily)'
+    : 'read_file, list_dir, glob, search_workspace (no web_search without Tavily)'
+  const webRule = web
+    ? '- Call **web_search** when external docs or APIs are needed; do not fabricate search results.'
+    : '- Tavily is not configured: note when real-time web data would help.'
+  return `You are a **Plan Mode** architect for this workspace (${root}). Explore read-only and output a **checklist plan** for the UI — nothing has been executed yet.
+- **DO NOT** modify files, delete files, run shell, or call skill_* / mcp_*; only read-only tools: ${toolLine}.
+- **DO NOT** claim you already changed code or ran commands. Do NOT tell the user to click "execute" or auto-run anything.
+- Explore enough (read/list/search) to ground steps in real paths and symbols.
+
+**Required final Markdown shape** (use these exact ## headings; labels may be Chinese or English):
+
+## 目标
+One short paragraph restating the user request.
+
+## 计划
+- [ ] First actionable step — include file paths when known
+- [ ] Second step
+(add one \`- [ ]\` line per implementation step; this section is rendered as a Cursor-style checklist)
+
+## 风险与待确认
+- Bullet risks or open questions (omit entire section if none)
+
+Rules:
+- Every implementation step MUST be \`- [ ]\` under ## 计划 (not numbered lists, not prose-only).
+- Keep step titles short; put extra detail after an em dash on the same line.
+${webRule}`
 }
 
 const INTENT_SUMMARY_TIMEOUT_MS = 18_000
@@ -416,9 +475,53 @@ type ReactAgentRunContext = {
   traceId: string
   threadId: string
   hitlEnabled: boolean
+  toolsByName: Map<string, NamedTool>
   onPendingHitl: (hitlId: string, toolCalls: PendingToolCall[]) => void
   emitHitlRequired: (hitlId: string, toolCalls: PendingToolCall[]) => void
   onToolsRejected?: (toolCalls: PendingToolCall[]) => void
+}
+
+async function executePendingToolCalls(
+  pending: PendingToolCall[],
+  toolsByName: Map<string, NamedTool>
+): Promise<ToolMessage[]> {
+  const out: ToolMessage[] = []
+  for (const tc of pending) {
+    const impl = toolsByName.get(tc.name)
+    if (!impl) {
+      out.push(
+        new ToolMessage({
+          content: `Tool not found: ${tc.name}`,
+          tool_call_id: tc.id,
+          name: tc.name,
+          status: 'error'
+        })
+      )
+      continue
+    }
+    try {
+      const result = await impl.invoke(tc.args)
+      const content = typeof result === 'string' ? result : JSON.stringify(result)
+      out.push(
+        new ToolMessage({
+          content,
+          tool_call_id: tc.id,
+          name: tc.name
+        })
+      )
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      out.push(
+        new ToolMessage({
+          content: message,
+          tool_call_id: tc.id,
+          name: tc.name,
+          status: 'error'
+        })
+      )
+    }
+  }
+  return out
 }
 
 /**
@@ -448,8 +551,7 @@ async function runReactAgentWithGuard(
         }
       },
       ...(langfuseHandler ? [langfuseHandler] : [])
-    ],
-    ...(runCtx.hitlEnabled ? { interruptBefore: ['tools'] as const } : {})
+    ]
   }
 
   let timer: ReturnType<typeof setTimeout> | null = null
@@ -486,19 +588,31 @@ async function runReactAgentWithGuard(
         return stateMessages
       }
 
+      const { approvalRequired, autoExecute } = partitionPendingToolCalls(pending)
+      if (approvalRequired.length === 0) {
+        agentLog.info(
+          `[runReactAgentWithGuard] read-only tools only (${autoExecute.map((t) => t.name).join(', ')}), skip HITL`
+        )
+        input = null
+        continue
+      }
+
       const hitlId = makeHitlId(runCtx.runId, hitlRound++)
-      runCtx.onPendingHitl(hitlId, pending)
-      runCtx.emitHitlRequired(hitlId, pending)
+      runCtx.onPendingHitl(hitlId, approvalRequired)
+      runCtx.emitHitlRequired(hitlId, approvalRequired)
 
       const decision = await waitForHitlDecision(hitlId, ac.signal)
       agentLog.info(`[runReactAgentWithGuard] hitl decision=${decision} hitlId=${hitlId}`)
 
       if (decision === 'reject') {
-        // Prebuilt ReAct + interruptBefore: inject synthetic ToolMessages, then resume with null.
+        const autoResults =
+          autoExecute.length > 0
+            ? await executePendingToolCalls(autoExecute, runCtx.toolsByName)
+            : []
         await agent.updateState(graphStateConfig, {
-          messages: buildRejectionStateMessages(pending)
+          messages: [...autoResults, ...buildRejectionStateMessages(approvalRequired)]
         })
-        runCtx.onToolsRejected?.(pending)
+        runCtx.onToolsRejected?.(approvalRequired)
       }
 
       // Approve: null continues into tools node. Reject: null after synthetic tool results above.
@@ -512,14 +626,6 @@ async function runReactAgentWithGuard(
 /**
  * Create tools
  */
-const ASK_MODE_TOOL_NAMES = new Set([
-  'read_file',
-  'list_dir',
-  'glob',
-  'search_workspace',
-  'web_search'
-])
-
 /** Tool executor context */
 type ToolExecutorContext = {
   runId: string
@@ -704,8 +810,10 @@ async function prepareAgentTooling(
 ): Promise<AgentTooling> {
   const { baseTools, webSearchTools } = buildBaseAndWebTools(sessionId, root, settings, runCtx)
 
-  if (mode === 'ask') {
-    const tools = [...baseTools, ...webSearchTools].filter((t) => ASK_MODE_TOOL_NAMES.has(t.name))
+  if (mode === 'ask' || mode === 'plan') {
+    const tools = [...baseTools, ...webSearchTools].filter((t) =>
+      HITL_EXEMPT_TOOL_NAMES.has(t.name)
+    )
     return { tools, skillHint: '', mcpContextHints: '' }
   }
 
@@ -734,6 +842,9 @@ function buildAgentRunPrompt(
 ): string {
   if (mode === 'ask') {
     return [buildAskSystemPrompt(root, settings), commonPrompt].filter(Boolean).join('\n\n')
+  }
+  if (mode === 'plan') {
+    return [buildPlanSystemPrompt(root, settings), commonPrompt].filter(Boolean).join('\n\n')
   }
   return [buildSystemPrompt(root, settings), tooling.skillHint, tooling.mcpContextHints, commonPrompt]
     .filter(Boolean)
@@ -819,9 +930,21 @@ export async function runUserMessage(
   sessionId: string,
   userText: string,
   onQueued: (pos: number) => void,
-  options?: { mode?: AgentComposerMode }
+  options?: AgentSendOptions
 ): Promise<void> {
-  const composerMode: AgentComposerMode = options?.mode === 'ask' ? 'ask' : 'build'
+  const composerMode = normalizeComposerMode(options?.mode)
+  const planContext = options?.planContext?.trim()
+  const userDisplayText =
+    options?.userDisplayText?.trim() ||
+    userText.trim() ||
+    (planContext ? '执行计划' : '')
+  const agentUserText = planContext
+    ? buildAgentMessageWithPlan(userText, planContext)
+    : userText.trim()
+  if (!agentUserText) {
+    emit({ type: 'error', sessionId, message: 'Empty message' })
+    return
+  }
   const settings = getSettings()
   agentLog.info(`settings: ${JSON.stringify(settings, null, 2)}, composerMode: ${composerMode}`)
 
@@ -899,6 +1022,7 @@ export async function runUserMessage(
 
     const schedulePlanAfterTool = (ended: ToolEndedCall) => {
       if (ac.signal.aborted) return
+      if (composerMode === 'plan') return
       if (planStepsThisRun >= MAX_PLAN_STEPS_PER_RUN) return
       planStepsThisRun += 1
       const stepId = `plan-${ended.id}`
@@ -995,7 +1119,14 @@ export async function runUserMessage(
     }
     const recursionLimit = settings.maxAgentLoopSteps
     const invokeTimeoutMs = settings.agentRunTimeoutMs
-    session.messages.push(new HumanMessage(userText))
+    session.messages.push(
+      new HumanMessage({
+        content: agentUserText,
+        additional_kwargs: planContext
+          ? { [AGENXY_USER_DISPLAY_KW]: userDisplayText }
+          : {}
+      })
+    )
     persistSessionMessages(session.workspaceId, sessionId, session.messages)
 
     const intentBatcher = new StreamBatcher(STREAM_FLUSH_MS, STREAM_FLUSH_CHARS, (t) => {
@@ -1005,7 +1136,7 @@ export async function runUserMessage(
     try {
       intentThinking = await streamIntentSummary(
         settings,
-        userText,
+        userDisplayText || agentUserText,
         ac,
         intentBatcher,
         langfuseHandler
@@ -1030,7 +1161,7 @@ export async function runUserMessage(
       if (composerMode === 'build') {
         try {
           const classification = await classifyIntent(
-            userText,
+            userDisplayText || agentUserText,
             settings,
             ac.signal,
             langfuseHandler
@@ -1080,13 +1211,15 @@ export async function runUserMessage(
         composerMode === 'build' && settings.toolApprovalInBuild !== false
       const threadId = `${sessionId}:${runId}`
 
+      const toolsByName = new Map(tools.map((t) => [t.name, t]))
+
       const agent = createReactAgent({
         llm: model,
         tools: tools as never[],
         prompt: runPrompt,
-        ...(hitlEnabled
-          ? { checkpointer: agentCheckpointer, interruptBefore: ['tools'] as const }
-          : {})
+        // All modes need a checkpointer: runReactAgentWithGuard reads graph state after invoke.
+        checkpointer: agentCheckpointer,
+        ...(hitlEnabled ? { interruptBefore: ['tools'] as const } : {})
       })
 
       const onStreamToken = (token: string) => {
@@ -1112,6 +1245,7 @@ export async function runUserMessage(
             traceId,
             threadId,
             hitlEnabled,
+            toolsByName,
             onPendingHitl: (hitlId, toolCalls) => {
               session.pendingHitl = { hitlId, toolCalls }
             },

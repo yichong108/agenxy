@@ -59,7 +59,9 @@ import {
   IPC,
   EVENTS,
   MAX_TERMINAL_OUTPUT_CHARS,
+  normalizeComposerMode,
   type AgentComposerMode,
+  type AgentSendOptions,
   type AppSettings,
   type McpServerEntry,
   type McpWarmupReport,
@@ -546,11 +548,12 @@ function registerIpc(): void {
    */
   ipcMain.handle(
     IPC.AGENT_SEND,
-    async (_e, sessionId: string, text: string, opts?: { mode?: AgentComposerMode }) => {
-      const mode = opts?.mode === 'ask' ? 'ask' : 'build'
-      mainLog.info(`[AGENT_SEND] sessionId: ${sessionId}, mode: ${mode}, text: ${text}`)
+    async (_e, sessionId: string, text: string, opts?: AgentSendOptions) => {
+      const mode = normalizeComposerMode(opts?.mode)
+      const hasPlan = Boolean(opts?.planContext?.trim())
+      mainLog.info(`[AGENT_SEND] sessionId: ${sessionId}, mode: ${mode}, hasPlan: ${hasPlan}`)
 
-      if (!text.trim()) return { ok: false as const, error: '空消息' }
+      if (!text.trim() && !hasPlan) return { ok: false as const, error: '空消息' }
       const onQueued = (pos: number) => {
         if (pos > 0) {
           mainLog.info(`[AGENT_SEND] onQueued: ${pos}`)
@@ -561,7 +564,7 @@ function registerIpc(): void {
         }
       }
       try {
-        await runUserMessage(sessionId, text.trim(), onQueued, { mode })
+        await runUserMessage(sessionId, text.trim(), onQueued, opts ? { ...opts, mode } : { mode })
         const workspaceId = getSessionWorkspaceId(sessionId)
         if (workspaceId) {
           touchSession(workspaceId, sessionId)

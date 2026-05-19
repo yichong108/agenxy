@@ -103,6 +103,34 @@ export function isPausedBeforeTools(next: string[] | undefined): boolean {
   return Array.isArray(next) && next.includes('tools')
 }
 
+/** Tools that may run without user approval in Build mode HITL. */
+export const HITL_EXEMPT_TOOL_NAMES = new Set([
+  'read_file',
+  'list_dir',
+  'glob',
+  'search_workspace',
+  'web_search',
+  'mcp_list_servers',
+  'mcp_inspect_server'
+])
+
+export function requiresHitlApproval(toolName: string): boolean {
+  return !HITL_EXEMPT_TOOL_NAMES.has(toolName)
+}
+
+export function partitionPendingToolCalls(pending: PendingToolCall[]): {
+  approvalRequired: PendingToolCall[]
+  autoExecute: PendingToolCall[]
+} {
+  const approvalRequired: PendingToolCall[] = []
+  const autoExecute: PendingToolCall[] = []
+  for (const tc of pending) {
+    if (requiresHitlApproval(tc.name)) approvalRequired.push(tc)
+    else autoExecute.push(tc)
+  }
+  return { approvalRequired, autoExecute }
+}
+
 /** Synthetic tool results + internal system hint (not persisted / not shown as user text). */
 export function buildRejectionStateMessages(pending: PendingToolCall[]): BaseMessage[] {
   const names = pending.map((t) => t.name).join(', ')

@@ -43,11 +43,15 @@ import {
   installCaptionBlockingOverlayObserver,
   resetNativeTitlebarModalStack
 } from '@/renderer/src/native-titlebar-bridge'
+import { PlanChecklistPanel } from '@/renderer/src/plan/PlanChecklistPanel'
+import { parseAgentPlan } from '@/renderer/src/plan/parse-plan'
 import { WorkspaceRightPane } from '@/renderer/src/right-pane/WorkspaceRightPane'
 import { useUiStore } from '@/renderer/src/store/ui-store'
 import { useWorkspaceStore } from '@/renderer/src/store/workspace-store'
 import {
   type AboutAppInfo,
+  type AgentComposerMode,
+  type AgentSendOptions,
   type ChatMessage,
   type HitlToolCallPayload,
   type SessionInfo,
@@ -248,8 +252,13 @@ export function App() {
     composerInputRef.current?.focus({ preventScroll: true })
   }, [composerFocusNonce])
 
-  /** 未开启时为 Cursor 风格的 Build（可写可执行）；开启后为 Ask 只读问答 */
-  const [composerAskOn, setComposerAskOn] = useState(false)
+  /** Composer 模式：Build / Ask / Plan（对齐 Cursor） */
+  const [composerMode, setComposerMode] = useState<AgentComposerMode>('build')
+  /** 由 Plan 模式生成的 assistant 消息 id，用于展示计划清单 */
+  const [planAssistantIds, setPlanAssistantIds] = useState<Set<string>>(() => new Set())
+  /** 点击「执行计划」后挂到会话上的计划正文（不写入输入框） */
+  const [pendingPlanBySession, setPendingPlanBySession] = useState<Record<string, string>>({})
+  const lastSendComposerModeRef = useRef<AgentComposerMode>('build')
 
   /** 顶栏工作区下拉始终含 Home；侧栏移除 Home 后主进程同步列表可能不含该项 */
   const workspacesWithComposerHomeStub = useMemo(() => {
@@ -528,6 +537,13 @@ export function App() {
         intentBuf.current[e.sessionId] = ''
         const aid = randomId()
         assistantMsgId.current[e.sessionId] = aid
+        if (lastSendComposerModeRef.current === 'plan') {
+          setPlanAssistantIds((prev) => {
+            const next = new Set(prev)
+            next.add(aid)
+            return next
+          })
+        }
         setMessages((m) => {
           const cur = m[e.sessionId] ?? []
           return {
@@ -800,36 +816,25 @@ export function App() {
   )
 
   const handleComposerPlusMenuClick = useCallback<NonNullable<MenuProps['onClick']>>(({ key }) => {
-    if (key === 'build') setComposerAskOn(false)
-    if (key === 'ask') setComposerAskOn(true)
+    if (key === 'build' || key === 'ask' || key === 'plan') {
+      setComposerMode(key)
+    }
   }, [])
 
   const composerPlusMenuItems = useMemo<MenuProps['items']>(
-    () => [
-      {
-        key: 'build',
+    () =>
+      (['build', 'ask', 'plan'] as const).map((mode) => ({
+        key: mode,
         label: (
           <span className="app-composer-plus-menu-title">
-            <span>Build</span>
-            {!composerAskOn ? (
+            <span>{mode === 'build' ? 'Build' : mode === 'ask' ? 'Ask' : 'Plan'}</span>
+            {composerMode === mode ? (
               <CheckOutlined className="app-composer-plus-menu-check" aria-hidden />
             ) : null}
           </span>
         )
-      },
-      {
-        key: 'ask',
-        label: (
-          <span className="app-composer-plus-menu-title">
-            <span>Ask</span>
-            {composerAskOn ? (
-              <CheckOutlined className="app-composer-plus-menu-check" aria-hidden />
-            ) : null}
-          </span>
-        )
-      }
-    ],
-    [composerAskOn]
+      })),
+    [composerMode]
   )
 
   const composerWorkspaceMenuItems = useMemo<MenuProps['items']>(() => {
@@ -854,54 +859,109 @@ export function App() {
     ]
   }, [composerSelectedWorkspaceId, supportsMultiWorkspaceApi, workspacesWithComposerHomeStub])
 
-  // 发送当前输入消息，并立即在本地追加用户消息（尚无会话时先创建再发送）
-  const send = async () => {
-    const t = input.trim()
-    if (!t) return
-    const activeWorkspace = workspacesWithComposerHomeStub.find(
-      (x) => x.id === composerSelectedWorkspaceId
-    )
-    if (!activeWorkspace?.path) {
-      msgApi.warning('请先为当前工作区绑定路径')
-      return
-    }
-    let sessionId: string
-    if (activeId) {
-      sessionId = activeId
-    } else {
-      const created = await bridge.createSession()
-      if (!created) {
-        msgApi.warning('请先创建或选择工作区')
+  const sendAgentText = useCallback(
+    async (text: string, mode: AgentComposerMode, sendOpts?: AgentSendOptions) => {
+      const t = text.trim()
+      const planContext = sendOpts?.planContext?.trim()
+      if (!t && !planContext) return
+      const displayContent =
+        sendOpts?.userDisplayText?.trim() || t || (planContext ? '执行计划' : '')
+      const activeWorkspace = workspacesWithComposerHomeStub.find(
+        (x) => x.id === composerSelectedWorkspaceId
+      )
+      if (!activeWorkspace?.path) {
+        msgApi.warning('请先为当前工作区绑定路径')
         return
       }
-      sessionId = created.id
-      setActiveId(sessionId)
-    }
-    // activeId 变更会触发 ensureSessionMessages；新会话此时主进程可能尚未持久化消息，
-    // 若拉取到空列表会覆盖本地用户消息与 run-start 的 assistant 占位，导致流式增量全部丢弃。
-    hydratedMessageSessions.current.add(sessionId)
-    setInput('')
-    setMessages((m) => {
-      const cur = m[sessionId] ?? []
-      return {
-        ...m,
-        [sessionId]: [...cur, { id: randomId(), role: 'user' as const, content: t }]
+      let sessionId: string
+      if (activeId) {
+        sessionId = activeId
+      } else {
+        const created = await bridge.createSession()
+        if (!created) {
+          msgApi.warning('请先创建或选择工作区')
+          return
+        }
+        sessionId = created.id
+        setActiveId(sessionId)
       }
-    })
-    const r = await bridge.sendAgentMessage(sessionId, t, {
-      mode: composerAskOn ? 'ask' : 'build'
-    })
-    if (!r.ok) {
-      msgApi.error('发送失败: ' + r.error)
+      hydratedMessageSessions.current.add(sessionId)
+      lastSendComposerModeRef.current = mode
       setMessages((m) => {
         const cur = m[sessionId] ?? []
         return {
           ...m,
-          [sessionId]: appendAssistantText(cur, `发送失败：${r.error}`, true)
+          [sessionId]: [...cur, { id: randomId(), role: 'user' as const, content: displayContent }]
         }
       })
+      const r = await bridge.sendAgentMessage(sessionId, t, {
+        mode,
+        ...(planContext ? { planContext, userDisplayText: displayContent } : {})
+      })
+      if (!r.ok) {
+        msgApi.error('发送失败: ' + r.error)
+        setMessages((m) => {
+          const cur = m[sessionId] ?? []
+          return {
+            ...m,
+            [sessionId]: appendAssistantText(cur, `发送失败：${r.error}`, true)
+          }
+        })
+      }
+    },
+    [
+      activeId,
+      appendAssistantText,
+      bridge,
+      composerSelectedWorkspaceId,
+      msgApi,
+      setActiveId,
+      workspacesWithComposerHomeStub
+    ]
+  )
+
+  const send = async () => {
+    const t = input.trim()
+    const planContext = activeId ? pendingPlanBySession[activeId]?.trim() : undefined
+    if (!t && !planContext) return
+    setInput('')
+    if (activeId && planContext) {
+      setPendingPlanBySession((prev) => {
+        const next = { ...prev }
+        delete next[activeId]
+        return next
+      })
     }
+    const mode = planContext ? 'build' : composerMode
+    await sendAgentText(t, mode, planContext ? { planContext } : undefined)
   }
+
+  /** 关联计划到当前会话并切 Build；不写入输入框、不自动发送 */
+  const preparePlanExecution = useCallback(
+    (planContent: string) => {
+      const body = planContent.trim()
+      if (!body) return
+      if (!activeId) {
+        msgApi.warning('请先选择会话')
+        return
+      }
+      setPendingPlanBySession((prev) => ({ ...prev, [activeId]: body }))
+      setComposerMode('build')
+      useUiStore.getState().requestComposerFocus()
+      msgApi.info('已切换到 Build。可在输入框补充对计划的修改，发送后开始实施（留空发送则按计划执行）')
+    },
+    [activeId, msgApi]
+  )
+
+  const clearPendingPlan = useCallback(() => {
+    if (!activeId) return
+    setPendingPlanBySession((prev) => {
+      if (!prev[activeId]) return prev
+      const next = { ...prev }
+      delete next[activeId]
+      return next
+    })
+  }, [activeId])
 
   // 检查 React DevTools 是否已加载完成
   const checkDevToolsReady = (): boolean => {
@@ -986,8 +1046,10 @@ export function App() {
   }, [activeId, runStats, isRun, liveTick])
 
   const hasInput = input.trim().length > 0
-  const showSendButton = !isRun || hasInput
-  const showStopButton = Boolean(activeId && isRun && !hasInput)
+  const hasPendingPlan = Boolean(activeId && pendingPlanBySession[activeId]?.trim())
+  const canSend = hasInput || hasPendingPlan
+  const showSendButton = !isRun || canSend
+  const showStopButton = Boolean(activeId && isRun && !canSend)
   const activeWorkspace = useMemo(
     () => workspacesWithComposerHomeStub.find((w) => w.id === composerSelectedWorkspaceId),
     [composerSelectedWorkspaceId, workspacesWithComposerHomeStub]
@@ -1175,6 +1237,22 @@ export function App() {
       />
     ) : null
 
+  const planReadyBar =
+    hasPendingPlan && activeId ? (
+      <Alert
+        type="info"
+        showIcon
+        className="app-plan-ready-bar"
+        message="计划已就绪"
+        description="可在下方输入对计划的修改说明；留空直接发送将按计划实施。"
+        action={
+          <Button size="small" onClick={clearPendingPlan}>
+            取消
+          </Button>
+        }
+      />
+    ) : null
+
   const composerInput = (
     <div className="app-composer">
       <div className="app-composer-inner">
@@ -1184,7 +1262,11 @@ export function App() {
           onChange={(e) => setInput(e.target.value)}
           autoSize={isEmptyConversation ? { minRows: 4, maxRows: 16 } : { minRows: 1, maxRows: 12 }}
           variant="borderless"
-          placeholder="Enter发送，Shift+Enter换行"
+          placeholder={
+            hasPendingPlan
+              ? '补充对计划的修改说明（可选），Enter 发送'
+              : 'Enter发送，Shift+Enter换行'
+          }
           className="app-composer-input"
           onPressEnter={(e) => {
             if (!e.shiftKey) {
@@ -1207,7 +1289,13 @@ export function App() {
                 aria-label="对话模式"
               />
             </Dropdown>
-            {composerAskOn ? <span className="app-composer-mode-hint">Ask</span> : null}
+            {composerMode !== 'build' ? (
+              <span
+                className={`app-composer-mode-hint${composerMode === 'plan' ? ' is-plan' : ''}`}
+              >
+                {composerMode === 'ask' ? 'Ask' : 'Plan'}
+              </span>
+            ) : null}
           </div>
           <div className="app-composer-actions">
             {showSendButton && (
@@ -1215,7 +1303,7 @@ export function App() {
                 type="primary"
                 icon={<SendOutlined />}
                 onClick={() => void send()}
-                disabled={!activeWorkspace?.path || !input.trim()}
+                disabled={!activeWorkspace?.path || !canSend}
                 className="app-send-btn"
               >
                 发送
@@ -1348,6 +1436,7 @@ export function App() {
                 <div className="app-composer-hero-inner">
                   {composerWorkspaceToolbar}
                   {hitlApprovalBar}
+                  {planReadyBar}
                   {composerInput}
                 </div>
               </div>
@@ -1491,14 +1580,64 @@ export function App() {
                                       ) : null}
                                     </div>
                                   ) : null}
-                                  <div className="app-message-markdown" onClick={onMarkdownClick}>
-                                    <ReactMarkdown
-                                      remarkPlugins={[remarkGfm, remarkLinkifyBareUrls]}
-                                      rehypePlugins={[rehypeHighlight]}
-                                    >
-                                      {m.content || (isRun && isLatestAssistant ? '…' : '')}
-                                    </ReactMarkdown>
-                                  </div>
+                                  {planAssistantIds.has(m.id) ? (
+                                    <>
+                                      <PlanChecklistPanel
+                                        content={m.content}
+                                        streaming={Boolean(isRun && isLatestAssistant)}
+                                        onExecutePlan={() => preparePlanExecution(m.content)}
+                                        executeDisabled={Boolean(isRun)}
+                                      />
+                                      {parseAgentPlan(m.content) ? (
+                                        <details className="app-plan-full-details">
+                                          <summary>查看完整说明</summary>
+                                          <div
+                                            className="app-message-markdown app-message-markdown--plan-extra"
+                                            onClick={onMarkdownClick}
+                                          >
+                                            <ReactMarkdown
+                                              remarkPlugins={[remarkGfm, remarkLinkifyBareUrls]}
+                                              rehypePlugins={[rehypeHighlight]}
+                                            >
+                                              {m.content}
+                                            </ReactMarkdown>
+                                          </div>
+                                        </details>
+                                      ) : (
+                                        <>
+                                          <div className="app-message-markdown" onClick={onMarkdownClick}>
+                                            <ReactMarkdown
+                                              remarkPlugins={[remarkGfm, remarkLinkifyBareUrls]}
+                                              rehypePlugins={[rehypeHighlight]}
+                                            >
+                                              {m.content || (isRun && isLatestAssistant ? '…' : '')}
+                                            </ReactMarkdown>
+                                          </div>
+                                          {m.content.trim() && !(isRun && isLatestAssistant) ? (
+                                            <div className="app-plan-execute-fallback">
+                                              <Button
+                                                type="primary"
+                                                size="small"
+                                                disabled={Boolean(isRun)}
+                                                onClick={() => preparePlanExecution(m.content)}
+                                              >
+                                                执行计划
+                                              </Button>
+                                            </div>
+                                          ) : null}
+                                        </>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <div className="app-message-markdown" onClick={onMarkdownClick}>
+                                      <ReactMarkdown
+                                        remarkPlugins={[remarkGfm, remarkLinkifyBareUrls]}
+                                        rehypePlugins={[rehypeHighlight]}
+                                      >
+                                        {m.content || (isRun && isLatestAssistant ? '…' : '')}
+                                      </ReactMarkdown>
+                                    </div>
+                                  )}
                                 </>
                               ) : (
                                 m.content
@@ -1515,6 +1654,7 @@ export function App() {
                 </div>
                 <div className="app-composer-stack">
                   {hitlApprovalBar}
+                  {planReadyBar}
                   {composerInput}
                 </div>
               </>

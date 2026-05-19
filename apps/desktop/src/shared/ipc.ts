@@ -122,13 +122,27 @@ export type TerminalOutputEvent = {
 export type ModelProviderId = 'deepseek'
 
 /**
- * 主输入区发送模式（对齐 Cursor：Ask 只读问答，Build 可写文件、跑终端与技能/MCP）。
- * 渲染层「未勾选 Ask」时按 build 发送。
+ * 主输入区发送模式（对齐 Cursor）：
+ * - build：可写文件、终端、技能/MCP
+ * - ask：只读问答
+ * - plan：只读探索并输出可执行计划，不修改工作区
  */
-export type AgentComposerMode = 'build' | 'ask'
+export type AgentComposerMode = 'build' | 'ask' | 'plan'
+
+export function normalizeComposerMode(mode?: AgentComposerMode): AgentComposerMode {
+  if (mode === 'ask' || mode === 'plan') return mode
+  return 'build'
+}
 
 export type AgentSendOptions = {
   mode?: AgentComposerMode
+  /**
+   * Plan 模式确认执行时附带的计划正文（不显示在输入框）。
+   * 与用户输入一并发给模型；用户消息气泡仅展示 `userDisplayText` 或用户原文。
+   */
+  planContext?: string
+  /** 与 planContext 搭配：持久化/展示用的用户消息文案 */
+  userDisplayText?: string
 }
 
 /** 用户配置的 stdio MCP 服务器（与 Cursor MCP 配置形态相近） */
