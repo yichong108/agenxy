@@ -26,6 +26,8 @@ export const IPC = {
   SESSIONS_DELETE: 'sessions:delete',
   AGENT_SEND: 'agent:send',
   AGENT_CANCEL: 'agent:cancel',
+  /** Resume a paused tool-approval interrupt (LangGraph Command.resume) */
+  AGENT_HITL_RESUME: 'agent:hitl-resume',
   AGENT_STATUS: 'agent:status',
   DEVTOOLS_TOGGLE: 'devtools:toggle',
   EXTERNAL_OPEN: 'external:open',
@@ -280,6 +282,8 @@ export type AppSettings = {
   maxAgentLoopSteps: number
   /** 单次 agent 运行超时（毫秒） */
   agentRunTimeoutMs: number
+  /** Build 模式：工具执行前需用户批准（LangGraph interruptBefore tools） */
+  toolApprovalInBuild: boolean
   /** Tavily 联网搜索 API Key（https://tavily.com），空则禁用检索能力 */
   tavilyApiKey: string
   /** 已保存的 MCP（stdio）服务器列表；启用项会在 Agent 工具流中挂载 */
@@ -356,6 +360,7 @@ export const defaultSettings: AppSettings = {
   providerProfiles: defaultProviderProfiles(),
   maxAgentLoopSteps: 24,
   agentRunTimeoutMs: 120_000,
+  toolApprovalInBuild: true,
   tavilyApiKey: '',
   mcpServers: []
 }
@@ -624,6 +629,26 @@ export type StreamPlanStepEndEvent = StreamBase & {
   stepId: string
 }
 
+export type HitlToolCallPayload = {
+  id: string
+  name: string
+  args: string
+}
+
+/** ReAct 在 tools 节点前中断，等待用户批准/拒绝 */
+export type StreamHitlRequiredEvent = StreamBase & {
+  type: 'hitl-required'
+  hitlId: string
+  toolCalls: HitlToolCallPayload[]
+}
+
+/** 丢弃当前 run 已流式输出的 assistant 草稿（HITL 中断/拒绝后） */
+export type StreamStreamResetEvent = StreamBase & {
+  type: 'stream-reset'
+}
+
+export type HitlResumeDecision = 'accept' | 'reject'
+
 /** StreamEvent 根据 Agent 一次 run 生命周期的阶段变化定义。 */
 export type StreamEvent =
   | StreamTextDeltaEvent
@@ -633,6 +658,8 @@ export type StreamEvent =
   | StreamPlanStepStartEvent
   | StreamPlanDeltaEvent
   | StreamPlanStepEndEvent
+  | StreamHitlRequiredEvent
+  | StreamStreamResetEvent
   | StreamToolEvent
   | StreamErrorEvent
   | StreamDoneEvent

@@ -1,6 +1,10 @@
-﻿import { inspect } from 'node:util'
-
-import { AIMessage, HumanMessage, SystemMessage, type BaseMessage } from '@langchain/core/messages'
+﻿import {
+  AIMessage,
+  HumanMessage,
+  SystemMessage,
+  ToolMessage,
+  type BaseMessage
+} from '@langchain/core/messages'
 import { tool } from '@langchain/core/tools'
 import { createReactAgent } from '@langchain/langgraph/prebuilt'
 import { ChatOpenAI } from '@langchain/openai'
@@ -9,6 +13,22 @@ import type { WebContents } from 'electron'
 import { z } from 'zod'
 
 import { StreamBatcher } from '@/main/agent/batcher'
+import {
+  AGENXY_INTERNAL_KW,
+  agentCheckpointer,
+  buildRejectionStateMessages,
+  extractPendingToolCalls,
+  formatToolArgs,
+  isPausedBeforeTools,
+  isRejectedToolResult,
+  makeHitlId,
+  submitHitlDecision,
+  cancelAllHitlWaiters,
+  TOOL_REJECTED_RESULT,
+  waitForHitlDecision,
+  type PendingToolCall,
+  type HitlUserDecision
+} from '@/main/agent/hitl'
 import { classifyIntent, type UserIntent } from '@/main/agent/intent-classifier'
 import { ConcurrencyQueue } from '@/main/agent/queue'
 import { buildSkillBundle } from '@/main/agent/skills/index'
@@ -57,6 +77,11 @@ type SessionRuntime = {
   controller: AbortController | null
   /** Consistent with terminal key for the session */
   terminalKey: string
+  /** Active LangGraph HITL wait (tool approval before tools node) */
+  pendingHitl?: {
+    hitlId: string
+    toolCalls: PendingToolCall[]
+  }
 }
 
 type NamedTool = {
@@ -103,9 +128,30 @@ function getBaseMessageType(msg: BaseMessage): string {
   return ''
 }
 
+function isInternalGraphMessage(msg: BaseMessage): boolean {
+  const kw = (msg as { additional_kwargs?: Record<string, unknown> }).additional_kwargs
+  return kw?.[AGENXY_INTERNAL_KW] === true
+}
+
 function toPersistedMessages(coreMessages: BaseMessage[]): ChatMessage[] {
-  const out: ChatMessage[] = []
+  const visible: BaseMessage[] = []
   for (const msg of coreMessages) {
+    const messageType = getBaseMessageType(msg)
+    if (messageType === 'system' || isInternalGraphMessage(msg)) continue
+    visible.push(msg)
+  }
+
+  let lastAiIndex = -1
+  for (let i = visible.length - 1; i >= 0; i -= 1) {
+    if (getBaseMessageType(visible[i]) === 'ai') {
+      lastAiIndex = i
+      break
+    }
+  }
+
+  const out: ChatMessage[] = []
+  for (let i = 0; i < visible.length; i += 1) {
+    const msg = visible[i]!
     const messageType = getBaseMessageType(msg)
     if (messageType === 'human') {
       out.push({
@@ -116,6 +162,7 @@ function toPersistedMessages(coreMessages: BaseMessage[]): ChatMessage[] {
       continue
     }
     if (messageType === 'ai') {
+      if (i !== lastAiIndex) continue
       const content = contentToText(msg.content)
       if (!content.trim()) continue
       out.push({
@@ -123,9 +170,7 @@ function toPersistedMessages(coreMessages: BaseMessage[]): ChatMessage[] {
         role: 'assistant',
         content
       })
-      continue
     }
-    // system prompt doesn't enter UI history to avoid interfering with session display
   }
   return trimPersistedMessages(out)
 }
@@ -220,7 +265,7 @@ function buildSystemPrompt(root: string, settings: AppSettings): string {
     ? 'read_file, write_file, delete_file, list_dir, glob, search_workspace, shell, web_search (Tavily internet search), mcp_list_servers, mcp_inspect_server'
     : 'read_file, write_file, delete_file, list_dir, glob, search_workspace, shell, mcp_list_servers, mcp_inspect_server (no web_search without Tavily API Key)'
   const webRule = web
-    ? '- When users ask about **weather, temperature, rainfall, real-time news, stock prices, policies**, etc. requiring external info, you MUST call **web_search** first before answering; do not make up current weather or claim "search failed".'
+    ? '- When users ask about **weather, temperature, rainfall, real-time news, stock prices, policies**, etc. requiring external info, you MUST call **web_search** first before answering; do not make up current weather or claim "search failed".\n- If the user **rejects** a tool call (tool result says rejected / not executed), do **not** call that tool again in the same turn; acknowledge in the user\'s language and offer alternatives (e.g. ask for city/region, or suggest configuring approval).'
     : '- Tavily is **not** configured, web_search unavailable: If users request real-time info like today\'s weather, clearly inform them to set "Tavily API Key" in app Settings or configure TAVILY_API_KEY environment variable; suggest weather websites or apps; do not claim "search engine is broken" or "internet search unavailable".'
   return `You are an intelligent agent assisting with office work and software development. Workspace root: ${root}.
 - Use **relative paths from workspace root** in tools (e.g., src/index.ts); do not use ../ to escape the workspace.
@@ -365,17 +410,21 @@ async function streamPlanAfterTool(
   return acc.trim()
 }
 
+type ReactAgentRunContext = {
+  sessionId: string
+  runId: string
+  traceId: string
+  threadId: string
+  hitlEnabled: boolean
+  onPendingHitl: (hitlId: string, toolCalls: PendingToolCall[]) => void
+  emitHitlRequired: (hitlId: string, toolCalls: PendingToolCall[]) => void
+  onToolsRejected?: (toolCalls: PendingToolCall[]) => void
+}
+
 /**
- * invoke agent with guard
- *
- * @param agent - the agent to invoke
- * @param messages - the messages to invoke the agent with
- * @param ac - the abort controller
- * @param onToken - the callback to invoke when a token is received
- * @param options - the options for the agent invocation
- * @returns the result of the agent invocation
+ * Run ReAct agent with timeout guard; optional LangGraph interruptBefore tools + Command.resume loop.
  */
-async function invokeAgentWithGuard(
+async function runReactAgentWithGuard(
   agent: ReturnType<typeof createReactAgent>,
   messages: BaseMessage[],
   ac: AbortController,
@@ -384,9 +433,25 @@ async function invokeAgentWithGuard(
     recursionLimit: number
     timeoutMs: number
     langfuseHandler?: CallbackHandler | null
-  }
-): Promise<unknown> {
+  },
+  runCtx: ReactAgentRunContext
+): Promise<BaseMessage[]> {
   const { recursionLimit, timeoutMs, langfuseHandler } = options
+  const graphConfig = {
+    configurable: { thread_id: runCtx.threadId },
+    signal: ac.signal,
+    recursionLimit,
+    callbacks: [
+      {
+        handleLLMNewToken(token: string) {
+          onToken(token)
+        }
+      },
+      ...(langfuseHandler ? [langfuseHandler] : [])
+    ],
+    ...(runCtx.hitlEnabled ? { interruptBefore: ['tools'] as const } : {})
+  }
+
   let timer: ReturnType<typeof setTimeout> | null = null
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
@@ -394,46 +459,53 @@ async function invokeAgentWithGuard(
       reject(new Error(`Model-tool loop timeout (>${timeoutMs}ms), run aborted`))
     }, timeoutMs)
   })
+
+  let input: { messages: BaseMessage[] } | null = { messages }
+  let hitlRound = 0
+  const graphStateConfig = { configurable: { thread_id: runCtx.threadId } }
+
   try {
-    agentLog.info(`[invokeAgentWithGuard] options: ${JSON.stringify(options, null, 2)}`)
     agentLog.info(
-      `[invokeAgentWithGuard] langfuseHandler: ${langfuseHandler ? '已传递' : '未传递'}`
+      `[runReactAgentWithGuard] thread=${runCtx.threadId} hitl=${runCtx.hitlEnabled} recursionLimit=${recursionLimit}`
     )
 
-    const result = await Promise.race([
-      agent.invoke(
-        { messages },
-        {
-          signal: ac.signal,
-          recursionLimit,
-          callbacks: [
-            {
-              handleLLMNewToken(token: string) {
-                onToken(token)
-              }
-            },
-            ...(langfuseHandler ? [langfuseHandler] : [])
-          ]
-        }
-      ),
-      timeoutPromise
-    ])
-    let resultStr = inspect(result, {
-      depth: 8,
-      maxArrayLength: 50,
-      colors: false,
-      breakLength: 100
-    })
-    const maxLog = 100_000
-    if (resultStr.length > maxLog) {
-      resultStr = resultStr.slice(0, maxLog) + '\n...[invokeAgentWithGuard result truncated]'
+    while (true) {
+      const result = await Promise.race([agent.invoke(input, graphConfig), timeoutPromise])
+      const state = await agent.getState(graphStateConfig)
+      const stateMessages = (state.values?.messages ?? []) as BaseMessage[]
+
+      if (!runCtx.hitlEnabled || !isPausedBeforeTools(state.next)) {
+        if (stateMessages.length > 0) return stateMessages
+        const fallback = (result as { messages?: BaseMessage[] })?.messages
+        return Array.isArray(fallback) && fallback.length > 0 ? fallback : stateMessages
+      }
+
+      const pending = extractPendingToolCalls(stateMessages)
+      if (pending.length === 0) {
+        agentLog.warn('[runReactAgentWithGuard] interrupt before tools but no tool_calls in state')
+        return stateMessages
+      }
+
+      const hitlId = makeHitlId(runCtx.runId, hitlRound++)
+      runCtx.onPendingHitl(hitlId, pending)
+      runCtx.emitHitlRequired(hitlId, pending)
+
+      const decision = await waitForHitlDecision(hitlId, ac.signal)
+      agentLog.info(`[runReactAgentWithGuard] hitl decision=${decision} hitlId=${hitlId}`)
+
+      if (decision === 'reject') {
+        // Prebuilt ReAct + interruptBefore: inject synthetic ToolMessages, then resume with null.
+        await agent.updateState(graphStateConfig, {
+          messages: buildRejectionStateMessages(pending)
+        })
+        runCtx.onToolsRejected?.(pending)
+      }
+
+      // Approve: null continues into tools node. Reject: null after synthetic tool results above.
+      input = null
     }
-    agentLog.info(`[invokeAgentWithGuard] result:\n${resultStr}`)
-    return result
   } finally {
-    if (timer) {
-      clearTimeout(timer)
-    }
+    if (timer) clearTimeout(timer)
   }
 }
 
@@ -719,7 +791,28 @@ export function cancelRun(sessionId: string): void {
   if (s?.controller) {
     s.controller.abort()
   }
+  if (s) {
+    s.pendingHitl = undefined
+  }
+  cancelAllHitlWaiters('Run cancelled')
   void killCommand(`term:${sessionId}`)
+}
+
+export function resumeAgentHitl(
+  sessionId: string,
+  hitlId: string,
+  decision: HitlUserDecision
+): { ok: true } | { ok: false; error: string } {
+  const s = sessions.get(sessionId)
+  if (!s?.pendingHitl || s.pendingHitl.hitlId !== hitlId) {
+    return { ok: false, error: 'No pending tool approval for this session' }
+  }
+  s.pendingHitl = undefined
+  const submitted = submitHitlDecision(hitlId, decision)
+  if (!submitted) {
+    return { ok: false, error: 'Approval request expired or already resolved' }
+  }
+  return { ok: true }
 }
 
 export async function runUserMessage(
@@ -896,7 +989,7 @@ export async function runUserMessage(
     const onTool = (e: ToolTimelineEvent) => {
       runToolEvents.push(e)
       emitTool(e)
-      if (e.kind === 'tool' && e.status === 'end') {
+      if (e.kind === 'tool' && e.status === 'end' && !isRejectedToolResult(e.result)) {
         schedulePlanAfterTool(e as ToolEndedCall)
       }
     }
@@ -983,10 +1076,17 @@ export async function runUserMessage(
         `[runUserMessage] mode=${composerMode} runPrompt: ${JSON.stringify(runPrompt, null, 2)}`
       )
 
+      const hitlEnabled =
+        composerMode === 'build' && settings.toolApprovalInBuild !== false
+      const threadId = `${sessionId}:${runId}`
+
       const agent = createReactAgent({
         llm: model,
         tools: tools as never[],
-        prompt: runPrompt
+        prompt: runPrompt,
+        ...(hitlEnabled
+          ? { checkpointer: agentCheckpointer, interruptBefore: ['tools'] as const }
+          : {})
       })
 
       const onStreamToken = (token: string) => {
@@ -999,14 +1099,75 @@ export async function runUserMessage(
         langfuseHandler
       }
 
-      const result = await Promise.all([
-        invokeAgentWithGuard(agent, session.messages, ac, onStreamToken, agentInvokeOpts),
+      const runMessages = await Promise.all([
+        runReactAgentWithGuard(
+          agent,
+          session.messages,
+          ac,
+          onStreamToken,
+          agentInvokeOpts,
+          {
+            sessionId,
+            runId,
+            traceId,
+            threadId,
+            hitlEnabled,
+            onPendingHitl: (hitlId, toolCalls) => {
+              session.pendingHitl = { hitlId, toolCalls }
+            },
+            emitHitlRequired: (hitlId, toolCalls) => {
+              streamedChars = 0
+              emit({ type: 'stream-reset', sessionId, runId, traceId })
+              emit({
+                type: 'hitl-required',
+                sessionId,
+                runId,
+                traceId,
+                hitlId,
+                toolCalls: toolCalls.map((t) => ({
+                  id: t.id,
+                  name: t.name,
+                  args: formatToolArgs(t.args)
+                }))
+              })
+            },
+            onToolsRejected: (toolCalls) => {
+              streamedChars = 0
+              emit({ type: 'stream-reset', sessionId, runId, traceId })
+              const now = Date.now()
+              for (const tc of toolCalls) {
+                onTool({
+                  kind: 'tool',
+                  id: tc.id,
+                  name: tc.name,
+                  status: 'start',
+                  args: formatToolArgs(tc.args),
+                  runId,
+                  traceId,
+                  timestampMs: now
+                })
+                onTool({
+                  kind: 'tool',
+                  id: tc.id,
+                  name: tc.name,
+                  status: 'end',
+                  result: TOOL_REJECTED_RESULT,
+                  runId,
+                  traceId,
+                  timestampMs: now,
+                  durationMs: 0
+                })
+              }
+            }
+          }
+        ),
         planChain
-      ]).then(([agentResult]) => agentResult)
-      const maybeMessages = (result as { messages?: BaseMessage[] }).messages
-      if (Array.isArray(maybeMessages) && maybeMessages.length > 0) {
-        session.messages = maybeMessages
+      ]).then(([msgs]) => msgs)
+
+      if (runMessages.length > 0) {
+        session.messages = runMessages
       }
+      session.pendingHitl = undefined
 
       if (streamedChars === 0) {
         const lastAi = [...session.messages]
@@ -1056,6 +1217,7 @@ export async function runUserMessage(
       })
     } finally {
       session.controller = null
+      session.pendingHitl = undefined
       batcher.flush()
       // Agent 运行结束后 flush Langfuse 数据（确保追踪数据被及时发送）
       void flushLangfuseTracing()

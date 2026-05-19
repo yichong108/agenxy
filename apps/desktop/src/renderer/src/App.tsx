@@ -49,6 +49,7 @@ import { useWorkspaceStore } from '@/renderer/src/store/workspace-store'
 import {
   type AboutAppInfo,
   type ChatMessage,
+  type HitlToolCallPayload,
   type SessionInfo,
   type StreamEvent,
   type ToolTimelineEvent,
@@ -355,6 +356,10 @@ export function App() {
   const [intentThinkingOpenOverride, setIntentThinkingOpenOverride] = useState<
     Record<string, boolean>
   >({})
+  /** LangGraph interruptBefore tools：待用户批准的工具批次 */
+  const [hitlPending, setHitlPending] = useState<
+    Record<string, { hitlId: string; toolCalls: HitlToolCallPayload[] }>
+  >({})
   const [rightPaneWidth, setRightPaneWidth] = useState(RIGHT_PANE_DEFAULT_WIDTH)
   const [isRightPaneCollapsed, setIsRightPaneCollapsed] = useState(true)
   const [isRightPaneResizing, setIsRightPaneResizing] = useState(false)
@@ -403,6 +408,19 @@ export function App() {
     },
     [bridge]
   )
+
+  const clearAssistantStreamDraft = useCallback((sessionId: string) => {
+    streamBuf.current[sessionId] = ''
+    const amId = assistantMsgId.current[sessionId]
+    if (!amId) return
+    setMessages((m) => {
+      const cur = [...(m[sessionId] ?? [])]
+      const idx = cur.findIndex((c) => c.id === amId)
+      if (idx < 0) return m
+      cur[idx] = { ...cur[idx]!, content: '' }
+      return { ...m, [sessionId]: cur }
+    })
+  }, [])
 
   const load = useCallback(async () => {
     if (supportsMultiWorkspaceApi) {
@@ -586,6 +604,18 @@ export function App() {
         })
         return
       }
+      if (e.type === 'stream-reset') {
+        clearAssistantStreamDraft(e.sessionId)
+        return
+      }
+      if (e.type === 'hitl-required') {
+        clearAssistantStreamDraft(e.sessionId)
+        setHitlPending((h) => ({
+          ...h,
+          [e.sessionId]: { hitlId: e.hitlId, toolCalls: e.toolCalls }
+        }))
+        return
+      }
       if (e.type === 'text-delta') {
         streamBuf.current[e.sessionId] = (streamBuf.current[e.sessionId] ?? '') + e.text
         const buf = streamBuf.current[e.sessionId]!
@@ -638,6 +668,11 @@ export function App() {
         return
       }
       if (e.type === 'error') {
+        setHitlPending((h) => {
+          const next = { ...h }
+          delete next[e.sessionId]
+          return next
+        })
         msgApi.error(e.message)
         setMessages((m) => {
           const cur = m[e.sessionId] ?? []
@@ -660,6 +695,11 @@ export function App() {
         return
       }
       if (e.type === 'done') {
+        setHitlPending((h) => {
+          const next = { ...h }
+          delete next[e.sessionId]
+          return next
+        })
         setRunning((r) => ({ ...r, [e.sessionId]: false }))
         setQueued((q) => ({ ...q, [e.sessionId]: undefined }))
         setRunStats((s) => {
@@ -678,7 +718,7 @@ export function App() {
         void ensureSessionMessages(e.sessionId, true)
       }
     },
-    [ensureSessionMessages, msgApi]
+    [clearAssistantStreamDraft, ensureSessionMessages, msgApi]
   )
 
   useEffect(() => {
@@ -909,6 +949,27 @@ export function App() {
   const isRun = activeId ? running[activeId] : false
   const isQueued = activeId ? queued[activeId] : undefined
   const currentRunStats = activeId ? runStats[activeId] : undefined
+  const activeHitl = activeId ? hitlPending[activeId] : undefined
+
+  const resumeHitl = useCallback(
+    async (decision: 'accept' | 'reject') => {
+      if (!activeId || !activeHitl) return
+      if (decision === 'reject') {
+        clearAssistantStreamDraft(activeId)
+      }
+      const r = await bridge.resumeAgentHitl(activeId, activeHitl.hitlId, decision)
+      if (!r.ok) {
+        msgApi.error(r.error)
+        return
+      }
+      setHitlPending((h) => {
+        const next = { ...h }
+        delete next[activeId]
+        return next
+      })
+    },
+    [activeHitl, activeId, bridge, clearAssistantStreamDraft, msgApi]
+  )
   const [liveTick, setLiveTick] = useState(0)
   useEffect(() => {
     if (!isRun) return
@@ -1084,6 +1145,36 @@ export function App() {
     </div>
   )
 
+  const hitlApprovalBar =
+    activeHitl && activeHitl.toolCalls.length > 0 ? (
+      <Alert
+        type="warning"
+        showIcon
+        className="app-hitl-bar"
+        message="工具执行待批准"
+        description={
+          <ul className="app-hitl-tool-list">
+            {activeHitl.toolCalls.map((t) => (
+              <li key={t.id}>
+                <Text code>{t.name}</Text>
+                {t.args ? <Text type="secondary"> {t.args}</Text> : null}
+              </li>
+            ))}
+          </ul>
+        }
+        action={
+          <Space>
+            <Button size="small" onClick={() => void resumeHitl('reject')}>
+              拒绝
+            </Button>
+            <Button size="small" type="primary" onClick={() => void resumeHitl('accept')}>
+              批准
+            </Button>
+          </Space>
+        }
+      />
+    ) : null
+
   const composerInput = (
     <div className="app-composer">
       <div className="app-composer-inner">
@@ -1256,6 +1347,7 @@ export function App() {
               <div className="app-composer-hero">
                 <div className="app-composer-hero-inner">
                   {composerWorkspaceToolbar}
+                  {hitlApprovalBar}
                   {composerInput}
                 </div>
               </div>
@@ -1376,7 +1468,12 @@ export function App() {
                                               ) : (
                                                 <>
                                                   <Text code>
-                                                    {e.name} {e.status === 'start' ? '…' : '✓'}
+                                                    {e.name}{' '}
+                                                    {e.status === 'start'
+                                                      ? '…'
+                                                      : e.result?.includes('Rejected by user')
+                                                        ? '✗'
+                                                        : '✓'}
                                                   </Text>
                                                   {e.args && (
                                                     <Text type="secondary"> {e.args}</Text>
@@ -1416,7 +1513,10 @@ export function App() {
                     </div>
                   </SimpleBar>
                 </div>
-                <div className="app-composer-stack">{composerInput}</div>
+                <div className="app-composer-stack">
+                  {hitlApprovalBar}
+                  {composerInput}
+                </div>
               </>
             )}
           </div>

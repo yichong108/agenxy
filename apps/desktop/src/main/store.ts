@@ -335,6 +335,10 @@ function normalizeSettings(
     providerProfiles,
     maxAgentLoopSteps: inputRest.maxAgentLoopSteps ?? defaults.maxAgentLoopSteps,
     agentRunTimeoutMs: inputRest.agentRunTimeoutMs ?? defaults.agentRunTimeoutMs,
+    toolApprovalInBuild:
+      typeof inputRest.toolApprovalInBuild === 'boolean'
+        ? inputRest.toolApprovalInBuild
+        : defaults.toolApprovalInBuild,
     tavilyApiKey:
       typeof inputRest.tavilyApiKey === 'string' ? inputRest.tavilyApiKey : defaults.tavilyApiKey,
     mcpServers: normalizeMcpServers(

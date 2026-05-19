@@ -7,7 +7,12 @@ import '@/main/env-bootstrap'
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron'
 
-import { bindAgentIpc, cancelRun, runUserMessage } from '@/main/agent/agent-service'
+import {
+  bindAgentIpc,
+  cancelRun,
+  resumeAgentHitl,
+  runUserMessage
+} from '@/main/agent/agent-service'
 import {
   ensureUserSkillsLayout,
   gatherSkillsRuntimeState,
@@ -580,6 +585,17 @@ function registerIpc(): void {
     cancelRun(sessionId)
     return { ok: true as const }
   })
+  ipcMain.handle(
+    IPC.AGENT_HITL_RESUME,
+    (
+      _e,
+      sessionId: string,
+      hitlId: string,
+      decision: 'accept' | 'reject'
+    ): { ok: true } | { ok: false; error: string } => {
+      return resumeAgentHitl(sessionId, hitlId, decision)
+    }
+  )
   ipcMain.handle(IPC.AGENT_STATUS, () => {
     // 可选：主进程不暴露细粒度
     return { ok: true as const }
