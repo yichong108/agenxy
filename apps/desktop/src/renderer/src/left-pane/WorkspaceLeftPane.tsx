@@ -1,5 +1,6 @@
 import {
   ApiOutlined,
+  BulbOutlined,
   FolderOpenOutlined,
   InboxOutlined,
   MenuFoldOutlined,
@@ -13,7 +14,7 @@ import { Button, Dropdown, Input, Modal, Space, Typography } from 'antd'
 import type { DragEvent } from 'react'
 import { createPortal } from 'react-dom'
 
-import { McpHubModal, SettingsModal, SkillsHubModal } from './modals'
+import { McpHubModal, MemoryHubModal, SettingsModal, SkillsHubModal } from './modals'
 import { useWorkspaceLeftPane } from './useWorkspaceLeftPane'
 
 const { Text } = Typography
@@ -72,6 +73,13 @@ export function WorkspaceLeftPane({ leftTogglePortalHost }: WorkspaceLeftPanePro
                     onClick={p.openSkillsHub}
                     className="app-settings-btn"
                     title="技能与市场"
+                  />
+                  <Button
+                    type="text"
+                    icon={<BulbOutlined />}
+                    onClick={p.openMemoryHub}
+                    className="app-settings-btn"
+                    title="用户记忆"
                   />
                   <Button
                     type="text"
@@ -249,7 +257,12 @@ export function WorkspaceLeftPane({ leftTogglePortalHost }: WorkspaceLeftPanePro
         onMouseDown={p.isSidebarCollapsed ? undefined : p.handleSidebarResizeStart}
       />
       <McpHubModal open={p.mcpOpen} onClose={p.closeMcpHub} />
-      <SettingsModal open={p.settingsOpen} onClose={p.closeSettings} />
+      <MemoryHubModal open={p.memoryOpen} onClose={p.closeMemoryHub} />
+      <SettingsModal
+        open={p.settingsOpen}
+        onClose={p.closeSettings}
+        onOpenMemoryHub={p.openMemoryHub}
+      />
       <SkillsHubModal open={p.skillsOpen} onClose={p.closeSkillsHub} />
 
       <Modal

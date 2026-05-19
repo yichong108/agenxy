@@ -16,9 +16,13 @@ import {
   type McpServerEntry,
   type ModelProviderId,
   type ProviderProfile,
+  MAX_MEMORY_CONTENT_CHARS,
+  MAX_MEMORY_ENTRIES,
   type ChatMessage,
+  type MemoryEntry,
   type RendererUiState,
   type SessionInfo,
+  type UserMemoriesState,
   type WorkspaceInfo,
   type WorkspaceUiState
 } from '@/shared/ipc'
@@ -40,6 +44,8 @@ type StoreSchema = {
   workspace?: string
   sessionsMeta?: SessionInfo[]
   sessionsMessages?: Record<string, ChatMessage[]>
+  /** 全局用户长期记忆 */
+  userMemories?: UserMemoriesState
 }
 
 const DEFAULT_WORKSPACE_ID = 'workspace-default'
@@ -52,7 +58,8 @@ const store = new Store<StoreSchema>({
     settings: { ...defaultSettings },
     uiState: { ...defaultRendererUiState },
     sessionsMetaByWorkspace: {},
-    sessionsMessagesByWorkspace: {}
+    sessionsMessagesByWorkspace: {},
+    userMemories: { items: [] }
   }
 })
 
@@ -343,7 +350,15 @@ function normalizeSettings(
       typeof inputRest.tavilyApiKey === 'string' ? inputRest.tavilyApiKey : defaults.tavilyApiKey,
     mcpServers: normalizeMcpServers(
       inputRest.mcpServers !== undefined ? inputRest.mcpServers : defaults.mcpServers
-    )
+    ),
+    memoryEnabled:
+      typeof inputRest.memoryEnabled === 'boolean'
+        ? inputRest.memoryEnabled
+        : defaults.memoryEnabled,
+    autoExtractMemory:
+      typeof inputRest.autoExtractMemory === 'boolean'
+        ? inputRest.autoExtractMemory
+        : defaults.autoExtractMemory
   }
 
   return {
@@ -351,6 +366,53 @@ function normalizeSettings(
     maxAgentLoopSteps: Math.min(64, Math.max(4, Math.floor(merged.maxAgentLoopSteps))),
     agentRunTimeoutMs: Math.min(600_000, Math.max(5_000, Math.floor(merged.agentRunTimeoutMs)))
   }
+}
+
+function normalizeMemoryContent(content: string): string {
+  return content.trim().slice(0, MAX_MEMORY_CONTENT_CHARS)
+}
+
+function normalizeMemoryEntry(raw: Partial<MemoryEntry>): MemoryEntry | null {
+  const content = normalizeMemoryContent(typeof raw.content === 'string' ? raw.content : '')
+  if (!content) return null
+  const now = Date.now()
+  const id =
+    typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : `mem-${randomUUID()}`
+  const source = raw.source === 'auto' ? 'auto' : 'manual'
+  const createdAt =
+    typeof raw.createdAt === 'number' && Number.isFinite(raw.createdAt) ? raw.createdAt : now
+  const updatedAt =
+    typeof raw.updatedAt === 'number' && Number.isFinite(raw.updatedAt) ? raw.updatedAt : now
+  const entry: MemoryEntry = { id, content, source, createdAt, updatedAt }
+  if (typeof raw.sourceSessionId === 'string' && raw.sourceSessionId.trim()) {
+    entry.sourceSessionId = raw.sourceSessionId.trim()
+  }
+  return entry
+}
+
+export function normalizeUserMemories(input?: Partial<UserMemoriesState>): UserMemoriesState {
+  const raw = Array.isArray(input?.items) ? input!.items : []
+  const items: MemoryEntry[] = []
+  const seen = new Set<string>()
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') continue
+    const entry = normalizeMemoryEntry(row as Partial<MemoryEntry>)
+    if (!entry || seen.has(entry.id)) continue
+    seen.add(entry.id)
+    items.push(entry)
+  }
+  items.sort((a, b) => b.updatedAt - a.updatedAt)
+  return { items: items.slice(0, MAX_MEMORY_ENTRIES) }
+}
+
+export function getUserMemories(): UserMemoriesState {
+  return normalizeUserMemories(store.get('userMemories'))
+}
+
+export function setUserMemories(state: UserMemoriesState): UserMemoriesState {
+  const next = normalizeUserMemories(state)
+  store.set('userMemories', next)
+  return next
 }
 
 export function getWorkspace(): string {

@@ -37,6 +37,15 @@ import { buildSkillBundle } from '@/main/agent/skills/index'
 import { createLangfuseCallbackHandler, flushLangfuseTracing } from '@/main/langfuse'
 import { logScope } from '@/main/logger'
 import { buildMcpLangChainTools } from '@/main/mcp/mcp-runtime'
+import { extractMemoriesAfterRun } from '@/main/memory/memory-extractor'
+import { isReservedMemoryFilePath, MEMORY_FILE_GUARD_MESSAGE } from '@/main/memory/memory-path-guard'
+import { buildMemoryPromptBlock } from '@/main/memory/memory-service'
+import {
+  userMemoryAdd,
+  userMemoryDelete,
+  userMemoryList,
+  userMemoryUpdate
+} from '@/main/memory/memory-tools'
 import {
   getSessionMessages,
   getSettings,
@@ -271,9 +280,13 @@ function buildSystemPrompt(root: string, settings: AppSettings): string {
       : (settings.mcpServers?.length ?? 0) > 0
         ? `${mcpMeta}\n- Current MCP entries are not enabled or have empty command; mcp_* tools will appear after user enables them.`
         : mcpMeta
+  const memoryTools =
+    settings.memoryEnabled !== false
+      ? ', user_memory_list, user_memory_add, user_memory_update, user_memory_delete'
+      : ''
   const toolLine = web
-    ? 'read_file, write_file, delete_file, list_dir, glob, grep, search_workspace, shell, web_search (Tavily internet search), mcp_list_servers, mcp_inspect_server'
-    : 'read_file, write_file, delete_file, list_dir, glob, grep, search_workspace, shell, mcp_list_servers, mcp_inspect_server (no web_search without Tavily API Key)'
+    ? `read_file, write_file, delete_file, list_dir, glob, grep, search_workspace, shell, web_search (Tavily internet search), mcp_list_servers, mcp_inspect_server${memoryTools}`
+    : `read_file, write_file, delete_file, list_dir, glob, grep, search_workspace, shell, mcp_list_servers, mcp_inspect_server (no web_search without Tavily API Key)${memoryTools}`
   const webRule = web
     ? '- When users ask about **weather, temperature, rainfall, real-time news, stock prices, policies**, etc. requiring external info, you MUST call **web_search** first before answering; do not make up current weather or claim "search failed".\n- If the user **rejects** a tool call (tool result says rejected / not executed), do **not** call that tool again in the same turn; acknowledge in the user\'s language and offer alternatives (e.g. ask for city/region, or suggest configuring approval).'
     : '- Tavily is **not** configured, web_search unavailable: If users request real-time info like today\'s weather, clearly inform them to set "Tavily API Key" in app Settings or configure TAVILY_API_KEY environment variable; suggest weather websites or apps; do not claim "search engine is broken" or "internet search unavailable".'
@@ -286,6 +299,7 @@ function buildSystemPrompt(root: string, settings: AppSettings): string {
 - When users explicitly request to delete a file in the workspace, use delete_file (for regular files only, not directories).
 - Use glob for filename/path pattern search (e.g., **/*.ts): results include workspace and "user data" directories (skill market installs, etc.); read_file/write remain limited to workspace paths.
 ${webRule}
+- **User long-term memory** lives in the app (Settings → 用户记忆), not in workspace files. When the user shares durable preferences or asks you to remember/forget something, use **user_memory_add** / **user_memory_update** / **user_memory_delete** (or rely on post-turn auto-extract). **Never** create or edit \`.claude-memory.json\`, \`.cursor-memory.json\`, or other ad-hoc memory JSON in the workspace.
 - Keep responses concise and actionable; read/list before modifying code.
 - Understand task first → restate goal if needed → then select tools.`
 }
@@ -314,9 +328,11 @@ function buildAgentMessageWithPlan(userText: string, planContext: string): strin
 
 function buildAskSystemPrompt(root: string, settings: AppSettings): string {
   const web = isTavilyConfigured(settings.tavilyApiKey)
+  const memoryTools =
+    settings.memoryEnabled !== false ? ', user_memory_list (read global user memories only)' : ''
   const toolLine = web
-    ? 'read_file, list_dir, glob, grep, search_workspace, web_search (Tavily)'
-    : 'read_file, list_dir, glob, grep, search_workspace (no web_search without Tavily)'
+    ? `read_file, list_dir, glob, grep, search_workspace, web_search (Tavily)${memoryTools}`
+    : `read_file, list_dir, glob, grep, search_workspace (no web_search without Tavily)${memoryTools}`
   const webRule = web
     ? '- Call **web_search** when external info is needed; do not fabricate search results.'
     : '- Tavily is not configured: If users need real-time info, be honest and suggest configuring Tavily in Settings.'
@@ -325,6 +341,7 @@ function buildAskSystemPrompt(root: string, settings: AppSettings): string {
 - Read-only tools only: ${toolLine}. All paths are relative to workspace root.
 - If users request "directly modify code / run commands / apply patches", explain that Ask mode cannot auto-execute and provide copyable snippets or steps; to auto-apply, switch to **Build** (turn off Ask).
 ${webRule}
+- User preferences are in app global memory (user_memory_list when enabled), not workspace JSON files. Do not suggest writing \`.claude-memory.json\` or similar.
 - Keep responses clear and verifiable: read/list/search repo content first before drawing conclusions.
 - Understand intent first → restate goal if needed
 `
@@ -693,12 +710,54 @@ function defineTool<T extends z.ZodTypeAny>(
   ) as unknown as NamedTool
 }
 
+function buildUserMemoryToolDefs(
+  sessionId: string,
+  settings: AppSettings,
+  allowWrite: boolean
+): ToolDefinition<z.ZodTypeAny>[] {
+  if (settings.memoryEnabled === false) return []
+  const defs: ToolDefinition<z.ZodTypeAny>[] = [
+    {
+      name: 'user_memory_list',
+      description:
+        'List global user long-term memories stored in the app (cross-workspace). Not stored in workspace files.',
+      schema: z.object({}),
+      execute: async () => userMemoryList(),
+      truncateTo: 4_000
+    }
+  ]
+  if (!allowWrite) return defs
+  defs.push(
+    {
+      name: 'user_memory_add',
+      description:
+        'Add a durable user preference or fact to global app memory. Use when the user asks to remember something; do not write .claude-memory.json in the workspace.',
+      schema: z.object({ content: z.string() }),
+      execute: async ({ content }) => userMemoryAdd(content, sessionId)
+    },
+    {
+      name: 'user_memory_update',
+      description: 'Update an existing global memory by id (from user_memory_list).',
+      schema: z.object({ id: z.string(), content: z.string() }),
+      execute: async ({ id, content }) => userMemoryUpdate(id, content)
+    },
+    {
+      name: 'user_memory_delete',
+      description: 'Delete a global memory by id when the user asks to forget it.',
+      schema: z.object({ id: z.string() }),
+      execute: async ({ id }) => userMemoryDelete(id)
+    }
+  )
+  return defs
+}
+
 /** Workspace base tools + optional web search; shared by Ask/Build agents */
 function buildBaseAndWebTools(
   sessionId: string,
   root: string,
   settings: AppSettings,
-  runCtx: ToolExecutorContext
+  runCtx: ToolExecutorContext,
+  opts?: { memoryWrite?: boolean }
 ): { baseTools: NamedTool[]; webSearchTools: NamedTool[] } {
   const termKey = `term:${sessionId}`
 
@@ -714,7 +773,10 @@ function buildBaseAndWebTools(
       name: 'write_file',
       description: 'Write or overwrite workspace file, auto-creates parent directories',
       schema: z.object({ path: z.string(), content: z.string() }),
-      execute: ({ path, content }) => writeFileTool(root, path, content)
+      execute: ({ path, content }) =>
+        isReservedMemoryFilePath(path)
+          ? Promise.resolve(`Rejected: ${MEMORY_FILE_GUARD_MESSAGE}`)
+          : writeFileTool(root, path, content)
     },
     {
       name: 'delete_file',
@@ -785,7 +847,8 @@ function buildBaseAndWebTools(
     }
   ]
 
-  const baseTools = baseToolDefs.map((def) => defineTool(def, runCtx))
+  const memoryToolDefs = buildUserMemoryToolDefs(sessionId, settings, opts?.memoryWrite !== false)
+  const baseTools = [...baseToolDefs, ...memoryToolDefs].map((def) => defineTool(def, runCtx))
 
   const webSearchTools: NamedTool[] = isTavilyConfigured(settings.tavilyApiKey)
     ? [
@@ -832,7 +895,10 @@ async function prepareAgentTooling(
   runCtx: ToolExecutorContext,
   options?: PrepareAgentToolingOptions
 ): Promise<AgentTooling> {
-  const { baseTools, webSearchTools } = buildBaseAndWebTools(sessionId, root, settings, runCtx)
+  const memoryWrite = mode === 'build'
+  const { baseTools, webSearchTools } = buildBaseAndWebTools(sessionId, root, settings, runCtx, {
+    memoryWrite
+  })
 
   if (mode === 'ask' || mode === 'plan') {
     const tools = [...baseTools, ...webSearchTools].filter((t) =>
@@ -864,13 +930,24 @@ function buildAgentRunPrompt(
   settings: AppSettings,
   tooling: AgentTooling
 ): string {
+  const memoryBlock = buildMemoryPromptBlock(settings)
   if (mode === 'ask') {
-    return [buildAskSystemPrompt(root, settings), commonPrompt].filter(Boolean).join('\n\n')
+    return [buildAskSystemPrompt(root, settings), memoryBlock, commonPrompt]
+      .filter(Boolean)
+      .join('\n\n')
   }
   if (mode === 'plan') {
-    return [buildPlanSystemPrompt(root, settings), commonPrompt].filter(Boolean).join('\n\n')
+    return [buildPlanSystemPrompt(root, settings), memoryBlock, commonPrompt]
+      .filter(Boolean)
+      .join('\n\n')
   }
-  return [buildSystemPrompt(root, settings), tooling.skillHint, tooling.mcpContextHints, commonPrompt]
+  return [
+    buildSystemPrompt(root, settings),
+    tooling.skillHint,
+    tooling.mcpContextHints,
+    memoryBlock,
+    commonPrompt
+  ]
     .filter(Boolean)
     .join('\n\n')
 }
@@ -1348,6 +1425,18 @@ export async function runUserMessage(
         traceId,
         timestampMs: Date.now(),
         durationMs: Date.now() - runStartedAt
+      })
+
+      const lastAi = [...session.messages]
+        .reverse()
+        .find((msg) => getBaseMessageType(msg) === 'ai') as AIMessage | undefined
+      const assistantForMemory = lastAi ? contentToText(lastAi.content) : ''
+      void extractMemoriesAfterRun({
+        sessionId,
+        userText: userDisplayText || agentUserText,
+        assistantText: assistantForMemory
+      }).catch((err) => {
+        agentLog.warn('[runUserMessage] memory extract:', err instanceof Error ? err.message : err)
       })
     } catch (e) {
       batcher.flush()

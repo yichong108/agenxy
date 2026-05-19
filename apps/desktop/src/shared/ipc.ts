@@ -54,7 +54,12 @@ export const IPC = {
   /** 触发 webContents 编辑命令（撤销、复制等） */
   WEB_EDIT: 'web:edit',
   /** 关于面板：返回版本/构建/引擎等信息（由渲染层展示弹窗） */
-  APP_ABOUT: 'app:about'
+  APP_ABOUT: 'app:about',
+  MEMORY_LIST: 'memory:list',
+  MEMORY_ADD: 'memory:add',
+  MEMORY_UPDATE: 'memory:update',
+  MEMORY_DELETE: 'memory:delete',
+  MEMORY_CLEAR: 'memory:clear'
 } as const
 
 /** 与 IPC.WINDOW_ACTION 对应的动作 */
@@ -110,7 +115,9 @@ export const EVENTS = {
   /** 池化预热完成（启动、保存 MCP 或手动触发后） */
   MCP_WARMUP: 'mcp:warmup',
   /** 右侧栏终端命令的实时 stdout/stderr 片段 */
-  TERMINAL_OUTPUT: 'terminal:output'
+  TERMINAL_OUTPUT: 'terminal:output',
+  /** 全局用户记忆列表变更（含可选的自动提取增量） */
+  MEMORY_SYNC: 'memory:sync'
 } as const
 
 export type TerminalOutputEvent = {
@@ -288,6 +295,38 @@ export type ProviderProfile = {
   apiKey: string
 }
 
+/** 全局用户长期记忆单条 */
+export type MemoryEntry = {
+  id: string
+  content: string
+  source: 'manual' | 'auto'
+  createdAt: number
+  updatedAt: number
+  /** 自动提取时的来源会话 */
+  sourceSessionId?: string
+}
+
+export type UserMemoriesState = {
+  items: MemoryEntry[]
+}
+
+export type MemoryExtractionDelta = {
+  added: number
+  updated: number
+  deleted: number
+}
+
+export type UserMemoriesSyncPayload = UserMemoriesState & {
+  lastExtractionDelta?: MemoryExtractionDelta
+}
+
+/** 记忆条数硬上限 */
+export const MAX_MEMORY_ENTRIES = 64
+/** 单条记忆内容最大字符 */
+export const MAX_MEMORY_CONTENT_CHARS = 400
+/** 注入 system prompt 的记忆块总字符上限 */
+export const MAX_MEMORY_PROMPT_CHARS = 3200
+
 export type AppSettings = {
   provider: ModelProviderId
   /** 各提供方独立配置；切换提供方时从对应项回显 */
@@ -302,6 +341,10 @@ export type AppSettings = {
   tavilyApiKey: string
   /** 已保存的 MCP（stdio）服务器列表；启用项会在 Agent 工具流中挂载 */
   mcpServers: McpServerEntry[]
+  /** 是否在 Agent 运行时注入全局用户记忆 */
+  memoryEnabled: boolean
+  /** 对话成功后是否自动提取/更新记忆 */
+  autoExtractMemory: boolean
 }
 
 /** 市场 catalog 单项（列表来自 ClawHub，安装包 URL 为官方 download 接口） */
@@ -376,7 +419,9 @@ export const defaultSettings: AppSettings = {
   agentRunTimeoutMs: 120_000,
   toolApprovalInBuild: true,
   tavilyApiKey: '',
-  mcpServers: []
+  mcpServers: [],
+  memoryEnabled: true,
+  autoExtractMemory: true
 }
 
 /** 当前选中提供方的连接配置 */

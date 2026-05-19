@@ -11,6 +11,8 @@ import type {
   McpWarmupStatus,
   RendererUiState,
   SessionInfo,
+  UserMemoriesState,
+  UserMemoriesSyncPayload,
   SkillsInstallResult,
   SkillsMarketCatalogItem,
   SkillsRuntimeState,
@@ -54,6 +56,12 @@ type Api = {
   ) => Promise<TerminalCompleteResult>
   getSettings: () => Promise<AppSettings>
   setSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>
+  listMemories: () => Promise<UserMemoriesState>
+  addMemory: (content: string) => Promise<UserMemoriesState>
+  updateMemory: (id: string, content: string) => Promise<UserMemoriesState>
+  deleteMemory: (id: string) => Promise<UserMemoriesState>
+  clearMemories: () => Promise<UserMemoriesState>
+  onMemorySync: (cb: (payload: UserMemoriesSyncPayload) => void) => () => void
   getUiState: () => Promise<RendererUiState>
   setUiState: (patch: Partial<RendererUiState>) => Promise<RendererUiState>
   listSessions: () => Promise<SessionInfo[]>

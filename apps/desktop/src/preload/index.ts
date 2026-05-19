@@ -13,6 +13,8 @@ import {
   type McpWarmupReport,
   type McpWarmupStatus,
   type RendererUiState,
+  type UserMemoriesState,
+  type UserMemoriesSyncPayload,
   type SessionInfo,
   type SkillsInstallResult,
   type SkillsMarketCatalogItem,
@@ -74,6 +76,21 @@ const api = {
   getSettings: () => ipcRenderer.invoke(IPC.SETTINGS_GET) as Promise<AppSettings>,
   setSettings: (patch: Partial<AppSettings>) =>
     ipcRenderer.invoke(IPC.SETTINGS_SET, patch) as Promise<AppSettings>,
+  listMemories: () => ipcRenderer.invoke(IPC.MEMORY_LIST) as Promise<UserMemoriesState>,
+  addMemory: (content: string) =>
+    ipcRenderer.invoke(IPC.MEMORY_ADD, content) as Promise<UserMemoriesState>,
+  updateMemory: (id: string, content: string) =>
+    ipcRenderer.invoke(IPC.MEMORY_UPDATE, id, content) as Promise<UserMemoriesState>,
+  deleteMemory: (id: string) =>
+    ipcRenderer.invoke(IPC.MEMORY_DELETE, id) as Promise<UserMemoriesState>,
+  clearMemories: () => ipcRenderer.invoke(IPC.MEMORY_CLEAR) as Promise<UserMemoriesState>,
+  onMemorySync: (cb: (payload: UserMemoriesSyncPayload) => void) => {
+    const h = (_: Electron.IpcRendererEvent, p: UserMemoriesSyncPayload) => cb(p)
+    ipcRenderer.on(EVENTS.MEMORY_SYNC, h)
+    return () => {
+      ipcRenderer.removeListener(EVENTS.MEMORY_SYNC, h)
+    }
+  },
   getUiState: () => ipcRenderer.invoke(IPC.UI_STATE_GET) as Promise<RendererUiState>,
   setUiState: (patch: Partial<RendererUiState>) =>
     ipcRenderer.invoke(IPC.UI_STATE_SET, patch) as Promise<RendererUiState>,
