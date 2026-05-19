@@ -64,7 +64,7 @@ export function AboutAgenxyModal({ open, info, onClose }: AboutAgenxyModalProps)
                 <span className="about-agenxy-modal__v">{info.version}</span>
               </div>
               <div className="about-agenxy-modal__kv">
-                <span className="about-agenxy-modal__k">Commit</span>
+                <span className="about-agenxy-modal__k">提交</span>
                 <span className="about-agenxy-modal__v">
                   {commitDisplay === '—' ? (
                     <Typography.Text type="secondary">—</Typography.Text>

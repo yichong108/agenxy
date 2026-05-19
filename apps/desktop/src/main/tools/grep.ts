@@ -206,7 +206,7 @@ export async function grepWorkspace(workspace: string, args: GrepToolArgs): Prom
   const root = ensureWorkspaceExists(workspace)
   const pattern = args.pattern?.trim()
   if (!pattern) {
-    return 'pattern is empty'
+    return 'pattern 不能为空'
   }
 
   let rgArgs: string[]
@@ -220,20 +220,20 @@ export async function grepWorkspace(workspace: string, args: GrepToolArgs): Prom
   const { stdout, stderr, code } = await runRipgrep(rgArgs, cwd)
 
   if (code === -1 && stderr && !stdout.trim()) {
-    return `Grep failed: ${stderr}`
+    return `grep 失败：${stderr}`
   }
 
   const trimmed = stdout.trimEnd()
   if (!trimmed) {
     if (code === 1) {
-      return `No matches for /${pattern}/`
+      return `未找到匹配：/${pattern}/`
     }
     const err = parseRgError(stderr)
-    if (err) return `Grep failed: ${err}`
+    if (err) return `grep 失败：${err}`
     if (code !== 0 && code !== 1) {
-      return `Grep failed: ripgrep exited with code ${code}${stderr ? `: ${stderr.trim()}` : ''}`
+      return `grep 失败：ripgrep 退出码 ${code}${stderr ? `：${stderr.trim()}` : ''}`
     }
-    return `No matches for /${pattern}/`
+    return `未找到匹配：/${pattern}/`
   }
 
   const normalized = normalizeOutputPaths(trimmed, root)
@@ -241,16 +241,16 @@ export async function grepWorkspace(workspace: string, args: GrepToolArgs): Prom
   return text
 }
 
-/** Tool description aligned with Cursor's grep tool. */
-export const GREP_TOOL_DESCRIPTION = `A powerful search tool built on ripgrep
+/** 与 Cursor grep 工具对齐的工具描述。 */
+export const GREP_TOOL_DESCRIPTION = `基于 ripgrep 的强大搜索工具
 
-Usage:
-- Prefer grep for exact symbol/string searches. Whenever possible, use this instead of terminal grep/rg. This tool is faster.
-- Supports full regex syntax, e.g. "log.*Error", "function\\s+\\w+". Escape special regex characters for literal matches.
-- Avoid overly broad glob patterns (e.g. '*') as they bypass .gitignore rules and may be slow.
-- Use 'type' (ripgrep --type, e.g. ts, js, py, rust) or 'glob' when filtering by file type.
-- output_mode: "content" shows matching lines (default), "files_with_matches" shows file paths only, "count" shows match counts per file.
-- Pattern syntax follows ripgrep (not GNU grep); escape braces in Go/C++ literals (e.g. interface\\{\\}).
-- multiline: true enables cross-line patterns (rg -U --multiline-dotall).
-- Content output uses ripgrep format: ':' for match lines, '-' for context lines, grouped by file with --heading.
-- Results are capped for responsiveness; truncated output notes how many lines were omitted.`
+用法：
+- 精确符号/字符串搜索优先用本工具，尽量代替终端 grep/rg，速度更快。
+- 支持完整正则，如 "log.*Error"、"function\\s+\\w+"。字面量匹配需转义正则特殊字符。
+- 避免过宽的 glob（如 '*'），会绕过 .gitignore 且可能很慢。
+- 按文件类型过滤可用 type（ripgrep --type，如 ts、js、py）或 glob。
+- output_mode："content" 显示匹配行（默认），"files_with_matches" 仅文件路径，"count" 每文件匹配数。
+- 模式语法遵循 ripgrep（非 GNU grep）；Go/C++ 字面量中的花括号需转义（如 interface\\{\\}）。
+- multiline: true 启用跨行匹配（rg -U --multiline-dotall）。
+- 内容输出为 ripgrep 格式：':' 为匹配行，'-' 为上下文行，按文件 --heading 分组。
+- 结果为响应速度设上限；截断时会说明省略行数。`

@@ -96,7 +96,7 @@ export function formatAboutAppCopyText(info: AboutAppInfo): string {
   return [
     info.productName,
     `版本: ${info.version}`,
-    `Commit: ${info.gitCommit || '(未知)'}`,
+    `提交: ${info.gitCommit || '(未知)'}`,
     `构建: ${buildLine}`,
     `Electron: ${info.electron}`,
     `Chromium: ${info.chrome}`,

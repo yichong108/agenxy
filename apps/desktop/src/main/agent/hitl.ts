@@ -4,10 +4,12 @@ import { AIMessage, SystemMessage, ToolMessage, type BaseMessage, isAIMessage } 
 export const AGENXY_INTERNAL_KW = 'agenxy_internal'
 import { MemorySaver } from '@langchain/langgraph'
 
-export const TOOL_REJECTED_RESULT = 'Rejected by user (not executed)'
+export const TOOL_REJECTED_RESULT = '用户已拒绝执行（未运行）'
 
 export function isRejectedToolResult(result?: string): boolean {
-  return Boolean(result?.includes('Rejected by user'))
+  return Boolean(
+    result?.includes('用户已拒绝') || result?.includes('Rejected by user')
+  )
 }
 
 /** Shared checkpointer for all agent threads (in-memory; keyed by thread_id). */
@@ -150,8 +152,8 @@ export function buildRejectionStateMessages(pending: PendingToolCall[]): BaseMes
   )
   const systemHint = new SystemMessage({
     content:
-      `User rejected tool call(s): ${names}. Do not retry them this turn. ` +
-      `Reply in the user's language: briefly acknowledge the rejection and suggest alternatives without those tools.`,
+      `用户拒绝了工具调用：${names}。本轮不要重试。` +
+      `用中文简要确认拒绝，并在不依赖这些工具的前提下给出替代方案。`,
     additional_kwargs: { [AGENXY_INTERNAL_KW]: true }
   })
   return [...toolMessages, systemHint]

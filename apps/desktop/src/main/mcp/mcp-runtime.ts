@@ -321,7 +321,7 @@ async function gatherMcpClientHints(
   const instr = client.getInstructions()?.trim()
   if (instr) {
     sections.push(
-      `**Server Instructions**\n${instr.slice(0, MAX_MCP_INSTRUCTIONS_CHARS)}${instr.length > MAX_MCP_INSTRUCTIONS_CHARS ? '\n...(truncated)' : ''}`
+      `**服务器说明**\n${instr.slice(0, MAX_MCP_INSTRUCTIONS_CHARS)}${instr.length > MAX_MCP_INSTRUCTIONS_CHARS ? '\n…（已截断）' : ''}`
     )
   }
   try {
@@ -333,11 +333,11 @@ async function gatherMcpClientHints(
       })
       const more =
         prompts.length > MAX_MCP_PROMPTS_LIST
-          ? `\n... and ${prompts.length - MAX_MCP_PROMPTS_LIST} more not listed`
+          ? `\n…另有 ${prompts.length - MAX_MCP_PROMPTS_LIST} 项未列出`
           : ''
       sections.push(
         [
-          '**Server Registered Prompt Templates (index only; call getPrompt to expand content)**',
+          '**服务器已注册的 Prompt 模板（仅索引；调用 getPrompt 展开内容）**',
           `${lines.join('\n')}${more}`
         ].join('\n')
       )
@@ -365,11 +365,11 @@ async function gatherMcpClientHints(
     })
     const more =
       tools.length > MAX_MCP_TOOLS_LIST
-        ? `\n... and ${tools.length - MAX_MCP_TOOLS_LIST} more not listed`
+        ? `\n…另有 ${tools.length - MAX_MCP_TOOLS_LIST} 项未列出`
         : ''
     sections.push(
       [
-        '**Server Registered Tools (name and description; parameters use host-bound tool schema)**',
+        '**服务器已注册的工具（名称与描述；参数以宿主绑定工具的 schema 为准）**',
         `${lines.join('\n')}${more}`
       ].join('\n')
     )
@@ -394,7 +394,7 @@ export async function collectMcpServerContextHints(settings: AppSettings): Promi
     }
   }
   if (!blocks.length) return ''
-  return `## MCP Server Context (instructions / prompts / tools index)\n\n${blocks.join('\n\n---\n\n')}`
+  return `## MCP 服务器上下文（说明 / prompt / 工具索引）\n\n${blocks.join('\n\n---\n\n')}`
 }
 
 function truncateSchema(schema: unknown, max = 1800): string {
@@ -430,9 +430,9 @@ export async function buildMcpLangChainTools(
           idx += 1
           const schemaHint = t.inputSchema ? truncateSchema(t.inputSchema) : ''
           const descParts = [
-            t.description?.trim() || `MCP tool ${mcpToolName}`,
-            `Server: ${srv.name} (stdio)`,
-            schemaHint ? `inputSchema: ${schemaHint}` : ''
+            t.description?.trim() || `MCP 工具 ${mcpToolName}`,
+            `服务器：${srv.name}（stdio）`,
+            schemaHint ? `inputSchema：${schemaHint}` : ''
           ].filter(Boolean)
 
           const wrapped = tool(
@@ -501,7 +501,7 @@ export async function buildMcpLangChainTools(
     }
   }
   const contextHints = hintBlocks.length
-    ? `## MCP Server Context (instructions / prompts / tools index)\n\n${hintBlocks.join('\n\n---\n\n')}`
+    ? `## MCP 服务器上下文（说明 / prompt / 工具索引）\n\n${hintBlocks.join('\n\n---\n\n')}`
     : ''
   return { tools: out, contextHints }
 }

@@ -297,7 +297,7 @@ async function appendSkillDefsFromScanRoot(scan: ScanRoot, defs: SkillDefinition
       )
       defs.push({
         name: skillName,
-        description: parsed.description || `Skill description: ${sourcePrefix}/${fileName}`,
+        description: parsed.description || `技能描述：${sourcePrefix}/${fileName}`,
         source: `${sourcePrefix}/${fileName}`,
         schema: z.object({ question: z.string().optional() }),
         execute: async (args) => {
@@ -345,7 +345,7 @@ function makeSkillHint(defs: SkillDefinition[]): string {
   if (!defs.length) return ''
   const top = defs.slice(0, 10)
   const lines = top.map((item) => `- ${item.name}: ${item.description} (source: ${item.source})`)
-  return `Available skill tools (auto-called):\n${lines.join('\n')}\nWhen user intent matches any of the above descriptions, you MUST call the corresponding skill tool (by exact name above) first (can pass question summarizing user request), then use other tools as needed; do not skip matching skills and guess with generic tools.`
+  return `可用技能工具（可自动调用）：\n${lines.join('\n')}\n当用户意图与上述任一描述匹配时，必须先按上方准确名称调用对应技能工具（可传入概括用户问题的 question），再按需使用其他工具；不要跳过匹配技能而用泛化工具猜测。`
 }
 
 function toTool(def: SkillDefinition, ctx: SkillToolContext): SkillTool {
@@ -449,7 +449,7 @@ export async function validateSkillPackageLayout(
   try {
     entries = await fs.readdir(absDir, { withFileTypes: true })
   } catch {
-    return { ok: false, error: 'Cannot read skill package directory' }
+    return { ok: false, error: '无法读取技能包目录' }
   }
   const hasJson = entries.some((e) => e.isFile() && e.name.toLowerCase().endsWith('.json'))
   if (hasJson) return { ok: true }
@@ -564,7 +564,7 @@ async function mdEntriesForUi(scan: ScanRoot): Promise<SkillUiEntry[]> {
             : 'legacy',
         toolName,
         title: parsed.name || parsed.id || fileName,
-        description: parsed.description || `JSON skill: ${relFile}`,
+        description: parsed.description || `JSON 技能：${relFile}`,
         sourceLabel: relFile,
         marketFolderId: scan.sourcePrefix.startsWith('skills/market/')
           ? scan.sourcePrefix.replace(/^skills\/market\//, '')
@@ -602,16 +602,16 @@ export async function uninstallMarketSkillFolder(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const id = folderId.trim()
   if (!id || id.includes('/') || id.includes('\\') || id === '.' || id === '..') {
-    return { ok: false, error: 'Invalid uninstall target' }
+    return { ok: false, error: '无效的卸载目标' }
   }
   if (id.startsWith('.')) {
-    return { ok: false, error: 'Invalid uninstall target' }
+    return { ok: false, error: '无效的卸载目标' }
   }
   const abs = path.join(marketSkillsInstallRoot(), id)
   const resolved = path.resolve(abs)
   const rootResolved = path.resolve(marketSkillsInstallRoot())
   if (!resolved.startsWith(rootResolved + path.sep) && resolved !== rootResolved) {
-    return { ok: false, error: 'Path escape denied' }
+    return { ok: false, error: '禁止路径逃逸' }
   }
   try {
     await fs.rm(resolved, { recursive: true, force: true })
@@ -629,19 +629,19 @@ export async function uninstallLegacySkillFolder(
   const userRoot = path.resolve(userSkillsAbsRoot())
   const normalized = legacyFolderRelative.replace(/\\/g, '/').trim()
   if (!normalized || normalized.includes('..')) {
-    return { ok: false, error: 'Invalid legacy skill path' }
+    return { ok: false, error: '无效的旧版技能路径' }
   }
   const segments = normalized.split('/').filter(Boolean)
   if (segments.some((s) => s === '.' || s === '..')) {
-    return { ok: false, error: 'Invalid legacy skill path' }
+    return { ok: false, error: '无效的旧版技能路径' }
   }
   if (segments[0] === 'market' || segments[0] === '.cache') {
-    return { ok: false, error: 'Cannot uninstall from reserved directories' }
+    return { ok: false, error: '不能从保留目录卸载' }
   }
   const abs = path.resolve(path.join(userRoot, ...segments))
   const rel = path.relative(userRoot, abs)
   if (rel.startsWith('..') || path.isAbsolute(rel)) {
-    return { ok: false, error: 'Path escape denied' }
+    return { ok: false, error: '禁止路径逃逸' }
   }
   if (
     rel.split(path.sep)[0] === 'market' ||
@@ -650,7 +650,7 @@ export async function uninstallLegacySkillFolder(
   ) {
     return {
       ok: false,
-      error: 'Cannot uninstall market/.cache content (use market uninstall instead)'
+      error: '不能卸载 market/.cache 内容（请使用市场卸载）'
     }
   }
   try {

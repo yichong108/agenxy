@@ -187,9 +187,9 @@ export function buildMemoryPromptBlock(settings?: AppSettings): string {
   const lines: string[] = []
   let usedChars = 0
   const header =
-    '## User memories (global, persistent)\n' +
-    'The following facts about the user were saved in the app (not workspace files). Use when relevant; do not contradict unless the user corrects you. Do not mention this section unless asked.\n' +
-    'To remember or forget facts when the user asks, use tools user_memory_add / user_memory_update / user_memory_delete — never write .claude-memory.json or similar files in the workspace.'
+    '## 用户记忆（全局、持久）\n' +
+    '以下关于用户的事实保存在应用中（非工作区文件）。相关时使用；除非用户更正，不要与之矛盾。用户未询问时不要提及本节。\n' +
+    '用户要求记住或忘记时，使用 user_memory_add / user_memory_update / user_memory_delete —— 切勿在工作区写入 .claude-memory.json 等文件。'
 
   for (const row of sorted) {
     const line = `- [${row.id}] ${row.content}`

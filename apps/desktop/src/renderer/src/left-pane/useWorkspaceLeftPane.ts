@@ -90,7 +90,7 @@ export function useWorkspaceLeftPane() {
     if (workspaces.some((w) => w.id === HOME_WORKSPACE_ID)) return workspaces
     const stub: WorkspaceInfo = {
       id: HOME_WORKSPACE_ID,
-      name: 'Home',
+      name: '主目录',
       path: null,
       createdAt: 0,
       updatedAt: 0

@@ -19,4 +19,4 @@ export function isReservedMemoryFilePath(relPath: string): boolean {
 }
 
 export const MEMORY_FILE_GUARD_MESSAGE =
-  'Do not store user memories in workspace files. Use user_memory_add / user_memory_update / user_memory_delete (app global memory in Settings → 用户记忆).'
+  '请勿在工作区文件中存储用户记忆。请使用 user_memory_add / user_memory_update / user_memory_delete（应用全局记忆：设置 → 用户记忆）。'

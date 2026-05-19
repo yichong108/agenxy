@@ -22,7 +22,7 @@ const MemoryExtractionSchema = z.object({
         content: z.string().optional()
       })
     )
-    .describe('Memory mutations to apply; empty if nothing durable to remember')
+    .describe('要应用的记忆变更；若无持久信息则为空')
 })
 
 const MIN_ASSISTANT_CHARS_FOR_EXTRACT = 24
@@ -79,37 +79,37 @@ export async function extractMemoriesAfterRun(opts: {
   const existingBlock =
     existing.length > 0
       ? existing.map((m) => `- id=${m.id} | ${m.content}`).join('\n')
-      : '(none)'
+      : '（无）'
 
-  const systemPrompt = `You maintain a small global memory about the user for a desktop coding agent.
+  const systemPrompt = `你维护桌面编码智能体关于用户的小型全局记忆。
 
-Only output durable facts useful across future sessions:
-- Preferences (languages, frameworks, package managers, editor habits)
-- Stable identity or role context the user explicitly shared
-- Long-term communication preferences
+仅输出对未来会话有用的持久事实：
+- 偏好（语言、框架、包管理器、编辑器习惯）
+- 用户明确分享的稳定身份或角色背景
+- 长期沟通偏好
 
-Do NOT store:
-- API keys, passwords, tokens, secrets
-- One-off task instructions, file paths, bug states, or temporary plans
-- Anything only relevant to the current message
+不要存储：
+- API 密钥、密码、令牌、机密
+- 一次性任务说明、文件路径、缺陷状态或临时计划
+- 仅与当前消息相关的内容
 
-Compare with existing memories:
-- If a new fact refines an existing one, use op "update" with the same id
-- If a fact is obsolete or contradicted, use op "delete"
-- If genuinely new, use op "add"
-- If nothing durable changed, return actions: []
+与已有记忆对比：
+- 新事实细化已有条目时，用 op "update" 并保留相同 id
+- 事实过时或被推翻时，用 op "delete"
+- 全新事实用 op "add"
+- 无持久变更时返回 actions: []
 
-Each add/update content must be a single concise sentence (under 200 characters).`
+每条 add/update 的 content 须为一句简洁中文（200 字以内）。`
 
   const humanPrompt = [
-    '## Existing memories',
+    '## 已有记忆',
     existingBlock,
     '',
-    '## Latest conversation turn',
-    'User:',
+    '## 最近一轮对话',
+    '用户：',
     truncateTurnText(userText),
     '',
-    'Assistant:',
+    '助手：',
     truncateTurnText(assistantText)
   ].join('\n')
 

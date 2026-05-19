@@ -82,7 +82,7 @@ function filterSessionsForSidebar(
   return (list ?? []).filter((s) => !hidden.has(s.id))
 }
 
-/** Cursor 风格时间线标题用：Worked for 1m 2.3s */
+/** Cursor 风格时间线标题用：耗时 1 分 2.3 秒 */
 function formatWorkedDuration(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return '0s'
   if (ms < 1000) return `${Math.round(ms)}ms`
@@ -265,7 +265,7 @@ export function App() {
     if (workspaces.some((w) => w.id === HOME_WORKSPACE_ID)) return workspaces
     const stub: WorkspaceInfo = {
       id: HOME_WORKSPACE_ID,
-      name: 'Home',
+      name: '主目录',
       path: null,
       createdAt: 0,
       updatedAt: 0
@@ -827,7 +827,7 @@ export function App() {
         key: mode,
         label: (
           <span className="app-composer-plus-menu-title">
-            <span>{mode === 'build' ? 'Build' : mode === 'ask' ? 'Ask' : 'Plan'}</span>
+            <span>{mode === 'build' ? '构建' : mode === 'ask' ? '问答' : '计划'}</span>
             {composerMode === mode ? (
               <CheckOutlined className="app-composer-plus-menu-check" aria-hidden />
             ) : null}
@@ -845,7 +845,7 @@ export function App() {
     })
     const rows: MenuProps['items'] = ordered.map((w) => ({
       key: w.id,
-      label: w.id === HOME_WORKSPACE_ID ? 'Home' : w.name,
+      label: w.id === HOME_WORKSPACE_ID ? '主目录' : w.name,
       disabled: w.id === composerSelectedWorkspaceId
     }))
     return [
@@ -948,7 +948,7 @@ export function App() {
       setPendingPlanBySession((prev) => ({ ...prev, [activeId]: body }))
       setComposerMode('build')
       useUiStore.getState().requestComposerFocus()
-      msgApi.info('已切换到 Build。可在输入框补充对计划的修改，发送后开始实施（留空发送则按计划执行）')
+      msgApi.info('已切换到构建模式。可在输入框补充对计划的修改，发送后开始实施（留空发送则按计划执行）')
     },
     [activeId, msgApi]
   )
@@ -1309,7 +1309,7 @@ export function App() {
               <span
                 className={`app-composer-mode-hint${composerMode === 'plan' ? ' is-plan' : ''}`}
               >
-                {composerMode === 'ask' ? 'Ask' : 'Plan'}
+                {composerMode === 'ask' ? '问答' : '计划'}
               </span>
             ) : null}
           </div>
@@ -1418,7 +1418,7 @@ export function App() {
                     </Text>
                   )}
                   {currentRunStats?.traceId && (
-                    <Tag color="default">trace: {currentRunStats.traceId.slice(-12)}</Tag>
+                    <Tag color="default">追踪: {currentRunStats.traceId.slice(-12)}</Tag>
                   )}
                 </Space>
               ) : null}
@@ -1545,7 +1545,7 @@ export function App() {
                                           className={`app-timeline-chevron${timelineExpanded ? ' is-open' : ''}`}
                                         />
                                         <span className="app-timeline-accordion-title">
-                                          Worked for {formatWorkedDuration(timelineWallMs)}
+                                          耗时 {formatWorkedDuration(timelineWallMs)}
                                         </span>
                                       </button>
                                       {timelineExpanded ? (
@@ -1562,7 +1562,7 @@ export function App() {
                                                   <Text type="secondary" className="app-timeline-plan-label">
                                                     下一步
                                                     {e.toolName ? (
-                                                      <Text type="secondary"> · after {e.toolName}</Text>
+                                                      <Text type="secondary"> · 在 {e.toolName} 之后</Text>
                                                     ) : null}
                                                   </Text>
                                                   <div className="app-timeline-plan">
@@ -1576,7 +1576,8 @@ export function App() {
                                                     {e.name}{' '}
                                                     {e.status === 'start'
                                                       ? '…'
-                                                      : e.result?.includes('Rejected by user')
+                                                      : e.result?.includes('用户已拒绝') ||
+                                                        e.result?.includes('Rejected by user')
                                                         ? '✗'
                                                         : '✓'}
                                                   </Text>
@@ -1711,7 +1712,7 @@ export function App() {
       {isDevEnv && (
         <FloatButton
           icon={<BugOutlined />}
-          tooltip="切换 DevTools"
+          tooltip="切换开发者工具"
           onClick={() => void toggleDevtools()}
           className="app-devtools-float"
         />

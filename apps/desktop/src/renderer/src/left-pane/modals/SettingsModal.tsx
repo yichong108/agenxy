@@ -83,15 +83,15 @@ export function SettingsModal({ open, onClose, onOpenMemoryHub }: SettingsModalP
         <Typography.Paragraph type="secondary" style={{ marginBottom: 16, marginTop: 0 }}>
           仅支持接入兼容 OpenAI API 标准格式的模型服务。
         </Typography.Paragraph>
-        <Form.Item name="baseUrl" label="Base URL" rules={[{ required: true }]}>
+        <Form.Item name="baseUrl" label="接口地址" rules={[{ required: true }]}>
           <Input placeholder="https://api.deepseek.com" />
         </Form.Item>
-        <Form.Item name="model" label="Model" rules={[{ required: true }]}>
+        <Form.Item name="model" label="模型" rules={[{ required: true }]}>
           <Input />
         </Form.Item>
         <Form.Item
           name="apiKey"
-          label="API Key"
+          label="API 密钥"
           rules={[{ required: true, message: '请先填写 API Key' }]}
           hasFeedback
         >
@@ -99,7 +99,7 @@ export function SettingsModal({ open, onClose, onOpenMemoryHub }: SettingsModalP
         </Form.Item>
         <Form.Item
           name="tavilyApiKey"
-          label="Tavily API Key（联网搜索）"
+          label="Tavily 密钥（联网搜索）"
           extra="填写后模型可调用 web_search，注册 https://tavily.com 获取Tavily API Key。"
         >
           <Input.Password autoComplete="off" placeholder="留空则不启用联网搜索" />

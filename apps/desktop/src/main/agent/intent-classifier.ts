@@ -95,20 +95,20 @@ export async function classifyIntent(
     strict: true
   })
 
-  const systemPrompt = `You are an intent classification expert. Analyze the user input and determine whether it is a programming-related task or a general task.
+  const systemPrompt = `你是意图分类专家。分析用户输入，判断属于编程相关任务还是通用任务。
 
-Available intent types:
-- coding: Programming-related tasks (code modification, bug fixes, feature development, code review, troubleshooting, deployment, etc.)
-- general: General tasks (slide creation, issue triage, documentation writing, etc.)
+可用意图类型：
+- coding：编程相关（改代码、修 bug、功能开发、代码评审、排障、部署等）
+- general：通用任务（做幻灯片、问题分拣、写文档等）
 
-Classification rules:
-1. If the input involves code, programs, software, bugs, feature development, code review, troubleshooting, deployment, etc., select "coding"
-2. If the input involves PPT, slides, presentations, issue triage, general inquiries, etc., select "general"
-3. If uncertain, select "general"
+分类规则：
+1. 涉及代码、程序、软件、缺陷、功能开发、评审、排障、部署等 → 选 "coding"
+2. 涉及 PPT、幻灯片、演示、问题分拣、一般咨询等 → 选 "general"
+3. 不确定时选 "general"
 
-Output requirements:
-- The "reasoning" field must be written in English
-- Provide clear justification for the classification decision`
+输出要求：
+- "reasoning" 字段须用中文
+- 给出清晰的分类理由`
 
   try {
     const messages = [new SystemMessage(systemPrompt), new HumanMessage(userText)]
@@ -124,7 +124,7 @@ Output requirements:
     return {
       intent,
       confidence,
-      reasoning: result.reasoning || 'Based on content analysis'
+      reasoning: result.reasoning || '根据内容分析'
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') throw error
@@ -132,7 +132,7 @@ Output requirements:
     return {
       intent: 'general',
       confidence: 0.5,
-      reasoning: 'Classification failed, falling back to general intent'
+      reasoning: '分类失败，回退为通用意图'
     }
   }
 }

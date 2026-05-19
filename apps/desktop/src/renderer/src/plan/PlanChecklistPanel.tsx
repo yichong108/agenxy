@@ -26,7 +26,7 @@ export function PlanChecklistPanel({
       return (
         <div className="app-plan-panel app-plan-panel--loading" aria-busy="true">
           <div className="app-plan-panel-head">
-            <span className="app-plan-panel-title">Plan</span>
+            <span className="app-plan-panel-title">计划</span>
             <Tag className="app-plan-panel-tag">生成中…</Tag>
           </div>
           <div className="app-plan-panel-skeleton">
@@ -66,9 +66,9 @@ function PlanChecklistView({
   return (
     <div className="app-plan-panel" data-plan-steps={stepCount}>
       <div className="app-plan-panel-head">
-        <span className="app-plan-panel-title">Plan</span>
+        <span className="app-plan-panel-title">计划</span>
         <Tag className="app-plan-panel-tag">
-          {streaming ? '更新中…' : `${stepCount} ${stepCount === 1 ? 'step' : 'steps'}`}
+          {streaming ? '更新中…' : `${stepCount} 步`}
         </Tag>
       </div>
 
@@ -113,7 +113,7 @@ function PlanChecklistView({
 
       <div className="app-plan-panel-footer">
         <Text type="secondary" className="app-plan-panel-footer-hint">
-          只读计划，尚未修改工作区。点击「执行计划」将切换到 Build 并关联本计划；可在输入框补充修改后发送。
+          只读计划，尚未修改工作区。点击「执行计划」将切换到构建模式并关联本计划；可在输入框补充修改后发送。
         </Text>
         {onExecutePlan && !streaming ? (
           <Button

@@ -541,7 +541,7 @@ export function McpHubModal({ open, onClose }: McpHubModalProps) {
               label="显示名称"
               rules={[{ required: true, message: '请填写名称' }]}
             >
-              <Input placeholder="例如 Filesystem MCP" />
+              <Input placeholder="例如：文件系统 MCP" />
             </Form.Item>
             <Form.Item
               name="command"

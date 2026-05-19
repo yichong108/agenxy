@@ -256,7 +256,7 @@ function openAiBaseUrlForProvider(_provider: ModelProviderId, rawBaseUrl: string
 function createLanguageModel(settings: AppSettings) {
   const profile = getActiveProviderProfile(settings)
   if (!profile.apiKey?.trim()) {
-    throw new Error('Please configure API Key in Settings first')
+    throw new Error('请先在设置中配置 API Key')
   }
   const apiKey = profile.apiKey.trim()
   const baseURL = openAiBaseUrlForProvider(settings.provider, profile.baseUrl)
@@ -273,39 +273,39 @@ function buildSystemPrompt(root: string, settings: AppSettings): string {
   const web = isTavilyConfigured(settings.tavilyApiKey)
   const mcpEnabled = (settings.mcpServers ?? []).filter((s) => s.enabled && s.command.trim())
   const mcpMeta =
-    '\n- **MCP Management (Meta Tools)**: `mcp_list_servers` lists configured MCPs with sanitized env; `mcp_inspect_server` probes a specific MCP for exposed tools. Prioritize these when connection info or tool names are needed; do not ask users for passwords already saved in the app.'
+    '\n- **MCP 管理（元工具）**：`mcp_list_servers` 列出已配置的 MCP（环境变量已脱敏）；`mcp_inspect_server` 探测指定 MCP 暴露的工具。需要连接信息或工具名时优先使用；不要向用户索要应用中已保存的密码。'
   const mcpNote =
     mcpEnabled.length > 0
-      ? `${mcpMeta}\n- Enabled MCP (stdio) servers: ${mcpEnabled.map((s) => s.name || s.id).join(', ')}. Tools starting with mcp_ are from each MCP; pass JSON objects when calling, with keys matching the tool's inputSchema.`
+      ? `${mcpMeta}\n- 已启用的 MCP（stdio）服务：${mcpEnabled.map((s) => s.name || s.id).join(', ')}。以 mcp_ 开头的工具来自各 MCP；调用时传入 JSON，键名需符合该工具的 inputSchema。`
       : (settings.mcpServers?.length ?? 0) > 0
-        ? `${mcpMeta}\n- Current MCP entries are not enabled or have empty command; mcp_* tools will appear after user enables them.`
+        ? `${mcpMeta}\n- 当前 MCP 条目未启用或 command 为空；用户启用后才会出现 mcp_* 工具。`
         : mcpMeta
   const memoryTools =
     settings.memoryEnabled !== false
-      ? ', user_memory_list, user_memory_add, user_memory_update, user_memory_delete'
+      ? '、user_memory_list、user_memory_add、user_memory_update、user_memory_delete'
       : ''
   const toolLine = web
-    ? `read_file, write_file, delete_file, list_dir, glob, grep, search_workspace, shell, web_search (Tavily internet search), mcp_list_servers, mcp_inspect_server${memoryTools}`
-    : `read_file, write_file, delete_file, list_dir, glob, grep, search_workspace, shell, mcp_list_servers, mcp_inspect_server (no web_search without Tavily API Key)${memoryTools}`
+    ? `read_file、write_file、delete_file、list_dir、glob、grep、search_workspace、shell、web_search（Tavily 联网搜索）、mcp_list_servers、mcp_inspect_server${memoryTools}`
+    : `read_file、write_file、delete_file、list_dir、glob、grep、search_workspace、shell、mcp_list_servers、mcp_inspect_server（未配置 Tavily API Key 时无 web_search）${memoryTools}`
   const webRule = web
-    ? '- When users ask about **weather, temperature, rainfall, real-time news, stock prices, policies**, etc. requiring external info, you MUST call **web_search** first before answering; do not make up current weather or claim "search failed".\n- If the user **rejects** a tool call (tool result says rejected / not executed), do **not** call that tool again in the same turn; acknowledge in the user\'s language and offer alternatives (e.g. ask for city/region, or suggest configuring approval).'
-    : '- Tavily is **not** configured, web_search unavailable: If users request real-time info like today\'s weather, clearly inform them to set "Tavily API Key" in app Settings or configure TAVILY_API_KEY environment variable; suggest weather websites or apps; do not claim "search engine is broken" or "internet search unavailable".'
-  return `You are an intelligent agent assisting with office work and software development. Workspace root: ${root}.
-- Use **relative paths from workspace root** in tools (e.g., src/index.ts); do not use ../ to escape the workspace.
-- Available tools: ${toolLine}, and various skill_* tools.${mcpNote}
-- **Prioritize skill_***: When user intent clearly matches a skill tool's description, you MUST call that skill first to get workflow/constraints/output, then use read_file, list_dir, grep, search_workspace, shell, mcp_* as needed; do not skip matching skills and guess with generic tools.
-- shell executes commands in the sandbox directory (workspace root), waits for completion, returns stdout/stderr. Windows uses cmd style.
-- When users ask to "view/read workspace files" or "list directory", prefer read_file/list_dir before answering.
-- When users explicitly request to delete a file in the workspace, use delete_file (for regular files only, not directories).
-- Use glob for filename/path pattern search (e.g., **/*.ts): results include workspace and "user data" directories (skill market installs, etc.); read_file/write remain limited to workspace paths.
+    ? '- 用户询问**天气、气温、降雨、实时新闻、股价、政策**等需要外部信息时，必须先调用 **web_search** 再回答；不要编造天气或声称「搜索失败」。\n- 若用户**拒绝**某次工具调用（结果含已拒绝/未执行），**本轮不得再次调用该工具**；用中文简要说明并给出替代方案（如请用户提供城市/地区，或说明可在设置中调整审批）。'
+    : '- 未配置 Tavily，**web_search 不可用**：若用户需要今日天气等实时信息，明确告知在应用设置中填写「Tavily API Key」或配置环境变量 TAVILY_API_KEY；可建议天气网站/App；不要声称「搜索引擎坏了」或「无法联网」。'
+  return `你是协助办公与软件开发的智能体。工作区根目录：${root}。
+- 工具中使用**相对于工作区根目录**的路径（如 src/index.ts）；不要用 ../ 逃出工作区。
+- 可用工具：${toolLine}，以及各类 skill_* 工具。${mcpNote}
+- **优先 skill_***：用户意图明显匹配某 skill 工具描述时，必须先调用该 skill 获取流程/约束/输出，再按需使用 read_file、list_dir、grep、search_workspace、shell、mcp_*；不要跳过匹配的技能而用泛化工具猜测。
+- shell 在工作区根目录沙箱中执行命令并等待结束，返回 stdout/stderr；Windows 使用 cmd 风格。
+- 用户要「查看/读取工作区文件」或「列目录」时，优先 read_file/list_dir 再回答。
+- 用户明确要求删除工作区中的文件时，使用 delete_file（仅普通文件，不含目录）。
+- 用 glob 按文件名/路径模式搜索（如 **/*.ts）：结果含工作区与「用户数据」目录（技能市场安装等）；read_file/write 仍仅限工作区路径。
 ${webRule}
-- **User long-term memory** lives in the app (Settings → 用户记忆), not in workspace files. When the user shares durable preferences or asks you to remember/forget something, use **user_memory_add** / **user_memory_update** / **user_memory_delete** (or rely on post-turn auto-extract). **Never** create or edit \`.claude-memory.json\`, \`.cursor-memory.json\`, or other ad-hoc memory JSON in the workspace.
-- Keep responses concise and actionable; read/list before modifying code.
-- Understand task first → restate goal if needed → then select tools.`
+- **用户长期记忆**保存在应用内（设置 → 用户记忆），不在工作区文件中。用户分享持久偏好或要求记住/忘记时，使用 **user_memory_add** / **user_memory_update** / **user_memory_delete**（或依赖回合结束后的自动提取）。**禁止**在工作区创建或编辑 \`.claude-memory.json\`、\`.cursor-memory.json\` 等临时记忆 JSON。
+- 回复简洁可执行；改代码前先 read/list。
+- 先理解任务 → 必要时复述目标 → 再选工具。`
 }
 
 const commonPrompt = `
-  Current date/time (UTC): ${new Date().toLocaleString()};
+  当前日期时间（UTC）：${new Date().toLocaleString()}；
 `
 
 /** 持久化用户消息时优先使用该展示文案（Plan 执行等场景） */
@@ -314,14 +314,14 @@ export const AGENXY_USER_DISPLAY_KW = 'agenxy_user_display'
 function buildAgentMessageWithPlan(userText: string, planContext: string): string {
   const userPart = userText.trim() || '（用户未附加说明，请严格按计划步骤实施。）'
   return [
-    'The user confirmed the following plan from **Plan mode** and switched to **Build** to implement it.',
-    'Follow the plan unless the user message clearly revises, narrows, or reorders scope.',
+    '用户已确认以下 **计划模式** 中的计划，并切换到 **构建模式** 实施。',
+    '除非用户消息明确修订、缩小或重排范围，否则按计划执行。',
     '',
-    '--- Plan ---',
+    '--- 计划 ---',
     planContext.trim(),
-    '--- End plan ---',
+    '--- 计划结束 ---',
     '',
-    'User message:',
+    '用户消息：',
     userPart
   ].join('\n')
 }
@@ -329,53 +329,53 @@ function buildAgentMessageWithPlan(userText: string, planContext: string): strin
 function buildAskSystemPrompt(root: string, settings: AppSettings): string {
   const web = isTavilyConfigured(settings.tavilyApiKey)
   const memoryTools =
-    settings.memoryEnabled !== false ? ', user_memory_list (read global user memories only)' : ''
+    settings.memoryEnabled !== false ? '、user_memory_list（仅读取全局用户记忆）' : ''
   const toolLine = web
-    ? `read_file, list_dir, glob, grep, search_workspace, web_search (Tavily)${memoryTools}`
-    : `read_file, list_dir, glob, grep, search_workspace (no web_search without Tavily)${memoryTools}`
+    ? `read_file、list_dir、glob、grep、search_workspace、web_search（Tavily）${memoryTools}`
+    : `read_file、list_dir、glob、grep、search_workspace（未配置 Tavily 时无 web_search）${memoryTools}`
   const webRule = web
-    ? '- Call **web_search** when external info is needed; do not fabricate search results.'
-    : '- Tavily is not configured: If users need real-time info, be honest and suggest configuring Tavily in Settings.'
-  return `You are an assistant for understanding and explaining code, architecture, and commands (**Ask / Q&A Mode**). Workspace root: ${root}.
-- **DO NOT** modify workspace files, delete files, execute shell, or call skill_* or mcp_*; these tools are unavailable in this mode.
-- Read-only tools only: ${toolLine}. All paths are relative to workspace root.
-- If users request "directly modify code / run commands / apply patches", explain that Ask mode cannot auto-execute and provide copyable snippets or steps; to auto-apply, switch to **Build** (turn off Ask).
+    ? '- 需要外部信息时调用 **web_search**；不要编造搜索结果。'
+    : '- 未配置 Tavily：若用户需要实时信息，如实说明并建议在设置中配置 Tavily。'
+  return `你是帮助理解代码、架构与命令的助手（**问答模式**）。工作区根目录：${root}。
+- **禁止**修改工作区文件、删除文件、执行 shell、调用 skill_* 或 mcp_*；本模式下这些工具不可用。
+- 仅只读工具：${toolLine}。路径均相对于工作区根目录。
+- 若用户要求「直接改代码 / 跑命令 / 打补丁」，说明问答模式不能自动执行，给出可复制片段或步骤；要自动应用请切换到 **构建模式**。
 ${webRule}
-- User preferences are in app global memory (user_memory_list when enabled), not workspace JSON files. Do not suggest writing \`.claude-memory.json\` or similar.
-- Keep responses clear and verifiable: read/list/search repo content first before drawing conclusions.
-- Understand intent first → restate goal if needed
+- 用户偏好保存在应用全局记忆（启用时可用 user_memory_list），不在工作区 JSON。不要建议写入 \`.claude-memory.json\` 等文件。
+- 回复清晰可验证：下结论前先 read/list/search 仓库内容。
+- 先理解意图 → 必要时复述目标
 `
 }
 
 function buildPlanSystemPrompt(root: string, settings: AppSettings): string {
   const web = isTavilyConfigured(settings.tavilyApiKey)
   const toolLine = web
-    ? 'read_file, list_dir, glob, grep, search_workspace, web_search (Tavily)'
-    : 'read_file, list_dir, glob, grep, search_workspace (no web_search without Tavily)'
+    ? 'read_file、list_dir、glob、grep、search_workspace、web_search（Tavily）'
+    : 'read_file、list_dir、glob、grep、search_workspace（未配置 Tavily 时无 web_search）'
   const webRule = web
-    ? '- Call **web_search** when external docs or APIs are needed; do not fabricate search results.'
-    : '- Tavily is not configured: note when real-time web data would help.'
-  return `You are a **Plan Mode** architect for this workspace (${root}). Explore read-only and output a **checklist plan** for the UI — nothing has been executed yet.
-- **DO NOT** modify files, delete files, run shell, or call skill_* / mcp_*; only read-only tools: ${toolLine}.
-- **DO NOT** claim you already changed code or ran commands. Do NOT tell the user to click "execute" or auto-run anything.
-- Explore enough (read/list/search) to ground steps in real paths and symbols.
+    ? '- 需要外部文档或 API 时调用 **web_search**；不要编造搜索结果。'
+    : '- 未配置 Tavily：在需要实时网页数据时注明。'
+  return `你是本工作区（${root}）的 **计划模式** 架构师。只读探索并输出供 UI 展示的 **清单式计划** —— 尚未执行任何修改。
+- **禁止**改文件、删文件、跑 shell、调用 skill_* / mcp_*；仅只读工具：${toolLine}。
+- **禁止**声称已改代码或已执行命令；不要让用户点击「执行」或自动运行。
+- 充分探索（read/list/search），使步骤基于真实路径与符号。
 
-**Required final Markdown shape** (use these exact ## headings; labels may be Chinese or English):
+**最终 Markdown 必须采用以下 ## 标题**：
 
 ## 目标
-One short paragraph restating the user request.
+用一小段话复述用户需求。
 
 ## 计划
-- [ ] First actionable step — include file paths when known
-- [ ] Second step
-(add one \`- [ ]\` line per implementation step; this section is rendered as a Cursor-style checklist)
+- [ ] 第一条可执行步骤 —— 已知时写明文件路径
+- [ ] 第二条步骤
+（每个实施步骤一行 \`- [ ]\`；本区块渲染为清单）
 
 ## 风险与待确认
-- Bullet risks or open questions (omit entire section if none)
+- 风险或待确认项（若无则省略整节）
 
-Rules:
-- Every implementation step MUST be \`- [ ]\` under ## 计划 (not numbered lists, not prose-only).
-- Keep step titles short; put extra detail after an em dash on the same line.
+规则：
+- ## 计划 下每条实施步骤必须是 \`- [ ]\`（不用编号列表，不要纯段落）。
+- 步骤标题简短；补充说明写在同行破折号后。
 ${webRule}`
 }
 
@@ -404,12 +404,12 @@ async function streamIntentSummary(
 ): Promise<string> {
   const model = createLanguageModel(settings)
   const system = new SystemMessage(
-    'You are an "intent thinking" assistant. Based only on the user\'s **latest message** (may contain technical terms), write 2-5 complete sentences in English explaining:\n' +
-      "(1) The user's general goal or problem type;\n" +
-      '(2) If code/docs review or operations are needed, how you **plan to proceed** (outline approach only, do not list specific tool names, no Markdown headers or code blocks).\n' +
-      'Keep tone concise and user-facing; do not repeat these system instructions.'
+    '你是「意图思考」助手。仅根据用户**最新一条消息**（可含技术术语），用**中文**写 2–5 句完整话说明：\n' +
+      '（1）用户的大致目标或问题类型；\n' +
+      '（2）若需查阅代码/文档或执行操作，你**打算如何推进**（只写思路概要，不要列具体工具名，不要 Markdown 标题或代码块）。\n' +
+      '语气简洁、面向用户；不要复述本系统说明。'
   )
-  const human = new HumanMessage(userText.trim() ? userText.trim() : '(empty message)')
+  const human = new HumanMessage(userText.trim() ? userText.trim() : '（空消息）')
   const deadline = Date.now() + INTENT_SUMMARY_TIMEOUT_MS
   let acc = ''
   try {
@@ -451,16 +451,16 @@ async function streamPlanAfterTool(
 ): Promise<string> {
   const model = createLanguageModel(settings)
   const system = new SystemMessage(
-    'You are a "next step planning" assistant. The coding agent just finished one tool call and will continue the same user task.\n' +
-      'Based on the user goal and the tool output, write 1-3 short complete sentences in English describing what you will do **next** (high-level outline only; do not name specific tool functions; no Markdown headers or code blocks).\n' +
-      'If the output looks empty, failed, or unexpected, briefly say how you will recover. Keep tone concise and user-facing.'
+    '你是「下一步计划」助手。编码智能体刚完成一次工具调用，将继续处理同一用户任务。\n' +
+      '根据用户目标与工具输出，用**中文**写 1–3 句简短完整话描述**接下来**要做什么（仅高层概要；不要写具体工具函数名；不要 Markdown 标题或代码块）。\n' +
+      '若输出为空、失败或异常，简要说明如何补救。语气简洁、面向用户。'
   )
   const human = new HumanMessage(
     [
-      `User message:\n${userText.trim() || '(empty message)'}`,
-      `Tool completed: ${ctx.toolName}`,
-      ctx.args ? `Arguments: ${ctx.args}` : '',
-      ctx.result ? `Output (truncated):\n${ctx.result.slice(0, 700)}` : ''
+      `用户消息：\n${userText.trim() || '（空消息）'}`,
+      `已完成工具：${ctx.toolName}`,
+      ctx.args ? `参数：${ctx.args}` : '',
+      ctx.result ? `输出（已截断）：\n${ctx.result.slice(0, 700)}` : ''
     ]
       .filter(Boolean)
       .join('\n\n')
@@ -719,8 +719,7 @@ function buildUserMemoryToolDefs(
   const defs: ToolDefinition<z.ZodTypeAny>[] = [
     {
       name: 'user_memory_list',
-      description:
-        'List global user long-term memories stored in the app (cross-workspace). Not stored in workspace files.',
+      description: '列出应用内保存的全局用户长期记忆（跨工作区），不在工作区文件中。',
       schema: z.object({}),
       execute: async () => userMemoryList(),
       truncateTo: 4_000
@@ -731,19 +730,19 @@ function buildUserMemoryToolDefs(
     {
       name: 'user_memory_add',
       description:
-        'Add a durable user preference or fact to global app memory. Use when the user asks to remember something; do not write .claude-memory.json in the workspace.',
+        '将用户偏好或事实写入应用全局记忆。用户要求记住时使用；不要在工作区写 .claude-memory.json。',
       schema: z.object({ content: z.string() }),
       execute: async ({ content }) => userMemoryAdd(content, sessionId)
     },
     {
       name: 'user_memory_update',
-      description: 'Update an existing global memory by id (from user_memory_list).',
+      description: '按 id（来自 user_memory_list）更新已有全局记忆。',
       schema: z.object({ id: z.string(), content: z.string() }),
       execute: async ({ id, content }) => userMemoryUpdate(id, content)
     },
     {
       name: 'user_memory_delete',
-      description: 'Delete a global memory by id when the user asks to forget it.',
+      description: '用户要求忘记时，按 id 删除全局记忆。',
       schema: z.object({ id: z.string() }),
       execute: async ({ id }) => userMemoryDelete(id)
     }
@@ -764,30 +763,29 @@ function buildBaseAndWebTools(
   const baseToolDefs: ToolDefinition<z.ZodTypeAny>[] = [
     {
       name: 'read_file',
-      description: 'Read UTF-8 text file in workspace, path is relative to workspace root',
+      description: '读取工作区内 UTF-8 文本文件，路径相对于工作区根目录',
       schema: z.object({ path: z.string() }),
       execute: ({ path }) => readFileTool(root, path),
       truncateTo: 1_000
     },
     {
       name: 'write_file',
-      description: 'Write or overwrite workspace file, auto-creates parent directories',
+      description: '写入或覆盖工作区文件，自动创建父目录',
       schema: z.object({ path: z.string(), content: z.string() }),
       execute: ({ path, content }) =>
         isReservedMemoryFilePath(path)
-          ? Promise.resolve(`Rejected: ${MEMORY_FILE_GUARD_MESSAGE}`)
+          ? Promise.resolve(`已拒绝：${MEMORY_FILE_GUARD_MESSAGE}`)
           : writeFileTool(root, path, content)
     },
     {
       name: 'delete_file',
-      description:
-        'Delete a single regular file in workspace (path relative to workspace); cannot delete directories',
+      description: '删除工作区内单个普通文件（相对路径）；不能删除目录',
       schema: z.object({ path: z.string() }),
       execute: ({ path }) => deleteFileTool(root, path)
     },
     {
       name: 'list_dir',
-      description: 'List directory, path is relative or empty for root, depth 1-3',
+      description: '列出目录，路径相对或空表示根目录，深度 1–3',
       schema: z.object({
         path: z.string().optional(),
         depth: z.number().int().min(1).max(3).optional()
@@ -819,8 +817,7 @@ function buildBaseAndWebTools(
     },
     {
       name: 'search_workspace',
-      description:
-        'Simple substring search in text files (no regex). Use grep when you need regex, glob, or match context.',
+      description: '在文本文件中做简单子串搜索（无正则）。需要正则、glob 或匹配上下文时用 grep。',
       schema: z.object({ query: z.string() }),
       execute: ({ query }) => searchWorkspace(root, query, { maxFiles: 50 }),
       truncateTo: 8_000
@@ -828,7 +825,7 @@ function buildBaseAndWebTools(
     {
       name: 'glob',
       description:
-        'Glob for files matching pattern under workspace root and Electron userData directory. Returns file paths only (no directories), split into "Workspace" and "User Data" sections; user data paths are relative to userData root. Pattern uses Node style like **/*.ts, skills/**/*.md; excludes node_modules/.git/dist and Chromium cache directories on both sides',
+        '按模式在工作区根目录与 Electron userData 下 glob 匹配文件。仅返回文件路径（不含目录），分「工作区」与「用户数据」两段；用户数据路径相对 userData 根。模式为 Node 风格如 **/*.ts；两侧均排除 node_modules/.git/dist 及 Chromium 缓存目录',
       schema: z.object({
         pattern: z.string(),
         max_results: z.number().int().min(1).max(500).optional()
@@ -840,7 +837,7 @@ function buildBaseAndWebTools(
     {
       name: 'shell',
       description:
-        'Execute a shell command in workspace root directory and wait for completion, returns combined stdout/stderr (long output truncated). Used for installing dependencies, building, testing, git, etc.',
+        '在工作区根目录执行 shell 命令并等待结束，返回合并的 stdout/stderr（过长会截断）。用于安装依赖、构建、测试、git 等。',
       schema: z.object({ command: z.string() }),
       execute: ({ command }) => runCommand(termKey, root, command, MAX_TERMINAL_OUTPUT_CHARS),
       truncateTo: 4_000
@@ -856,7 +853,7 @@ function buildBaseAndWebTools(
           {
             name: 'web_search',
             description:
-              'Use Tavily to search public web pages (weather, news, docs, etc.). search_workspace only searches workspace code; call this tool when external info is needed.',
+              '用 Tavily 搜索公开网页（天气、新闻、文档等）。search_workspace 只搜工作区代码；需要外部信息时调用本工具。',
             schema: z.object({
               query: z.string(),
               max_results: z.number().int().min(1).max(20).optional()
@@ -1006,7 +1003,7 @@ export function cancelRun(sessionId: string): void {
   if (s) {
     s.pendingHitl = undefined
   }
-  cancelAllHitlWaiters('Run cancelled')
+  cancelAllHitlWaiters('运行已取消')
   void killCommand(`term:${sessionId}`)
 }
 
@@ -1017,12 +1014,12 @@ export function resumeAgentHitl(
 ): { ok: true } | { ok: false; error: string } {
   const s = sessions.get(sessionId)
   if (!s?.pendingHitl || s.pendingHitl.hitlId !== hitlId) {
-    return { ok: false, error: 'No pending tool approval for this session' }
+    return { ok: false, error: '当前会话没有待审批的工具调用' }
   }
   s.pendingHitl = undefined
   const submitted = submitHitlDecision(hitlId, decision)
   if (!submitted) {
-    return { ok: false, error: 'Approval request expired or already resolved' }
+    return { ok: false, error: '审批请求已过期或已处理' }
   }
   return { ok: true }
 }
@@ -1043,7 +1040,7 @@ export async function runUserMessage(
     ? buildAgentMessageWithPlan(userText, planContext)
     : userText.trim()
   if (!agentUserText) {
-    emit({ type: 'error', sessionId, message: 'Empty message' })
+    emit({ type: 'error', sessionId, message: '消息为空' })
     return
   }
   const settings = getSettings()
@@ -1051,7 +1048,7 @@ export async function runUserMessage(
 
   const existingSession = sessions.get(sessionId)
   if (!existingSession) {
-    emit({ type: 'error', sessionId, message: 'Session does not exist or has expired' })
+    emit({ type: 'error', sessionId, message: '会话不存在或已过期' })
     return
   }
   const workspace = getWorkspaceById(existingSession.workspaceId)
@@ -1062,7 +1059,7 @@ export async function runUserMessage(
     emit({
       type: 'error',
       sessionId,
-      message: 'Current session workspace not bound to directory, please bind path first'
+      message: '当前会话未绑定工作区目录，请先绑定路径'
     })
     return
   }
@@ -1075,7 +1072,7 @@ export async function runUserMessage(
     const session = sessions.get(sessionId)
     if (!session) {
       agentLog.error(`[runUserMessage] session not found for sessionId: ${sessionId}`)
-      emit({ type: 'error', sessionId, message: 'Session does not exist or has expired' })
+      emit({ type: 'error', sessionId, message: '会话不存在或已过期' })
       return
     }
     const ac = new AbortController()

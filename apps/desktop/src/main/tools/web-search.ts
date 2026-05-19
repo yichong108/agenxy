@@ -24,16 +24,16 @@ function formatTavilyResponse(data: TavilySearchJson): string {
     return `Tavily: ${err}`
   }
   const results = data.results ?? []
-  const parts: string[] = ['Internet search (Tavily):']
+  const parts: string[] = ['互联网搜索（Tavily）：']
   if (typeof data.answer === 'string' && data.answer.trim()) {
-    parts.push(`Summary:\n${data.answer.trim()}`, '')
+    parts.push(`摘要：\n${data.answer.trim()}`, '')
   }
   if (!results.length) {
-    parts.push('No web pages returned.')
+    parts.push('未返回网页结果。')
     return parts.join('\n')
   }
   const blocks = results.map((r, i) => {
-    const title = (r.title ?? '').trim() || '(no title)'
+    const title = (r.title ?? '').trim() || '（无标题）'
     const url = (r.url ?? '').trim()
     const text = (r.content ?? '').trim()
     const head = `${i + 1}. ${title}`
@@ -42,7 +42,7 @@ function formatTavilyResponse(data: TavilySearchJson): string {
   })
   parts.push(blocks.join('\n\n'))
   parts.push(
-    '\n[Note] Above is search summary; please verify with original sources before drawing conclusions.'
+    '\n[说明] 以上为搜索摘要；下结论前请对照原始来源核实。'
   )
   return parts.join('\n')
 }
@@ -57,14 +57,14 @@ export async function tavilyWebSearch(
 ): Promise<string> {
   const q = query.trim()
   if (!q) {
-    return 'query is empty'
+    return 'query 不能为空'
   }
 
   const key = (options?.apiKey?.trim() || process.env.TAVILY_API_KEY?.trim()) ?? ''
   if (!key) {
     return [
-      'Tavily API Key not configured, cannot perform internet search.',
-      'Please fill in "Tavily API Key" in app Settings, or set environment variable TAVILY_API_KEY; register at https://tavily.com .'
+      '未配置 Tavily API Key，无法联网搜索。',
+      '请在应用设置中填写「Tavily API Key」，或设置环境变量 TAVILY_API_KEY；可在 https://tavily.com 注册。'
     ].join('\n')
   }
 
@@ -83,7 +83,7 @@ export async function tavilyWebSearch(
       signal: AbortSignal.timeout(45_000)
     })
   } catch (e) {
-    return `Tavily request failed: ${(e as Error).message}`
+    return `Tavily 请求失败：${(e as Error).message}`
   }
 
   const text = await res.text()
@@ -91,7 +91,7 @@ export async function tavilyWebSearch(
   try {
     data = JSON.parse(text) as TavilySearchJson
   } catch {
-    return `Tavily response is not valid JSON (HTTP ${res.status})`
+    return `Tavily 响应不是有效 JSON（HTTP ${res.status}）`
   }
 
   if (!res.ok) {
@@ -102,7 +102,7 @@ export async function tavilyWebSearch(
           ? JSON.stringify(data.detail).slice(0, 400)
           : ''
     const msg = (typeof data.error === 'string' && data.error) || detailStr || text.slice(0, 500)
-    return `Tavily HTTP ${res.status}: ${msg}`
+    return `Tavily HTTP ${res.status}：${msg}`
   }
 
   return formatTavilyResponse(data)

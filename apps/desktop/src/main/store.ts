@@ -183,7 +183,7 @@ function migrateFromLegacyIfNeeded(): void {
     const homePath = normalizeWorkspacePath(app.getPath('home'))
     const homeWs: WorkspaceInfo = {
       id: HOME_WORKSPACE_ID,
-      name: 'Home',
+      name: '主目录',
       path: homePath,
       createdAt: now,
       updatedAt: now
@@ -234,7 +234,7 @@ export function ensureHomeWorkspaceInList(): void {
   const now = Date.now()
   const homeWs: WorkspaceInfo = {
     id: HOME_WORKSPACE_ID,
-    name: 'Home',
+    name: '主目录',
     path: homePath,
     createdAt: dup?.createdAt ?? now,
     updatedAt: now
