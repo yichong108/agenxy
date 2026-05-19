@@ -108,6 +108,7 @@ export const HITL_EXEMPT_TOOL_NAMES = new Set([
   'read_file',
   'list_dir',
   'glob',
+  'grep',
   'search_workspace',
   'web_search',
   'mcp_list_servers',

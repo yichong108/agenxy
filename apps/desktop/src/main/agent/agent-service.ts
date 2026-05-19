@@ -52,6 +52,7 @@ import {
   searchWorkspace,
   writeFileTool
 } from '@/main/tools/fs-tools'
+import { GREP_TOOL_DESCRIPTION, grepWorkspace } from '@/main/tools/grep'
 import { runCommand, killCommand } from '@/main/tools/terminal'
 import { isTavilyConfigured, tavilyWebSearch } from '@/main/tools/web-search'
 import {
@@ -271,15 +272,15 @@ function buildSystemPrompt(root: string, settings: AppSettings): string {
         ? `${mcpMeta}\n- Current MCP entries are not enabled or have empty command; mcp_* tools will appear after user enables them.`
         : mcpMeta
   const toolLine = web
-    ? 'read_file, write_file, delete_file, list_dir, glob, search_workspace, shell, web_search (Tavily internet search), mcp_list_servers, mcp_inspect_server'
-    : 'read_file, write_file, delete_file, list_dir, glob, search_workspace, shell, mcp_list_servers, mcp_inspect_server (no web_search without Tavily API Key)'
+    ? 'read_file, write_file, delete_file, list_dir, glob, grep, search_workspace, shell, web_search (Tavily internet search), mcp_list_servers, mcp_inspect_server'
+    : 'read_file, write_file, delete_file, list_dir, glob, grep, search_workspace, shell, mcp_list_servers, mcp_inspect_server (no web_search without Tavily API Key)'
   const webRule = web
     ? '- When users ask about **weather, temperature, rainfall, real-time news, stock prices, policies**, etc. requiring external info, you MUST call **web_search** first before answering; do not make up current weather or claim "search failed".\n- If the user **rejects** a tool call (tool result says rejected / not executed), do **not** call that tool again in the same turn; acknowledge in the user\'s language and offer alternatives (e.g. ask for city/region, or suggest configuring approval).'
     : '- Tavily is **not** configured, web_search unavailable: If users request real-time info like today\'s weather, clearly inform them to set "Tavily API Key" in app Settings or configure TAVILY_API_KEY environment variable; suggest weather websites or apps; do not claim "search engine is broken" or "internet search unavailable".'
   return `You are an intelligent agent assisting with office work and software development. Workspace root: ${root}.
 - Use **relative paths from workspace root** in tools (e.g., src/index.ts); do not use ../ to escape the workspace.
 - Available tools: ${toolLine}, and various skill_* tools.${mcpNote}
-- **Prioritize skill_***: When user intent clearly matches a skill tool's description, you MUST call that skill first to get workflow/constraints/output, then use read_file, list_dir, search_workspace, shell, mcp_* as needed; do not skip matching skills and guess with generic tools.
+- **Prioritize skill_***: When user intent clearly matches a skill tool's description, you MUST call that skill first to get workflow/constraints/output, then use read_file, list_dir, grep, search_workspace, shell, mcp_* as needed; do not skip matching skills and guess with generic tools.
 - shell executes commands in the sandbox directory (workspace root), waits for completion, returns stdout/stderr. Windows uses cmd style.
 - When users ask to "view/read workspace files" or "list directory", prefer read_file/list_dir before answering.
 - When users explicitly request to delete a file in the workspace, use delete_file (for regular files only, not directories).
@@ -314,8 +315,8 @@ function buildAgentMessageWithPlan(userText: string, planContext: string): strin
 function buildAskSystemPrompt(root: string, settings: AppSettings): string {
   const web = isTavilyConfigured(settings.tavilyApiKey)
   const toolLine = web
-    ? 'read_file, list_dir, glob, search_workspace, web_search (Tavily)'
-    : 'read_file, list_dir, glob, search_workspace (no web_search without Tavily)'
+    ? 'read_file, list_dir, glob, grep, search_workspace, web_search (Tavily)'
+    : 'read_file, list_dir, glob, grep, search_workspace (no web_search without Tavily)'
   const webRule = web
     ? '- Call **web_search** when external info is needed; do not fabricate search results.'
     : '- Tavily is not configured: If users need real-time info, be honest and suggest configuring Tavily in Settings.'
@@ -332,8 +333,8 @@ ${webRule}
 function buildPlanSystemPrompt(root: string, settings: AppSettings): string {
   const web = isTavilyConfigured(settings.tavilyApiKey)
   const toolLine = web
-    ? 'read_file, list_dir, glob, search_workspace, web_search (Tavily)'
-    : 'read_file, list_dir, glob, search_workspace (no web_search without Tavily)'
+    ? 'read_file, list_dir, glob, grep, search_workspace, web_search (Tavily)'
+    : 'read_file, list_dir, glob, grep, search_workspace (no web_search without Tavily)'
   const webRule = web
     ? '- Call **web_search** when external docs or APIs are needed; do not fabricate search results.'
     : '- Tavily is not configured: note when real-time web data would help.'
@@ -733,8 +734,31 @@ function buildBaseAndWebTools(
       truncateTo: 8_000
     },
     {
+      name: 'grep',
+      description: GREP_TOOL_DESCRIPTION,
+      schema: z
+        .object({
+          pattern: z.string(),
+          path: z.string().optional(),
+          glob: z.string().optional(),
+          type: z.string().optional(),
+          output_mode: z.enum(['content', 'files_with_matches', 'count']).optional(),
+          multiline: z.boolean().optional(),
+          head_limit: z.number().int().min(1).max(2000).optional()
+        })
+        .extend({
+          '-i': z.boolean().optional(),
+          '-A': z.number().int().min(0).max(10).optional(),
+          '-B': z.number().int().min(0).max(10).optional(),
+          '-C': z.number().int().min(0).max(10).optional()
+        }),
+      execute: (args) => grepWorkspace(root, args),
+      truncateTo: 12_000
+    },
+    {
       name: 'search_workspace',
-      description: 'Search by substring in text source files, good for finding symbols',
+      description:
+        'Simple substring search in text files (no regex). Use grep when you need regex, glob, or match context.',
       schema: z.object({ query: z.string() }),
       execute: ({ query }) => searchWorkspace(root, query, { maxFiles: 50 }),
       truncateTo: 8_000
