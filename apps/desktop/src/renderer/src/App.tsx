@@ -1503,32 +1503,7 @@ export function App() {
                             <div className="app-message-content">
                               {m.role === 'assistant' ? (
                                 <>
-                                  {intentText ? (
-                                    <div className="app-intent-accordion">
-                                      <button
-                                        type="button"
-                                        className="app-intent-accordion-head"
-                                        aria-expanded={intentThinkingExpanded}
-                                        onClick={() =>
-                                          setIntentThinkingOpenOverride((prev) => ({
-                                            ...prev,
-                                            [m.id]: !intentThinkingExpanded
-                                          }))
-                                        }
-                                      >
-                                        <RightOutlined
-                                          className={`app-timeline-chevron${intentThinkingExpanded ? ' is-open' : ''}`}
-                                        />
-                                        <span className="app-timeline-accordion-title">思考</span>
-                                      </button>
-                                      {intentThinkingExpanded ? (
-                                        <div className="app-intent-accordion-body">
-                                          <div className="app-intent-preamble">{intentText}</div>
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  ) : null}
-                                  {showTimelineAccordion ? (
+                                      {showTimelineAccordion || intentText ? (
                                     <div className="app-timeline-accordion">
                                       <button
                                         type="button"
@@ -1550,6 +1525,12 @@ export function App() {
                                       </button>
                                       {timelineExpanded ? (
                                         <div className="app-timeline-wrap">
+                                          {intentText ? (
+                                            <div className="app-timeline-item">
+                                              <Text type="secondary" className="app-timeline-plan-label">思考</Text>
+                                              <div className="app-intent-preamble">{intentText}</div>
+                                            </div>
+                                          ) : null}
                                           {displayTimeline.map((e, idx) => (
                                             <div
                                               key={`${e.kind}-${'id' in e ? e.id : idx}-${idx}`}
