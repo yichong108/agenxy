@@ -8,7 +8,19 @@ This file guides AI assistants and contributors working on this repository.
 
 ## Language and commits
 
-- **Git commit messages, PR titles, and PR descriptions must be written in English.** Use clear, imperative-style subjects (e.g. “Fix workspace pane scroll”, “Add MCP reconnect handler”). Body text may add context in English when helpful.
+- **Git commit messages, PR titles, and PR descriptions must be written in English.** Use clear, imperative-style subjects (e.g. "Fix workspace pane scroll", "Add MCP reconnect handler"). Body text may add context in English when helpful.
+- **Follow Conventional Commits format:** `<type>(<scope>): <description>`
+
+  - **Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `merge`, `improvement`
+  - **Scope:** optional, describes the module/page (e.g., `feat(auth):`, `fix(payment):`)
+  - **Description:** imperative mood, max 50 characters, no period
+  - **Examples:**
+    - `feat(auth): add OAuth2 support`
+    - `fix(api): resolve rate limit bypass`
+    - `perf(dashboard): lazy load chart data`
+    - `docs: update API documentation`
+  - **Breaking changes:** add `!` before `:` or include `BREAKING CHANGE:` in footer
+
 - **Changelog-style or release notes entries** intended for the repo or automation should also be in English unless an existing localized process says otherwise.
 - User-facing UI copy and docs may follow product language choices; this rule applies to **version control and review metadata** (commits, PRs, merge commit messages).
 
