@@ -6,11 +6,11 @@
   "private": true,
   "scripts": {
     "preinstall": "npx only-allow pnpm",
-    "start": "docker-compose --env-file .env.local up -d",
-    "stop": "docker-compose stop",
-    "down": "docker-compose down",
-    "status": "docker-compose ps",
-    "logs": "docker-compose logs -f",
-    "reset": "docker-compose down -v"
+    "start": "docker compose --env-file .env.local up -d",
+    "stop": "docker compose stop",
+    "down": "docker compose down",
+    "status": "docker compose ps",
+    "logs": "docker compose logs -f",
+    "reset": "docker compose down -v"
   }
 }

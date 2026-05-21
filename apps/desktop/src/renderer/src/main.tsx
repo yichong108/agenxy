@@ -16,6 +16,11 @@ type AppErrorBoundaryState = {
   error: Error | null
 }
 
+/**
+ * TODO: Error Boundary + 全局兜底监听
+ * 
+ * React 在设计上只允许 class 组件拦截「render 阶段的异常」
+ */
 class AppErrorBoundary extends React.Component<React.PropsWithChildren, AppErrorBoundaryState> {
   state: AppErrorBoundaryState = { error: null }
 

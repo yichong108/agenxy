@@ -22,6 +22,12 @@
 pnpm langfuse:start
 
 # 3. 访问 http://localhost:3000
+
+# 4. 客户端配置
+登录后生成key并配置到客户端
+LANGFUSE_SECRET_KEY="the key"
+LANGFUSE_PUBLIC_KEY="the key"
+LANGFUSE_BASE_URL="http://localhost:3000"
 ```
 
 ## 命令
