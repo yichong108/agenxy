@@ -503,9 +503,7 @@ export function WorkspaceRightPane(props: WorkspaceRightPaneProps) {
     async (term: Terminal): Promise<boolean> => {
       if (terminalRunningRef.current) return false
       try {
-        const text = navigator.clipboard?.readText
-          ? await navigator.clipboard.readText()
-          : ''
+        const text = navigator.clipboard?.readText ? await navigator.clipboard.readText() : ''
         if (text) {
           insertTerminalPastedText(term, text)
           return true

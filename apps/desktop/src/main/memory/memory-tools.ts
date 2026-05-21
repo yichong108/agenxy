@@ -1,9 +1,4 @@
-import {
-  addMemory,
-  deleteMemory,
-  listMemories,
-  updateMemory
-} from '@/main/memory/memory-service'
+import { addMemory, deleteMemory, listMemories, updateMemory } from '@/main/memory/memory-service'
 import { getSettings } from '@/main/store'
 import { MAX_MEMORY_CONTENT_CHARS } from '@/shared/ipc'
 

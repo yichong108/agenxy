@@ -1,4 +1,10 @@
-import { AIMessage, SystemMessage, ToolMessage, type BaseMessage, isAIMessage } from '@langchain/core/messages'
+import {
+  AIMessage,
+  SystemMessage,
+  ToolMessage,
+  type BaseMessage,
+  isAIMessage
+} from '@langchain/core/messages'
 
 /** Marks graph-only messages that must not appear in chat history. */
 export const AGENXY_INTERNAL_KW = 'agenxy_internal'
@@ -7,9 +13,7 @@ import { MemorySaver } from '@langchain/langgraph'
 export const TOOL_REJECTED_RESULT = '用户已拒绝执行（未运行）'
 
 export function isRejectedToolResult(result?: string): boolean {
-  return Boolean(
-    result?.includes('用户已拒绝') || result?.includes('Rejected by user')
-  )
+  return Boolean(result?.includes('用户已拒绝') || result?.includes('Rejected by user'))
 }
 
 /** Shared checkpointer for all agent threads (in-memory; keyed by thread_id). */

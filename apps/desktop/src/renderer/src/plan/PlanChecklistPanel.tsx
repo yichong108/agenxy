@@ -67,9 +67,7 @@ function PlanChecklistView({
     <div className="app-plan-panel" data-plan-steps={stepCount}>
       <div className="app-plan-panel-head">
         <span className="app-plan-panel-title">计划</span>
-        <Tag className="app-plan-panel-tag">
-          {streaming ? '更新中…' : `${stepCount} 步`}
-        </Tag>
+        <Tag className="app-plan-panel-tag">{streaming ? '更新中…' : `${stepCount} 步`}</Tag>
       </div>
 
       {plan.goal ? (
@@ -130,4 +128,3 @@ function PlanChecklistView({
     </div>
   )
 }
-

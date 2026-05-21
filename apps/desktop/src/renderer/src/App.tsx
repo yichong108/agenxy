@@ -948,7 +948,9 @@ export function App() {
       setPendingPlanBySession((prev) => ({ ...prev, [activeId]: body }))
       setComposerMode('build')
       useUiStore.getState().requestComposerFocus()
-      msgApi.info('已切换到构建模式。可在输入框补充对计划的修改，发送后开始实施（留空发送则按计划执行）')
+      msgApi.info(
+        '已切换到构建模式。可在输入框补充对计划的修改，发送后开始实施（留空发送则按计划执行）'
+      )
     },
     [activeId, msgApi]
   )
@@ -1474,175 +1476,195 @@ export function App() {
                       {messageTurns.map((turn) => (
                         <div key={turn.key} className="app-message-turn">
                           {turn.messages.map((m) => {
-                        const isLatestAssistant =
-                          m.role === 'assistant' && m.id === latestAssistantMessageId
-                        const displayTimeline = assistantDisplayTimeline(
-                          m,
-                          latestAssistantMessageId,
-                          Boolean(isRun && isLatestAssistant),
-                          currentTimeline
-                        )
-                        const showTimelineAccordion = displayTimeline.length > 0
-                        const intentText = m.intentThinking?.trim()
-                        const intentThinkingExpanded =
-                          intentThinkingOpenOverride[m.id] !== undefined
-                            ? intentThinkingOpenOverride[m.id]!
-                            : false
-                        const timelineExpanded =
-                          timelineOpenOverride[m.id] !== undefined
-                            ? timelineOpenOverride[m.id]!
-                            : Boolean(isRun && showTimelineAccordion)
-                        const isUser = m.role === 'user'
-                        return (
-                          <Card
-                            key={m.id}
-                            size="small"
-                            bordered={isUser}
-                            className={`app-message-card ${isUser ? 'is-user is-sticky-prompt' : 'is-assistant'}`}
-                          >
-                            <div className="app-message-content">
-                              {m.role === 'assistant' ? (
-                                <>
+                            const isLatestAssistant =
+                              m.role === 'assistant' && m.id === latestAssistantMessageId
+                            const displayTimeline = assistantDisplayTimeline(
+                              m,
+                              latestAssistantMessageId,
+                              Boolean(isRun && isLatestAssistant),
+                              currentTimeline
+                            )
+                            const showTimelineAccordion = displayTimeline.length > 0
+                            const intentText = m.intentThinking?.trim()
+                            const intentThinkingExpanded =
+                              intentThinkingOpenOverride[m.id] !== undefined
+                                ? intentThinkingOpenOverride[m.id]!
+                                : false
+                            const timelineExpanded =
+                              timelineOpenOverride[m.id] !== undefined
+                                ? timelineOpenOverride[m.id]!
+                                : Boolean(isRun && showTimelineAccordion)
+                            const isUser = m.role === 'user'
+                            return (
+                              <Card
+                                key={m.id}
+                                size="small"
+                                bordered={isUser}
+                                className={`app-message-card ${isUser ? 'is-user is-sticky-prompt' : 'is-assistant'}`}
+                              >
+                                <div className="app-message-content">
+                                  {m.role === 'assistant' ? (
+                                    <>
                                       {showTimelineAccordion || intentText ? (
-                                    <div className="app-timeline-accordion">
-                                      <button
-                                        type="button"
-                                        className="app-timeline-accordion-head"
-                                        aria-expanded={timelineExpanded}
-                                        onClick={() =>
-                                          setTimelineOpenOverride((prev) => ({
-                                            ...prev,
-                                            [m.id]: !timelineExpanded
-                                          }))
-                                        }
-                                      >
-                                        <RightOutlined
-                                          className={`app-timeline-chevron${timelineExpanded ? ' is-open' : ''}`}
-                                        />
-                                        <span className="app-timeline-accordion-title">
-                                          耗时 {formatWorkedDuration(timelineWallMs)}
-                                        </span>
-                                      </button>
-                                      {timelineExpanded ? (
-                                        <div className="app-timeline-wrap">
-                                          {intentText ? (
-                                            <div className="app-timeline-item">
-                                              <Text type="secondary" className="app-timeline-plan-label">思考</Text>
-                                              <div className="app-intent-preamble">{intentText}</div>
+                                        <div className="app-timeline-accordion">
+                                          <button
+                                            type="button"
+                                            className="app-timeline-accordion-head"
+                                            aria-expanded={timelineExpanded}
+                                            onClick={() =>
+                                              setTimelineOpenOverride((prev) => ({
+                                                ...prev,
+                                                [m.id]: !timelineExpanded
+                                              }))
+                                            }
+                                          >
+                                            <RightOutlined
+                                              className={`app-timeline-chevron${timelineExpanded ? ' is-open' : ''}`}
+                                            />
+                                            <span className="app-timeline-accordion-title">
+                                              耗时 {formatWorkedDuration(timelineWallMs)}
+                                            </span>
+                                          </button>
+                                          {timelineExpanded ? (
+                                            <div className="app-timeline-wrap">
+                                              {intentText ? (
+                                                <div className="app-timeline-item">
+                                                  <Text
+                                                    type="secondary"
+                                                    className="app-timeline-plan-label"
+                                                  >
+                                                    思考
+                                                  </Text>
+                                                  <div className="app-intent-preamble">
+                                                    {intentText}
+                                                  </div>
+                                                </div>
+                                              ) : null}
+                                              {displayTimeline.map((e, idx) => (
+                                                <div
+                                                  key={`${e.kind}-${'id' in e ? e.id : idx}-${idx}`}
+                                                  className={`app-timeline-item${e.kind === 'plan' ? ' is-plan' : ''}`}
+                                                >
+                                                  {e.kind === 'error' ? (
+                                                    <Text type="danger">{e.message}</Text>
+                                                  ) : e.kind === 'plan' ? (
+                                                    <>
+                                                      <Text
+                                                        type="secondary"
+                                                        className="app-timeline-plan-label"
+                                                      >
+                                                        下一步
+                                                        {e.toolName ? (
+                                                          <Text type="secondary">
+                                                            {' '}
+                                                            · 在 {e.toolName} 之后
+                                                          </Text>
+                                                        ) : null}
+                                                      </Text>
+                                                      <div className="app-timeline-plan">
+                                                        {e.text ||
+                                                          (e.status === 'streaming' ? '…' : '')}
+                                                      </div>
+                                                    </>
+                                                  ) : (
+                                                    <>
+                                                      <Text code>
+                                                        {e.name}{' '}
+                                                        {e.status === 'start'
+                                                          ? '…'
+                                                          : e.result?.includes('用户已拒绝') ||
+                                                              e.result?.includes('Rejected by user')
+                                                            ? '✗'
+                                                            : '✓'}
+                                                      </Text>
+                                                      {e.args && (
+                                                        <Text type="secondary"> {e.args}</Text>
+                                                      )}
+                                                      {e.status === 'end' && e.result && (
+                                                        <pre className="app-timeline-result">
+                                                          {e.result}
+                                                        </pre>
+                                                      )}
+                                                    </>
+                                                  )}
+                                                </div>
+                                              ))}
                                             </div>
                                           ) : null}
-                                          {displayTimeline.map((e, idx) => (
-                                            <div
-                                              key={`${e.kind}-${'id' in e ? e.id : idx}-${idx}`}
-                                              className={`app-timeline-item${e.kind === 'plan' ? ' is-plan' : ''}`}
-                                            >
-                                              {e.kind === 'error' ? (
-                                                <Text type="danger">{e.message}</Text>
-                                              ) : e.kind === 'plan' ? (
-                                                <>
-                                                  <Text type="secondary" className="app-timeline-plan-label">
-                                                    下一步
-                                                    {e.toolName ? (
-                                                      <Text type="secondary"> · 在 {e.toolName} 之后</Text>
-                                                    ) : null}
-                                                  </Text>
-                                                  <div className="app-timeline-plan">
-                                                    {e.text ||
-                                                      (e.status === 'streaming' ? '…' : '')}
-                                                  </div>
-                                                </>
-                                              ) : (
-                                                <>
-                                                  <Text code>
-                                                    {e.name}{' '}
-                                                    {e.status === 'start'
-                                                      ? '…'
-                                                      : e.result?.includes('用户已拒绝') ||
-                                                        e.result?.includes('Rejected by user')
-                                                        ? '✗'
-                                                        : '✓'}
-                                                  </Text>
-                                                  {e.args && (
-                                                    <Text type="secondary"> {e.args}</Text>
-                                                  )}
-                                                  {e.status === 'end' && e.result && (
-                                                    <pre className="app-timeline-result">
-                                                      {e.result}
-                                                    </pre>
-                                                  )}
-                                                </>
-                                              )}
-                                            </div>
-                                          ))}
                                         </div>
                                       ) : null}
-                                    </div>
-                                  ) : null}
-                                  {planAssistantIds.has(m.id) ? (
-                                    <>
-                                      <PlanChecklistPanel
-                                        content={m.content}
-                                        streaming={Boolean(isRun && isLatestAssistant)}
-                                        onExecutePlan={() => preparePlanExecution(m.content)}
-                                        executeDisabled={Boolean(isRun)}
-                                      />
-                                      {parseAgentPlan(m.content) ? (
-                                        <details className="app-plan-full-details">
-                                          <summary>查看完整说明</summary>
-                                          <div
-                                            className="app-message-markdown app-message-markdown--plan-extra"
-                                            onClick={onMarkdownClick}
-                                          >
-                                            <ReactMarkdown
-                                              remarkPlugins={[remarkGfm, remarkLinkifyBareUrls]}
-                                              rehypePlugins={[rehypeHighlight]}
-                                            >
-                                              {m.content}
-                                            </ReactMarkdown>
-                                          </div>
-                                        </details>
-                                      ) : (
+                                      {planAssistantIds.has(m.id) ? (
                                         <>
-                                          <div className="app-message-markdown" onClick={onMarkdownClick}>
-                                            <ReactMarkdown
-                                              remarkPlugins={[remarkGfm, remarkLinkifyBareUrls]}
-                                              rehypePlugins={[rehypeHighlight]}
-                                            >
-                                              {m.content || (isRun && isLatestAssistant ? '…' : '')}
-                                            </ReactMarkdown>
-                                          </div>
-                                          {m.content.trim() && !(isRun && isLatestAssistant) ? (
-                                            <div className="app-plan-execute-fallback">
-                                              <Button
-                                                type="primary"
-                                                size="small"
-                                                disabled={Boolean(isRun)}
-                                                onClick={() => preparePlanExecution(m.content)}
+                                          <PlanChecklistPanel
+                                            content={m.content}
+                                            streaming={Boolean(isRun && isLatestAssistant)}
+                                            onExecutePlan={() => preparePlanExecution(m.content)}
+                                            executeDisabled={Boolean(isRun)}
+                                          />
+                                          {parseAgentPlan(m.content) ? (
+                                            <details className="app-plan-full-details">
+                                              <summary>查看完整说明</summary>
+                                              <div
+                                                className="app-message-markdown app-message-markdown--plan-extra"
+                                                onClick={onMarkdownClick}
                                               >
-                                                执行计划
-                                              </Button>
-                                            </div>
-                                          ) : null}
+                                                <ReactMarkdown
+                                                  remarkPlugins={[remarkGfm, remarkLinkifyBareUrls]}
+                                                  rehypePlugins={[rehypeHighlight]}
+                                                >
+                                                  {m.content}
+                                                </ReactMarkdown>
+                                              </div>
+                                            </details>
+                                          ) : (
+                                            <>
+                                              <div
+                                                className="app-message-markdown"
+                                                onClick={onMarkdownClick}
+                                              >
+                                                <ReactMarkdown
+                                                  remarkPlugins={[remarkGfm, remarkLinkifyBareUrls]}
+                                                  rehypePlugins={[rehypeHighlight]}
+                                                >
+                                                  {m.content ||
+                                                    (isRun && isLatestAssistant ? '…' : '')}
+                                                </ReactMarkdown>
+                                              </div>
+                                              {m.content.trim() && !(isRun && isLatestAssistant) ? (
+                                                <div className="app-plan-execute-fallback">
+                                                  <Button
+                                                    type="primary"
+                                                    size="small"
+                                                    disabled={Boolean(isRun)}
+                                                    onClick={() => preparePlanExecution(m.content)}
+                                                  >
+                                                    执行计划
+                                                  </Button>
+                                                </div>
+                                              ) : null}
+                                            </>
+                                          )}
                                         </>
+                                      ) : (
+                                        <div
+                                          className="app-message-markdown"
+                                          onClick={onMarkdownClick}
+                                        >
+                                          <ReactMarkdown
+                                            remarkPlugins={[remarkGfm, remarkLinkifyBareUrls]}
+                                            rehypePlugins={[rehypeHighlight]}
+                                          >
+                                            {m.content || (isRun && isLatestAssistant ? '…' : '')}
+                                          </ReactMarkdown>
+                                        </div>
                                       )}
                                     </>
                                   ) : (
-                                    <div className="app-message-markdown" onClick={onMarkdownClick}>
-                                      <ReactMarkdown
-                                        remarkPlugins={[remarkGfm, remarkLinkifyBareUrls]}
-                                        rehypePlugins={[rehypeHighlight]}
-                                      >
-                                        {m.content || (isRun && isLatestAssistant ? '…' : '')}
-                                      </ReactMarkdown>
-                                    </div>
+                                    m.content
                                   )}
-                                </>
-                              ) : (
-                                m.content
-                              )}
-                            </div>
-                          </Card>
-                        )
+                                </div>
+                              </Card>
+                            )
                           })}
                         </div>
                       ))}

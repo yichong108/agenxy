@@ -77,9 +77,7 @@ export async function extractMemoriesAfterRun(opts: {
 
   const existing = getUserMemories().items
   const existingBlock =
-    existing.length > 0
-      ? existing.map((m) => `- id=${m.id} | ${m.content}`).join('\n')
-      : '（无）'
+    existing.length > 0 ? existing.map((m) => `- id=${m.id} | ${m.content}`).join('\n') : '（无）'
 
   const systemPrompt = `你维护桌面编码智能体关于用户的小型全局记忆。
 
@@ -140,9 +138,6 @@ export async function extractMemoriesAfterRun(opts: {
       `[extractMemoriesAfterRun] applied delta added=${delta.added} updated=${delta.updated} deleted=${delta.deleted}`
     )
   } catch (error) {
-    memLog.warn(
-      '[extractMemoriesAfterRun] failed:',
-      error instanceof Error ? error.message : error
-    )
+    memLog.warn('[extractMemoriesAfterRun] failed:', error instanceof Error ? error.message : error)
   }
 }

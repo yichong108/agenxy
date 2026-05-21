@@ -376,8 +376,7 @@ function normalizeMemoryEntry(raw: Partial<MemoryEntry>): MemoryEntry | null {
   const content = normalizeMemoryContent(typeof raw.content === 'string' ? raw.content : '')
   if (!content) return null
   const now = Date.now()
-  const id =
-    typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : `mem-${randomUUID()}`
+  const id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : `mem-${randomUUID()}`
   const source = raw.source === 'auto' ? 'auto' : 'manual'
   const createdAt =
     typeof raw.createdAt === 'number' && Number.isFinite(raw.createdAt) ? raw.createdAt : now

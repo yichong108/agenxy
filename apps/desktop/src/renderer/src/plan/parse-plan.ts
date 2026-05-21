@@ -13,8 +13,7 @@ export type ParsedAgentPlan = {
   notes: string[]
 }
 
-const PLAN_SECTION_RE =
-  /^##\s*(计划|plan|approach|implementation\s*plan|steps)\s*$/im
+const PLAN_SECTION_RE = /^##\s*(计划|plan|approach|implementation\s*plan|steps)\s*$/im
 const GOAL_SECTION_RE = /^##\s*(目标|goal|overview|summary)\s*$/im
 const NOTES_SECTION_RE = /^##\s*(风险|待确认|risks?|open\s*questions?|notes?)\s*$/im
 

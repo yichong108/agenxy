@@ -111,11 +111,7 @@ const api = {
     >,
   cancelAgent: (sessionId: string) =>
     ipcRenderer.invoke(IPC.AGENT_CANCEL, sessionId) as Promise<{ ok: true }>,
-  resumeAgentHitl: (
-    sessionId: string,
-    hitlId: string,
-    decision: 'accept' | 'reject'
-  ) =>
+  resumeAgentHitl: (sessionId: string, hitlId: string, decision: 'accept' | 'reject') =>
     ipcRenderer.invoke(IPC.AGENT_HITL_RESUME, sessionId, hitlId, decision) as Promise<
       { ok: true } | { ok: false; error: string }
     >,

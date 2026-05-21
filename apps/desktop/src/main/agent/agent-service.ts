@@ -38,7 +38,10 @@ import { createLangfuseCallbackHandler, flushLangfuseTracing } from '@/main/lang
 import { logScope } from '@/main/logger'
 import { buildMcpLangChainTools } from '@/main/mcp/mcp-runtime'
 import { extractMemoriesAfterRun } from '@/main/memory/memory-extractor'
-import { isReservedMemoryFilePath, MEMORY_FILE_GUARD_MESSAGE } from '@/main/memory/memory-path-guard'
+import {
+  isReservedMemoryFilePath,
+  MEMORY_FILE_GUARD_MESSAGE
+} from '@/main/memory/memory-path-guard'
 import { buildMemoryPromptBlock } from '@/main/memory/memory-service'
 import {
   userMemoryAdd,
@@ -1033,9 +1036,7 @@ export async function runUserMessage(
   const composerMode = normalizeComposerMode(options?.mode)
   const planContext = options?.planContext?.trim()
   const userDisplayText =
-    options?.userDisplayText?.trim() ||
-    userText.trim() ||
-    (planContext ? '执行计划' : '')
+    options?.userDisplayText?.trim() || userText.trim() || (planContext ? '执行计划' : '')
   const agentUserText = planContext
     ? buildAgentMessageWithPlan(userText, planContext)
     : userText.trim()
@@ -1201,10 +1202,7 @@ export async function runUserMessage(
         })
         .catch((e) => {
           if (isAbortError(e)) return
-          agentLog.warn(
-            '[schedulePlanAfterTool] failed:',
-            e instanceof Error ? e.message : e
-          )
+          agentLog.warn('[schedulePlanAfterTool] failed:', e instanceof Error ? e.message : e)
         })
     }
 
@@ -1220,9 +1218,7 @@ export async function runUserMessage(
     session.messages.push(
       new HumanMessage({
         content: agentUserText,
-        additional_kwargs: planContext
-          ? { [AGENXY_USER_DISPLAY_KW]: userDisplayText }
-          : {}
+        additional_kwargs: planContext ? { [AGENXY_USER_DISPLAY_KW]: userDisplayText } : {}
       })
     )
     persistSessionMessages(session.workspaceId, sessionId, session.messages)
@@ -1305,8 +1301,7 @@ export async function runUserMessage(
         `[runUserMessage] mode=${composerMode} runPrompt: ${JSON.stringify(runPrompt, null, 2)}`
       )
 
-      const hitlEnabled =
-        composerMode === 'build' && settings.toolApprovalInBuild !== false
+      const hitlEnabled = composerMode === 'build' && settings.toolApprovalInBuild !== false
       const threadId = `${sessionId}:${runId}`
 
       const toolsByName = new Map(tools.map((t) => [t.name, t]))
@@ -1331,68 +1326,61 @@ export async function runUserMessage(
       }
 
       const runMessages = await Promise.all([
-        runReactAgentWithGuard(
-          agent,
-          session.messages,
-          ac,
-          onStreamToken,
-          agentInvokeOpts,
-          {
-            sessionId,
-            runId,
-            traceId,
-            threadId,
-            hitlEnabled,
-            toolsByName,
-            onPendingHitl: (hitlId, toolCalls) => {
-              session.pendingHitl = { hitlId, toolCalls }
-            },
-            emitHitlRequired: (hitlId, toolCalls) => {
-              streamedChars = 0
-              emit({ type: 'stream-reset', sessionId, runId, traceId })
-              emit({
-                type: 'hitl-required',
-                sessionId,
+        runReactAgentWithGuard(agent, session.messages, ac, onStreamToken, agentInvokeOpts, {
+          sessionId,
+          runId,
+          traceId,
+          threadId,
+          hitlEnabled,
+          toolsByName,
+          onPendingHitl: (hitlId, toolCalls) => {
+            session.pendingHitl = { hitlId, toolCalls }
+          },
+          emitHitlRequired: (hitlId, toolCalls) => {
+            streamedChars = 0
+            emit({ type: 'stream-reset', sessionId, runId, traceId })
+            emit({
+              type: 'hitl-required',
+              sessionId,
+              runId,
+              traceId,
+              hitlId,
+              toolCalls: toolCalls.map((t) => ({
+                id: t.id,
+                name: t.name,
+                args: formatToolArgs(t.args)
+              }))
+            })
+          },
+          onToolsRejected: (toolCalls) => {
+            streamedChars = 0
+            emit({ type: 'stream-reset', sessionId, runId, traceId })
+            const now = Date.now()
+            for (const tc of toolCalls) {
+              onTool({
+                kind: 'tool',
+                id: tc.id,
+                name: tc.name,
+                status: 'start',
+                args: formatToolArgs(tc.args),
                 runId,
                 traceId,
-                hitlId,
-                toolCalls: toolCalls.map((t) => ({
-                  id: t.id,
-                  name: t.name,
-                  args: formatToolArgs(t.args)
-                }))
+                timestampMs: now
               })
-            },
-            onToolsRejected: (toolCalls) => {
-              streamedChars = 0
-              emit({ type: 'stream-reset', sessionId, runId, traceId })
-              const now = Date.now()
-              for (const tc of toolCalls) {
-                onTool({
-                  kind: 'tool',
-                  id: tc.id,
-                  name: tc.name,
-                  status: 'start',
-                  args: formatToolArgs(tc.args),
-                  runId,
-                  traceId,
-                  timestampMs: now
-                })
-                onTool({
-                  kind: 'tool',
-                  id: tc.id,
-                  name: tc.name,
-                  status: 'end',
-                  result: TOOL_REJECTED_RESULT,
-                  runId,
-                  traceId,
-                  timestampMs: now,
-                  durationMs: 0
-                })
-              }
+              onTool({
+                kind: 'tool',
+                id: tc.id,
+                name: tc.name,
+                status: 'end',
+                result: TOOL_REJECTED_RESULT,
+                runId,
+                traceId,
+                timestampMs: now,
+                durationMs: 0
+              })
             }
           }
-        ),
+        }),
         planChain
       ]).then(([msgs]) => msgs)
 

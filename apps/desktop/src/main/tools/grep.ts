@@ -29,14 +29,7 @@ function clampContext(n: number): number {
 }
 
 function buildRgArgs(root: string, args: GrepToolArgs): { rgArgs: string[]; cwd: string } {
-  const rgArgs = [
-    '--hidden',
-    '--no-require-git',
-    '--no-config',
-    '--color',
-    'never',
-    '--crlf'
-  ]
+  const rgArgs = ['--hidden', '--no-require-git', '--no-config', '--color', 'never', '--crlf']
 
   if (args['-i']) {
     rgArgs.push('-i')
@@ -132,7 +125,10 @@ function applyHeadLimit(
 }
 
 function parseRgError(stderr: string): string | null {
-  const lines = stderr.split('\n').map((l) => l.trim()).filter(Boolean)
+  const lines = stderr
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
   if (!lines.length) return null
 
   if (lines.some((l) => l.includes('regex parse error') || l.startsWith('PCRE2:'))) {
@@ -151,7 +147,10 @@ function parseRgError(stderr: string): string | null {
   return null
 }
 
-function runRipgrep(rgArgs: string[], cwd: string): Promise<{ stdout: string; stderr: string; code: number }> {
+function runRipgrep(
+  rgArgs: string[],
+  cwd: string
+): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
     const proc = spawn(rgPath, rgArgs, {
       cwd,
