@@ -19,6 +19,12 @@ export default function Home() {
             下载应用
           </a>
           <a
+            href="/docs"
+            className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-100 transition"
+          >
+            查看文档
+          </a>
+          <a
             href="https://github.com/your-org/agenxy"
             className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-100 transition"
           >
