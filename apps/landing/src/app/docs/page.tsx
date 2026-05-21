@@ -92,7 +92,7 @@ export default function DocsPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      <header className="border-b border-gray-200">
+      <header className="fixed top-0 left-0 right-0 border-b border-gray-200 bg-white z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <a href="/" className="text-xl font-bold text-gray-900">
@@ -110,10 +110,10 @@ export default function DocsPage() {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex gap-8">
-          <aside className="w-64 flex-shrink-0">
-            <nav className="sticky top-8">
+      <div className="fixed top-16 left-0 right-0 bottom-0 overflow-hidden">
+        <div className="h-full flex">
+          <aside className="w-64 flex-shrink-0 overflow-y-auto bg-white border-r border-gray-200">
+            <div className="p-4">
               {docSections.map((section) => (
                 <div key={section.id} className="mb-6">
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
@@ -140,18 +140,20 @@ export default function DocsPage() {
                   </ul>
                 </div>
               ))}
-            </nav>
+            </div>
           </aside>
 
-          <main className="flex-1 min-w-0">
-            <article className="prose prose-lg max-w-none prose-headings:font-bold prose-headings:text-gray-900 prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-h1:border-b prose-h1:border-gray-200 prose-h1:pb-4 prose-h1:mb-6 prose-h2:mt-8 prose-h2:mb-4 prose-h3:mt-6 prose-h3:mb-3 prose-p:text-gray-700 prose-p:leading-relaxed prose-p:mb-4 prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline prose-a:font-medium prose-strong:text-gray-900 prose-code:text-blue-600 prose-code:bg-blue-50 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-pre:rounded-lg prose-pre:p-4 prose-pre:overflow-x-auto prose-pre:mb-6 prose-ul:list-disc prose-ul:pl-6 prose-ul:mb-4 prose-ol:list-decimal prose-ol:pl-6 prose-ol:mb-4 prose-li:mb-2 prose-li:text-gray-700 prose-blockquote:border-l-4 prose-blockquote:border-blue-500 prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:text-gray-600 prose-blockquote:mb-4 prose-hr:border-gray-200 prose-hr:my-8 prose-table:mb-6 prose-th:text-left prose-th:font-semibold prose-th:text-gray-900 prose-th:border-b prose-th:border-gray-200 prose-th:pb-2 prose-th:pr-4 prose-td:border-b prose-td:border-gray-100 prose-td:py-3 prose-td:pr-4 prose-td:text-gray-700">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={[rehypeHighlight, rehypeRaw]}
-              >
-                {activeItemData?.content || ''}
-              </ReactMarkdown>
-            </article>
+          <main className="flex-1 overflow-y-auto bg-white">
+            <div className="max-w-4xl mx-auto px-8 py-8">
+              <article className="prose prose-lg max-w-none prose-headings:font-bold prose-headings:text-gray-900 prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-h1:border-b prose-h1:border-gray-200 prose-h1:pb-4 prose-h1:mb-6 prose-h2:mt-8 prose-h2:mb-4 prose-h3:mt-6 prose-h3:mb-3 prose-p:text-gray-700 prose-p:leading-relaxed prose-p:mb-4 prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline prose-a:font-medium prose-strong:text-gray-900 prose-code:text-blue-600 prose-code:bg-blue-50 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-pre:rounded-lg prose-pre:p-4 prose-pre:overflow-x-auto prose-pre:mb-6 prose-ul:list-disc prose-ul:pl-6 prose-ul:mb-4 prose-ol:list-decimal prose-ol:pl-6 prose-ol:mb-4 prose-li:mb-2 prose-li:text-gray-700 prose-blockquote:border-l-4 prose-blockquote:border-blue-500 prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:text-gray-600 prose-blockquote:mb-4 prose-hr:border-gray-200 prose-hr:my-8 prose-table:mb-6 prose-th:text-left prose-th:font-semibold prose-th:text-gray-900 prose-th:border-b prose-th:border-gray-200 prose-th:pb-2 prose-th:pr-4 prose-td:border-b prose-td:border-gray-100 prose-td:py-3 prose-td:pr-4 prose-td:text-gray-700">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeHighlight, rehypeRaw]}
+                >
+                  {activeItemData?.content || ''}
+                </ReactMarkdown>
+              </article>
+            </div>
           </main>
         </div>
       </div>
