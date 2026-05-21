@@ -321,8 +321,8 @@ export default function DocsPage() {
   const [activeSection, setActiveSection] = useState('getting-started')
   const [activeItem, setActiveItem] = useState('introduction')
 
-  const activeSectionData = docSections.find(s => s.id === activeSection)
-  const activeItemData = activeSectionData?.items.find(i => i.id === activeItem)
+  const activeSectionData = docSections.find((s) => s.id === activeSection)
+  const activeItemData = activeSectionData?.items.find((i) => i.id === activeItem)
 
   return (
     <div className="min-h-screen bg-white">
@@ -348,13 +348,13 @@ export default function DocsPage() {
         <div className="flex gap-8">
           <aside className="w-64 flex-shrink-0">
             <nav className="sticky top-8">
-              {docSections.map(section => (
+              {docSections.map((section) => (
                 <div key={section.id} className="mb-6">
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
                     {section.title}
                   </h3>
                   <ul className="space-y-1">
-                    {section.items.map(item => (
+                    {section.items.map((item) => (
                       <li key={item.id}>
                         <button
                           onClick={() => {
