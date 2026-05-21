@@ -70,9 +70,9 @@ export default tseslint.config(
             // External packages
             ['^(?!@/)'],
             // Internal packages
-            ['^@/'],
-          ],
-        },
+            ['^@/']
+          ]
+        }
       ],
       'simple-import-sort/exports': 'warn',
       'prettier/prettier': 'warn'

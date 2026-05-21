@@ -50,14 +50,6 @@
     "turbo": "^2.0.0"
   },
   "packageManager": "pnpm@9.0.0",
-  "lint-staged": {
-    "*.{ts,tsx,mjs,cjs,js,json,md,scss,css}": [
-      "prettier --write"
-    ],
-    "*.{ts,tsx}": [
-      "eslint --fix"
-    ]
-  },
   "husky": {
     "hooks": {
       "pre-commit": "lint-staged"
