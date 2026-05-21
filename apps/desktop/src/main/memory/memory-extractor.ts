@@ -9,7 +9,7 @@ import {
   type MemoryExtractionAction
 } from '@/main/memory/memory-service'
 import { getSettings, getUserMemories } from '@/main/store'
-import { getActiveProviderProfile, type AppSettings } from '@/shared/ipc'
+import { type AppSettings, getActiveProviderProfile } from '@/shared/ipc'
 
 const memLog = logScope('memory')
 

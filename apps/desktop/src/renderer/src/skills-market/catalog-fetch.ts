@@ -1,8 +1,8 @@
 import type { SkillsMarketCatalogItem } from '@/shared/ipc'
 import {
-  clawhubSkillsPageSchema,
   type ClawhubSkillListItem,
-  type ClawhubSkillsPage
+  type ClawhubSkillsPage,
+  clawhubSkillsPageSchema
 } from '@/shared/skills-market/catalog-schema'
 
 const CLAWHUB_SKILLS_LIST_URL = 'https://clawhub.ai/api/v1/skills'

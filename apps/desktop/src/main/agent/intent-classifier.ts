@@ -1,13 +1,12 @@
+import { agentLog } from './agent-service'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { ChatOpenAI } from '@langchain/openai'
 import type { CallbackHandler } from '@langfuse/langchain'
 import { z } from 'zod'
 
+import { SKILLS_WITH_TAGS } from '@/main/agent/skills'
 import type { AppSettings } from '@/shared/ipc'
 import { getActiveProviderProfile } from '@/shared/ipc'
-
-import { agentLog } from './agent-service'
-import { SKILLS_WITH_TAGS } from '@/main/agent/skills'
 
 /**
  * 意图分类结果 schema

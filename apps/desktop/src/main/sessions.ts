@@ -2,8 +2,8 @@
 
 import { clearSessionState, initSessionState } from '@/main/agent/agent-service'
 import {
-  getActiveWorkspaceId,
   deleteSessionMessages,
+  getActiveWorkspaceId,
   getAllSessionsMetaByWorkspace,
   getSessionsMeta,
   listWorkspaces,

@@ -1,7 +1,7 @@
 ﻿import fs from 'node:fs/promises'
 import path from 'node:path'
 
-import { resolveSafePath, ensureWorkspaceExists } from '@/main/path-guard'
+import { ensureWorkspaceExists, resolveSafePath } from '@/main/path-guard'
 
 const MAX_READ = 500_000
 

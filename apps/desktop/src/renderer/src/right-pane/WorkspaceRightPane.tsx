@@ -1,3 +1,6 @@
+import '@/renderer/src/right-pane/WorkspaceRightPane.scss'
+import '@xterm/xterm/css/xterm.css'
+import 'file-icons-js/css/style.css'
 import {
   CodeOutlined,
   FileOutlined,
@@ -14,22 +17,19 @@ import { App as AntdApp, Button, Spin, Tag, Typography } from 'antd'
 import { getClassWithColor } from 'file-icons-js'
 import * as monaco from 'monaco-editor'
 import {
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
-  useState,
-  type MouseEvent as ReactMouseEvent,
-  type ReactNode
+  useState
 } from 'react'
-import { Tree, type NodeRendererProps } from 'react-arborist'
+import { type NodeRendererProps, Tree } from 'react-arborist'
 
 import { WorkspaceFileTreeContainer } from '@/renderer/src/right-pane/WorkspaceFileTreeContainer'
 import { HOME_WORKSPACE_ID, type WorkspaceFileNode } from '@/shared/ipc'
-import '@/renderer/src/right-pane/WorkspaceRightPane.scss'
-import '@xterm/xterm/css/xterm.css'
-import 'file-icons-js/css/style.css'
 
 const { Text } = Typography
 loader.config({ monaco })
@@ -78,11 +78,14 @@ function writeTerminalStreamChunk(term: Terminal, chunk: string): void {
 }
 
 function normalizePastedTerminalText(raw: string): string {
-  return raw
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .replace(/\n/g, ' ')
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
+  return (
+    raw
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .replace(/\n/g, ' ')
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
+  )
 }
 
 function clampTreeWidthPx(treePx: number, contentWidth: number): number {

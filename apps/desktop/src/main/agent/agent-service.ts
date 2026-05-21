@@ -1,9 +1,9 @@
 ﻿import {
   AIMessage,
+  type BaseMessage,
   HumanMessage,
   SystemMessage,
-  ToolMessage,
-  type BaseMessage
+  ToolMessage
 } from '@langchain/core/messages'
 import { tool } from '@langchain/core/tools'
 import { createReactAgent } from '@langchain/langgraph/prebuilt'
@@ -14,22 +14,22 @@ import { z } from 'zod'
 
 import { StreamBatcher } from '@/main/agent/batcher'
 import {
-  AGENXY_INTERNAL_KW,
   agentCheckpointer,
+  AGENXY_INTERNAL_KW,
   buildRejectionStateMessages,
+  cancelAllHitlWaiters,
   extractPendingToolCalls,
   formatToolArgs,
   HITL_EXEMPT_TOOL_NAMES,
+  type HitlUserDecision,
   isPausedBeforeTools,
-  partitionPendingToolCalls,
   isRejectedToolResult,
   makeHitlId,
-  submitHitlDecision,
-  cancelAllHitlWaiters,
-  TOOL_REJECTED_RESULT,
-  waitForHitlDecision,
+  partitionPendingToolCalls,
   type PendingToolCall,
-  type HitlUserDecision
+  submitHitlDecision,
+  TOOL_REJECTED_RESULT,
+  waitForHitlDecision
 } from '@/main/agent/hitl'
 import { classifyIntent, type UserIntent } from '@/main/agent/intent-classifier'
 import { ConcurrencyQueue } from '@/main/agent/queue'
@@ -65,24 +65,24 @@ import {
   writeFileTool
 } from '@/main/tools/fs-tools'
 import { GREP_TOOL_DESCRIPTION, grepWorkspace } from '@/main/tools/grep'
-import { runCommand, killCommand } from '@/main/tools/terminal'
+import { killCommand, runCommand } from '@/main/tools/terminal'
 import { isTavilyConfigured, tavilyWebSearch } from '@/main/tools/web-search'
 import {
-  EVENTS,
-  normalizeComposerMode,
   type AgentComposerMode,
   type AgentSendOptions,
   type AppSettings,
   type ChatMessage,
-  type ModelProviderId,
-  type StreamEvent,
-  type ToolCallEvent,
-  type ToolTimelineEvent,
+  EVENTS,
   getActiveProviderProfile,
   MAX_CONCURRENT_AGENT_STREAMS,
   MAX_TERMINAL_OUTPUT_CHARS,
+  type ModelProviderId,
+  normalizeComposerMode,
   STREAM_FLUSH_CHARS,
-  STREAM_FLUSH_MS
+  STREAM_FLUSH_MS,
+  type StreamEvent,
+  type ToolCallEvent,
+  type ToolTimelineEvent
 } from '@/shared/ipc'
 
 export const agentLog = logScope('agent')

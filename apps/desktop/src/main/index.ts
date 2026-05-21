@@ -4,7 +4,6 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import '@/main/env-bootstrap'
-
 import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron'
 
 import {
@@ -31,52 +30,52 @@ import {
   updateMemory
 } from '@/main/memory/memory-service'
 import {
-  loadSessionList,
-  getSessions,
   createSession,
-  renameSession,
   deleteSession,
+  getSessions,
   getSessionWorkspaceId,
+  loadSessionList,
   purgeWorkspaceSessions,
+  renameSession,
   touchSession
 } from '@/main/sessions'
 import { installSkillFromMarketItem } from '@/main/skills-market/install'
 import {
   ensureHomeWorkspaceInList,
-  restoreHomeWorkspaceInList,
   getActiveWorkspace,
   getActiveWorkspaceId,
-  getSettings,
   getSessionMessages,
+  getSettings,
   getUiState,
   getWorkspace,
   getWorkspaceById,
   listWorkspaces,
-  reorderWorkspaces,
   removeWorkspace,
   renameWorkspace,
+  reorderWorkspaces,
+  restoreHomeWorkspaceInList,
+  setActiveWorkspace,
   setSettings,
   setUiState,
-  setActiveWorkspace,
   upsertWorkspaceByPath
 } from '@/main/store'
 import { completeCommandInWorkspace, killCommand, runCommand } from '@/main/tools/terminal'
 import { listWorkspaceFileTree, readWorkspaceFileContent } from '@/main/workspace-files'
 import {
-  HOME_WORKSPACE_ID,
-  IPC,
-  EVENTS,
-  MAX_TERMINAL_OUTPUT_CHARS,
-  normalizeComposerMode,
+  type AboutAppInfo,
   type AgentSendOptions,
   type AppSettings,
+  EVENTS,
+  HOME_WORKSPACE_ID,
+  IPC,
+  MAX_TERMINAL_OUTPUT_CHARS,
+  normalizeComposerMode,
   type McpServerEntry,
   type McpWarmupReport,
   type McpWarmupStatus,
   type RendererUiState,
   type SkillsMarketCatalogItem,
   type SkillsUninstallPayload,
-  type AboutAppInfo,
   type StreamEvent,
   type TerminalOutputEvent,
   type WebEditAction,

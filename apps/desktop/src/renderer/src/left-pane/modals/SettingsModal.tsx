@@ -3,14 +3,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import {
   applySettingsForm,
+  type AppSettings,
   defaultProviderProfiles,
   defaultSettings,
   mergeFormIntoProviderProfiles,
-  settingsToFormValues,
-  type AppSettings,
   type ModelProviderId,
   type ProviderProfile,
-  type SettingsFormValues
+  type SettingsFormValues,
+  settingsToFormValues
 } from '@/shared/ipc'
 
 function cloneProviderProfiles(

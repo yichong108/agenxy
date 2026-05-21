@@ -4,10 +4,10 @@
  */
 import {
   forwardRef,
-  useCallback,
   type HTMLAttributes,
   type KeyboardEvent,
-  type MouseEvent
+  type MouseEvent,
+  useCallback
 } from 'react'
 import { Cursor } from 'react-arborist/dist/module/components/cursor.js'
 import { ListInnerElement } from 'react-arborist/dist/module/components/list-inner-element.js'

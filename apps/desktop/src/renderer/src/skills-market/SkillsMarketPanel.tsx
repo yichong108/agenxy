@@ -1,11 +1,9 @@
-import { App as AntdApp, Alert, Button, Space, Table, Tooltip, Typography } from 'antd'
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import '@/renderer/src/skills-market/SkillsMarketPanel.scss'
+import { fetchSkillsCatalogPage } from './catalog-fetch'
+import { Alert, App as AntdApp, Button, Space, Table, Tooltip, Typography } from 'antd'
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { SkillsMarketCatalogItem } from '@/shared/ipc'
-
-import { fetchSkillsCatalogPage } from './catalog-fetch'
-
-import '@/renderer/src/skills-market/SkillsMarketPanel.scss'
 
 const { Link } = Typography
 

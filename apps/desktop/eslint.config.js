@@ -5,6 +5,7 @@ import js from '@eslint/js'
 import globals from 'globals'
 import tseslint from 'typescript-eslint'
 import importPlugin from 'eslint-plugin-import'
+import simpleImportSort from 'eslint-plugin-simple-import-sort'
 import prettierPlugin from 'eslint-plugin-prettier'
 import eslintConfigPrettier from 'eslint-config-prettier'
 
@@ -33,6 +34,7 @@ export default tseslint.config(
     },
     plugins: {
       import: importPlugin,
+      'simple-import-sort': simpleImportSort,
       prettier: prettierPlugin
     },
     settings: {
@@ -58,14 +60,21 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-require-imports': 'off',
       'import/no-unresolved': 'error',
-      'import/order': [
+      'import/order': 'off',
+      'simple-import-sort/imports': [
         'warn',
         {
-          groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
-          alphabetize: { order: 'asc', caseInsensitive: true },
-          'newlines-between': 'always'
-        }
+          groups: [
+            // Node.js builtins
+            ['^node:'],
+            // External packages
+            ['^(?!@/)'],
+            // Internal packages
+            ['^@/'],
+          ],
+        },
       ],
+      'simple-import-sort/exports': 'warn',
       'prettier/prettier': 'warn'
     }
   },

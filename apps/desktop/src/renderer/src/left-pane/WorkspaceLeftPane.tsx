@@ -1,3 +1,5 @@
+import { McpHubModal, MemoryHubModal, SettingsModal, SkillsHubModal } from './modals'
+import { useWorkspaceLeftPane } from './useWorkspaceLeftPane'
 import {
   ApiOutlined,
   BulbOutlined,
@@ -13,9 +15,6 @@ import {
 import { Button, Dropdown, Input, Modal, Space, Typography } from 'antd'
 import type { DragEvent } from 'react'
 import { createPortal } from 'react-dom'
-
-import { McpHubModal, MemoryHubModal, SettingsModal, SkillsHubModal } from './modals'
-import { useWorkspaceLeftPane } from './useWorkspaceLeftPane'
 
 const { Text } = Typography
 

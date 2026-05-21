@@ -13,16 +13,13 @@ import {
   userSkillsAbsRoot
 } from '@/main/agent/skills/paths'
 import { mainLog } from '@/main/logger'
-import { listDirTool, readFileTool, searchWorkspace, writeFileTool } from '@/main/tools/fs-tools'
-import { runCommand } from '@/main/tools/terminal'
 import type {
   AppSettings,
-  SkillUiEntry,
   SkillsRuntimeState,
+  SkillUiEntry,
   ToolCallEvent,
   ToolTimelineEvent
 } from '@/shared/ipc'
-import { defaultSettings, MAX_TERMINAL_OUTPUT_CHARS } from '@/shared/ipc'
 
 export {
   ensureUserSkillsLayout,
@@ -472,16 +469,6 @@ async function extractToolNamesFromScanRoot(scan: ScanRoot): Promise<string[]> {
 export async function previewPackageSkillToolNames(packageAbsDir: string): Promise<string[]> {
   const scan: ScanRoot = { absRoot: packageAbsDir, sourcePrefix: 'preview' }
   return extractToolNamesFromScanRoot(scan)
-}
-
-function dummySkillToolContext(): SkillToolContext {
-  return {
-    root: '',
-    termKey: '',
-    settings: defaultSettings,
-    runCtx: { runId: '', traceId: '' },
-    onTool: () => {}
-  }
 }
 
 async function mdEntriesForUi(scan: ScanRoot): Promise<SkillUiEntry[]> {

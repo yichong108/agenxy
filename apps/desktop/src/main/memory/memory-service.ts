@@ -5,11 +5,11 @@ import type { WebContents } from 'electron'
 import { logScope } from '@/main/logger'
 import { getSettings, getUserMemories, setUserMemories } from '@/main/store'
 import {
+  type AppSettings,
   EVENTS,
   MAX_MEMORY_CONTENT_CHARS,
   MAX_MEMORY_ENTRIES,
   MAX_MEMORY_PROMPT_CHARS,
-  type AppSettings,
   type MemoryEntry,
   type MemoryExtractionDelta,
   type UserMemoriesState,

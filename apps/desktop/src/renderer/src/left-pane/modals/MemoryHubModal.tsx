@@ -15,9 +15,9 @@ import type { ColumnsType } from 'antd/es/table'
 import { useCallback, useEffect, useState } from 'react'
 
 import {
+  type AppSettings,
   defaultSettings,
   MAX_MEMORY_CONTENT_CHARS,
-  type AppSettings,
   type MemoryEntry,
   type UserMemoriesState
 } from '@/shared/ipc'

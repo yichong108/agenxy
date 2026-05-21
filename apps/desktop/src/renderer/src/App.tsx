@@ -1,3 +1,5 @@
+import 'simplebar-react/dist/simplebar.min.css'
+import 'highlight.js/styles/github.css'
 import {
   BugOutlined,
   CheckOutlined,
@@ -10,8 +12,8 @@ import {
   StopOutlined
 } from '@ant-design/icons'
 import {
-  App as AntdApp,
   Alert,
+  App as AntdApp,
   Button,
   Card,
   ConfigProvider,
@@ -19,10 +21,10 @@ import {
   FloatButton,
   Input,
   Menu,
+  MenuProps,
   Space,
   Tag,
-  Typography,
-  MenuProps
+  Typography
 } from 'antd'
 import type { InputRef } from 'antd/es/input'
 import { findAndReplace } from 'mdast-util-find-and-replace'
@@ -33,8 +35,6 @@ import rehypeHighlight from 'rehype-highlight'
 import remarkGfm from 'remark-gfm'
 import type SimpleBarCore from 'simplebar-core'
 import SimpleBar from 'simplebar-react'
-import 'simplebar-react/dist/simplebar.min.css'
-import 'highlight.js/styles/github.css'
 
 import { AboutAgenxyModal } from '@/renderer/src/AboutAgenxyModal'
 import agenxyLogoUrl from '@/renderer/src/assets/agenxy-logo.png'
@@ -54,10 +54,10 @@ import {
   type AgentSendOptions,
   type ChatMessage,
   type HitlToolCallPayload,
+  HOME_WORKSPACE_ID,
   type SessionInfo,
   type StreamEvent,
   type ToolTimelineEvent,
-  HOME_WORKSPACE_ID,
   type WorkspaceInfo
 } from '@/shared/ipc'
 

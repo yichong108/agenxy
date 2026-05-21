@@ -2,7 +2,7 @@ import { App as AntdApp, Button, Modal, Table, Tabs, Tag, Tooltip } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { SkillsMarketPanel } from '@/renderer/src/skills-market/SkillsMarketPanel'
-import type { SkillUiEntry, SkillsMarketCatalogItem, SkillsRuntimeState } from '@/shared/ipc'
+import type { SkillsMarketCatalogItem, SkillsRuntimeState, SkillUiEntry } from '@/shared/ipc'
 
 function skillKindLabel(kind: SkillUiEntry['kind']): string {
   switch (kind) {

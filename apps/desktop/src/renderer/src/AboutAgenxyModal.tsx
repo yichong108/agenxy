@@ -1,10 +1,9 @@
+import '@/renderer/src/AboutAgenxyModal.scss'
 import { App as AntdApp, Button, Modal, Spin, Typography } from 'antd'
 import { useCallback } from 'react'
 
 import agenxyLogoUrl from '@/renderer/src/assets/agenxy-logo.png'
-import { formatAboutAppCopyText, formatBuildIsoUtcHuman, type AboutAppInfo } from '@/shared/ipc'
-
-import '@/renderer/src/AboutAgenxyModal.scss'
+import { type AboutAppInfo, formatAboutAppCopyText, formatBuildIsoUtcHuman } from '@/shared/ipc'
 
 export type AboutAgenxyModalProps = {
   open: boolean

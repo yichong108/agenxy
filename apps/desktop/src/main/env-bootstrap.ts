@@ -11,7 +11,7 @@
  * 合并完成后关闭 LangChain 内置追踪（不使用 LangSmith / langsmith 客户端）。
  * Langfuse 见 `LANGFUSE_*` 环境变量，在 `index.ts` 中于本模块之后启动 OpenTelemetry。
  */
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
