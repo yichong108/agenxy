@@ -68,7 +68,6 @@ import {
   EVENTS,
   MAX_TERMINAL_OUTPUT_CHARS,
   normalizeComposerMode,
-  type AgentComposerMode,
   type AgentSendOptions,
   type AppSettings,
   type McpServerEntry,

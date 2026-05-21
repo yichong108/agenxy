@@ -17,9 +17,9 @@ import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 
 import {
   MAX_MCP_SERVERS,
-  parseMcpServersFromUnknown,
   type McpServerEntry,
-  type McpWarmupReport
+  type McpWarmupReport,
+  parseMcpServersFromUnknown
 } from '@/shared/ipc'
 
 const { TextArea } = Input

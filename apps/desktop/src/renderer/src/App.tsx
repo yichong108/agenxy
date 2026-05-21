@@ -43,8 +43,8 @@ import {
   installCaptionBlockingOverlayObserver,
   resetNativeTitlebarModalStack
 } from '@/renderer/src/native-titlebar-bridge'
-import { PlanChecklistPanel } from '@/renderer/src/plan/PlanChecklistPanel'
 import { parseAgentPlan } from '@/renderer/src/plan/parse-plan'
+import { PlanChecklistPanel } from '@/renderer/src/plan/PlanChecklistPanel'
 import { WorkspaceRightPane } from '@/renderer/src/right-pane/WorkspaceRightPane'
 import { useUiStore } from '@/renderer/src/store/ui-store'
 import { useWorkspaceStore } from '@/renderer/src/store/workspace-store'
@@ -361,10 +361,6 @@ export function App() {
   const [runStats, setRunStats] = useState<Record<string, RunStats | undefined>>({})
   /** 工具时间线手风琴：key 为 assistant message id，未设置时由 isRun 推导默认展开/收起 */
   const [timelineOpenOverride, setTimelineOpenOverride] = useState<Record<string, boolean>>({})
-  /** 模型意图思考：key 为 assistant message id，未设置时默认收起 */
-  const [intentThinkingOpenOverride, setIntentThinkingOpenOverride] = useState<
-    Record<string, boolean>
-  >({})
   /** LangGraph interruptBefore tools：待用户批准的工具批次 */
   const [hitlPending, setHitlPending] = useState<
     Record<string, { hitlId: string; toolCalls: HitlToolCallPayload[] }>
@@ -1486,10 +1482,6 @@ export function App() {
                             )
                             const showTimelineAccordion = displayTimeline.length > 0
                             const intentText = m.intentThinking?.trim()
-                            const intentThinkingExpanded =
-                              intentThinkingOpenOverride[m.id] !== undefined
-                                ? intentThinkingOpenOverride[m.id]!
-                                : false
                             const timelineExpanded =
                               timelineOpenOverride[m.id] !== undefined
                                 ? timelineOpenOverride[m.id]!
