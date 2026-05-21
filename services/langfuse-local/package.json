@@ -5,6 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "preinstall": "npx only-allow pnpm",
     "start": "docker-compose --env-file .env.local up -d",
     "stop": "docker-compose stop",
     "down": "docker-compose down",

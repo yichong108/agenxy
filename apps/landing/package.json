@@ -4,6 +4,7 @@
   "description": "Agenxy 落地页 — Next.js + Tailwind CSS",
   "type": "module",
   "scripts": {
+    "preinstall": "npx only-allow pnpm",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

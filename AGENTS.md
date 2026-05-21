@@ -6,6 +6,10 @@ This file guides AI assistants and contributors working on this repository.
 
 **Agenxy** — an Electron desktop app for agents (React, Ant Design, AI SDK, MCP). Main code lives under `src/` (`main`, `renderer`, `preload`).
 
+## Package Manager
+
+- **pnpm is the only allowed package manager.** npm must not be used for this project. All dependency management operations (installing, updating, adding dependencies) must be performed using pnpm.
+
 ## Language and commits
 
 - **Git commit messages, PR titles, and PR descriptions must be written in English.** Use clear, imperative-style subjects (e.g. "Fix workspace pane scroll", "Add MCP reconnect handler"). Body text may add context in English when helpful.
