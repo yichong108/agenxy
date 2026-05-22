@@ -1,3 +1,4 @@
+import { configureGlobalLogger, LogLevel } from '@langfuse/core'
 import { CallbackHandler } from '@langfuse/langchain'
 import { LangfuseSpanProcessor } from '@langfuse/otel'
 import { NodeSDK } from '@opentelemetry/sdk-node'
@@ -6,6 +7,12 @@ import { mainLog } from '@/main/logger'
 
 let sdk: NodeSDK | null = null
 let spanProcessor: LangfuseSpanProcessor | null = null
+
+if (process.env.LANGFUSE_DEBUG === 'true') {
+  configureGlobalLogger({
+    level: LogLevel.DEBUG
+  })
+}
 
 function isTracingDisabled(): boolean {
   const v = (process.env.LANGFUSE_TRACING_DISABLED ?? '').trim().toLowerCase()
@@ -95,6 +102,12 @@ export type LangfuseRunContext = {
   traceMetadata?: Record<string, unknown>
 }
 
+/**
+ *
+ * @param ctx 运行上下文
+ * @param callback 回调函数
+ * @returns 回调处理函数
+ */
 export function createLangfuseCallbackHandler(ctx: LangfuseRunContext): CallbackHandler | null {
   const keys = readLangfuseKeys()
   if (!keys) return null
@@ -111,7 +124,9 @@ export function createLangfuseCallbackHandler(ctx: LangfuseRunContext): Callback
       traceMetadata: ctx.traceMetadata
     }
     mainLog.info('[langfuse] 创建 CallbackHandler:', options)
-    return new CallbackHandler(options)
+
+    const handler = new CallbackHandler(options)
+    return handler
   } catch (e) {
     mainLog.warn('[langfuse] CallbackHandler 创建失败:', e instanceof Error ? e.message : e)
     return null
