@@ -690,6 +690,7 @@ export function useWorkspaceCenterPane({
         return next
       })
     }
+    // TODO: 需要另外个入口去切换成build模式
     const mode = planContext ? 'build' : composerMode
     await sendAgentText(t, mode, planContext ? { planContext } : undefined)
   }
