@@ -104,11 +104,14 @@ export function createLangfuseCallbackHandler(ctx: LangfuseRunContext): Callback
   process.env.LANGFUSE_SECRET_KEY = keys.secretKey
 
   try {
-    return new CallbackHandler({
+    // TODO: 不知道怎么查看发出的请求
+    const options = {
       sessionId: ctx.sessionId,
       tags: ctx.tags?.length ? ctx.tags : ['agenxy'],
       traceMetadata: ctx.traceMetadata
-    })
+    }
+    mainLog.info('[langfuse] 创建 CallbackHandler:', options)
+    return new CallbackHandler(options)
   } catch (e) {
     mainLog.warn('[langfuse] CallbackHandler 创建失败:', e instanceof Error ? e.message : e)
     return null

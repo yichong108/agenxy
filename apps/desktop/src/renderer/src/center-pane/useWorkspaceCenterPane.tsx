@@ -683,6 +683,7 @@ export function useWorkspaceCenterPane({
     if (!t && !planContext) return
     setInput('')
     if (activeId && planContext) {
+      // TODO: 这个干嘛
       setPendingPlanBySession((prev) => {
         const next = { ...prev }
         delete next[activeId]
