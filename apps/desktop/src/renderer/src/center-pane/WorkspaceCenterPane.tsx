@@ -31,6 +31,7 @@ export function WorkspaceCenterPane(props: WorkspaceCenterPaneProps) {
 
   return (
     <div className="app-main-pane">
+      {/* 顶部栏 */}
       <div className="app-topbar">
         {p.isWinCustomChrome ? (
           <div
@@ -96,6 +97,7 @@ export function WorkspaceCenterPane(props: WorkspaceCenterPaneProps) {
           </div>
         ) : null}
       </div>
+      {/* 内容区 */}
       <div className={`app-content ${p.isEmptyConversation ? 'is-empty-conversation' : ''}`}>
         {!p.preloadOk && (
           <div className="app-preload-alert-wrap">
@@ -118,6 +120,7 @@ export function WorkspaceCenterPane(props: WorkspaceCenterPaneProps) {
           </div>
         ) : (
           <>
+            {/* 消息区 */}
             <div className="app-messages-shell" onMouseLeave={p.handleMessagesShellMouseLeave}>
               <SimpleBar
                 className={`app-messages-scroll${p.messagesScrollSurfaceHot ? ' is-messages-scrollbar-hot' : ''}`}
@@ -326,6 +329,7 @@ export function WorkspaceCenterPane(props: WorkspaceCenterPaneProps) {
                 </div>
               </SimpleBar>
             </div>
+            {/* 输入区 */}
             <div className="app-composer-stack">
               {p.hitlApprovalBar}
               {p.planReadyBar}

@@ -43,8 +43,32 @@ export function formatWorkedDuration(ms: number): string {
   return `${h}h ${rm}m`
 }
 
-export type MessageTurn = { key: string; messages: ChatMessage[] }
+export type MessageTurn = {
+  /** 消息组 ID */
+  key: string
+  /** 消息列表 */
+  messages: ChatMessage[]
+}
 
+/**
+ * 将消息转换为消息回合
+ *
+ * 将线性数组归类为回合数组，每个回合包含多个消息。
+ *
+ * 例如：
+ * 输入：[
+ *  { id: '1', role: 'user', content: 'Hello' },
+ *  { id: '2', role: 'assistant', content: 'Hello, how can I help you?' },
+ *  { id: '3', role: 'user', content: 'I have a question' },
+ * ]
+ * 输出：[
+ *  { key: '1', messages: [{ id: '1', role: 'user', content: 'Hello' }] },
+ *  { key: '2', messages: [{ id: '2', role: 'assistant', content: 'Hello, how can I help you?' }, { id: '3', role: 'user', content: 'I have a question' }] },
+ * ]
+ *
+ * @param messages 消息
+ * @returns 消息回合
+ */
 export function buildMessageTurns(messages: ChatMessage[]): MessageTurn[] {
   const turns: MessageTurn[] = []
   let batch: ChatMessage[] = []

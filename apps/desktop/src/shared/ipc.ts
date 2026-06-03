@@ -565,8 +565,11 @@ export type SessionInfo = {
 export type MessageRole = 'user' | 'assistant' | 'system'
 
 export type ChatMessage = {
+  /** 消息组 ID: 用于表示当前轮（组）消息的id，一组消息包含多个消息。对于消息发出方没有这个组的概念，但是接收方需要知道这个组的概念*/
   id: string
+  /** 消息角色 */
   role: MessageRole
+  /** 消息内容 */
   content: string
   /** ReAct 前由主进程流式写入的简短意图理解（对齐 Cursor 式「先思考」） */
   intentThinking?: string

@@ -79,11 +79,17 @@ export function useWorkspaceCenterPane({
   const setExpandedWorkspaceIds = useWorkspaceStore((s) => s.setExpandedWorkspaceIds)
   const activeWorkspaceId = useUiStore((s) => s.activeWorkspaceId)
   const setActiveWorkspaceId = useUiStore((s) => s.setActiveWorkspaceId)
+  /** 当前会话 ID */
   const activeId = useUiStore((s) => s.activeSessionId)
+  /** 设置当前会话 ID */
   const setActiveId = useUiStore((s) => s.setActiveSessionId)
+  /** 输入框内容 */
   const input = useUiStore((s) => s.inputDraft)
+  /** 设置输入框内容 */
   const setInput = useUiStore((s) => s.setInputDraft)
+  /** 输入框焦点 nonce */
   const composerFocusNonce = useUiStore((s) => s.composerFocusNonce)
+  /** 从主进程恢复 UI 状态 */
   const hydrateUiStore = useUiStore((s) => s.hydrateFromMain)
 
   const composerInputRef = useRef<InputRef>(null)
@@ -728,7 +734,18 @@ export function useWorkspaceCenterPane({
     () => (activeId ? (messages[activeId] ?? []) : []),
     [activeId, messages]
   )
+  /**
+   * 将消息转换为消息回合
+   * @param currentMessages 当前消息
+   * @returns 消息回合
+   */
   const messageTurns = useMemo(() => buildMessageTurns(currentMessages), [currentMessages])
+  /**
+   * 当前工具时间线
+   * @param activeId 当前会话 ID
+   * @param timeline 工具时间线
+   * @returns 当前工具时间线
+   */
   const currentTimeline = useMemo(
     () => (activeId ? (timeline[activeId] ?? []) : []),
     [activeId, timeline]
