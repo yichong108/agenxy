@@ -1,6 +1,5 @@
 import {
   appendAssistantText,
-  buildMessageTurns,
   filterSessionsForSidebar,
   PRELOAD_MISSING_ERROR,
   randomId,
@@ -18,7 +17,6 @@ import { Alert, App as AntdApp, Button, Dropdown, Input, MenuProps, Space, Typog
 import type { InputRef } from 'antd/es/input'
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
-import type SimpleBarCore from 'simplebar-core'
 
 import { useUiStore } from '@/renderer/src/store/ui-store'
 import { useWorkspaceStore } from '@/renderer/src/store/workspace-store'
@@ -52,7 +50,7 @@ export function useWorkspaceCenterPane({
   onRightPaneExpand,
   onLeftTogglePortalHostChange
 }: UseWorkspaceCenterPaneOptions) {
-  const { message: msgApi, modal: modalApi } = AntdApp.useApp()
+  const { message: msgApi } = AntdApp.useApp()
   const preloadOk = typeof window !== 'undefined' && typeof window.bridge !== 'undefined'
   const bridge = window.bridge
   const bridgeCompat = bridge as typeof bridge & {
@@ -133,8 +131,6 @@ export function useWorkspaceCenterPane({
   const [running, setRunning] = useState<Record<string, boolean>>({})
   const [queued, setQueued] = useState<Record<string, number | undefined>>({})
   const [runStats, setRunStats] = useState<Record<string, RunStats | undefined>>({})
-  /** 工具时间线手风琴：key 为 assistant message id，未设置时由 isRun 推导默认展开/收起 */
-  const [timelineOpenOverride, setTimelineOpenOverride] = useState<Record<string, boolean>>({})
   /** LangGraph interruptBefore tools：待用户批准的工具批次 */
   const [hitlPending, setHitlPending] = useState<
     Record<string, { hitlId: string; toolCalls: HitlToolCallPayload[] }>
@@ -143,32 +139,6 @@ export function useWorkspaceCenterPane({
   const intentBuf = useRef<Record<string, string>>({})
   const assistantMsgId = useRef<Record<string, string | null>>({})
   const hydratedMessageSessions = useRef<Set<string>>(new Set())
-  const messagesSimpleBarRef = useRef<SimpleBarCore | null>(null)
-  const messagesBottomRef = useRef<HTMLDivElement | null>(null)
-  const autoScrollRef = useRef(true)
-  /** 指针在消息区 `.simplebar-content-wrapper` 内时为 true，用于仅在该区域悬停时显示滚动条 */
-  const [messagesScrollSurfaceHot, setMessagesScrollSurfaceHot] = useState(false)
-
-  const isNearBottom = useCallback((el: HTMLDivElement) => {
-    const threshold = 48
-    return el.scrollTop + el.clientHeight >= el.scrollHeight - threshold
-  }, [])
-
-  const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
-    const bottomEl = messagesBottomRef.current
-    if (bottomEl) {
-      bottomEl.scrollIntoView({ block: 'end', behavior })
-      return
-    }
-    const el = messagesSimpleBarRef.current?.getScrollElement()
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior })
-  }, [])
-
-  const handleMessagesShellMouseLeave = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const next = e.relatedTarget
-    if (next instanceof Node && e.currentTarget.contains(next)) return
-    setMessagesScrollSurfaceHot(false)
-  }, [])
 
   const ensureSessionMessages = useCallback(
     async (sessionId: string, force = false) => {
@@ -734,29 +704,10 @@ export function useWorkspaceCenterPane({
     () => (activeId ? (messages[activeId] ?? []) : []),
     [activeId, messages]
   )
-  /**
-   * 将消息转换为消息回合
-   * @param currentMessages 当前消息
-   * @returns 消息回合
-   */
-  const messageTurns = useMemo(() => buildMessageTurns(currentMessages), [currentMessages])
-  /**
-   * 当前工具时间线
-   * @param activeId 当前会话 ID
-   * @param timeline 工具时间线
-   * @returns 当前工具时间线
-   */
   const currentTimeline = useMemo(
     () => (activeId ? (timeline[activeId] ?? []) : []),
     [activeId, timeline]
   )
-  const latestAssistantMessageId = useMemo(() => {
-    for (let i = currentMessages.length - 1; i >= 0; i -= 1) {
-      const msg = currentMessages[i]
-      if (msg?.role === 'assistant') return msg.id
-    }
-    return null
-  }, [currentMessages])
   const isRun = activeId ? running[activeId] : false
   const isQueued = activeId ? queued[activeId] : undefined
   const currentRunStats = activeId ? runStats[activeId] : undefined
@@ -781,21 +732,6 @@ export function useWorkspaceCenterPane({
     },
     [activeHitl, activeId, bridge, clearAssistantStreamDraft, msgApi]
   )
-  const [liveTick, setLiveTick] = useState(0)
-  useEffect(() => {
-    if (!isRun) return
-    const id = window.setInterval(() => setLiveTick((n) => n + 1), 500)
-    return () => window.clearInterval(id)
-  }, [isRun])
-
-  const timelineWallMs = useMemo(() => {
-    const st = activeId ? runStats[activeId] : undefined
-    const started = st?.startedAt
-    if (isRun && started != null) return Math.max(0, Date.now() - started + liveTick * 0)
-    if (st?.durationMs != null && st.durationMs >= 0) return st.durationMs
-    return 0
-  }, [activeId, runStats, isRun, liveTick])
-
   const hasInput = input.trim().length > 0
   const hasPendingPlan = Boolean(activeId && pendingPlanBySession[activeId]?.trim())
   const canSend = hasInput || hasPendingPlan
@@ -814,39 +750,6 @@ export function useWorkspaceCenterPane({
   const isEmptyConversation = currentMessages.length === 0
 
   useEffect(() => {
-    if (isEmptyConversation) setMessagesScrollSurfaceHot(false)
-  }, [isEmptyConversation])
-
-  useEffect(() => {
-    setMessagesScrollSurfaceHot(false)
-  }, [activeId])
-
-  const openExternalWithConfirm = useCallback(
-    (href: string) => {
-      const target = (() => {
-        try {
-          const parsed = new URL(href)
-          return parsed.host || href
-        } catch {
-          return href
-        }
-      })()
-      modalApi.confirm({
-        title: '即将打开外部链接',
-        content: `目标地址：${target}`,
-        centered: true,
-        okText: '继续打开',
-        cancelText: '取消',
-        onOk: async () => {
-          const r = await bridge.openExternal(href)
-          if (!r.ok) msgApi.warning('打开链接失败')
-        }
-      })
-    },
-    [bridge, modalApi, msgApi]
-  )
-
-  useEffect(() => {
     if (!preloadOk) return
     return bridge.onMemorySync((payload) => {
       const d = payload.lastExtractionDelta
@@ -860,40 +763,6 @@ export function useWorkspaceCenterPane({
       msgApi.info(`已更新用户记忆（${parts.join('，')}）`)
     })
   }, [bridge, msgApi, preloadOk])
-
-  const onMarkdownClick = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      const target = event.target as HTMLElement | null
-      const anchor = target?.closest('a')
-      if (!anchor) return
-      const href = anchor.getAttribute('href') ?? ''
-      if (!/^(https?:|mailto:)/i.test(href)) return
-      event.preventDefault()
-      openExternalWithConfirm(href)
-    },
-    [openExternalWithConfirm]
-  )
-
-  useEffect(() => {
-    // 切换会话后默认回到底部，便于继续跟随最新回复。
-    autoScrollRef.current = true
-    const rafId = window.requestAnimationFrame(() => {
-      scrollMessagesToBottom('auto')
-    })
-    return () => window.cancelAnimationFrame(rafId)
-  }, [activeId, scrollMessagesToBottom])
-
-  useLayoutEffect(() => {
-    if (!autoScrollRef.current) return
-    const rafId = window.requestAnimationFrame(() => {
-      scrollMessagesToBottom('auto')
-      // 再补一次，避免流式内容换行导致高度在下一帧继续增长。
-      window.requestAnimationFrame(() => {
-        if (autoScrollRef.current) scrollMessagesToBottom('auto')
-      })
-    })
-    return () => window.cancelAnimationFrame(rafId)
-  }, [currentMessages, currentTimeline, scrollMessagesToBottom])
 
   const composerWorkspaceToolbar = (
     <div className="app-composer-toolbar">
@@ -1049,22 +918,10 @@ export function useWorkspaceCenterPane({
     planReadyBar,
     composerInput,
     isEmptyConversation,
-    messageTurns,
-    latestAssistantMessageId,
+    currentMessages,
     isRun,
     currentTimeline,
-    timelineOpenOverride,
-    setTimelineOpenOverride,
     planAssistantIds,
-    timelineWallMs,
-    messagesScrollSurfaceHot,
-    setMessagesScrollSurfaceHot,
-    handleMessagesShellMouseLeave,
-    messagesSimpleBarRef,
-    messagesBottomRef,
-    isNearBottom,
-    autoScrollRef,
-    preparePlanExecution,
-    onMarkdownClick
+    preparePlanExecution
   }
 }
