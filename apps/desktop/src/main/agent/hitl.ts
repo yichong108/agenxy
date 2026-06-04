@@ -5,11 +5,11 @@ import {
   SystemMessage,
   ToolMessage
 } from '@langchain/core/messages'
+import { Command, MemorySaver } from '@langchain/langgraph'
 
 import { AGENXY_INTERNAL_KW } from '@/main/agent/constants'
 
 export { AGENXY_INTERNAL_KW }
-import { MemorySaver } from '@langchain/langgraph'
 
 export const TOOL_REJECTED_RESULT = '用户已拒绝执行（未运行）'
 
@@ -27,6 +27,32 @@ export type PendingToolCall = {
 }
 
 export type HitlUserDecision = 'accept' | 'reject'
+
+/** LangGraph Command.resume 载荷：用户审批结果 */
+export type HitlResumeValue = HitlUserDecision
+
+/**
+ * 构造 ReAct 子图 HITL 恢复用的 LangGraph Command。
+ *
+ * 配合 createReactAgent 的 interruptBefore: ['tools']，在用户审批后 resume 图执行。
+ *
+ * @param decision - accept 继续 tools 节点；reject 在 updateState 注入拒绝结果后 resume
+ * @returns LangGraph Command 实例
+ */
+export function createHitlResumeCommand(decision: HitlResumeValue): Command<HitlResumeValue> {
+  return new Command({ resume: decision })
+}
+
+/**
+ * IPC 桥接：等待 renderer 通过 submitHitlDecision 传入用户决策。
+ *
+ * Electron 跨进程无法直接 Command.resume，故保留 Promise 等待；runReactAgentWithGuard
+ * 收到决策后调用 createHitlResumeCommand 恢复 LangGraph checkpoint。
+ *
+ * @param hitlId - 审批批次 ID
+ * @param signal - 可选 AbortSignal
+ * @returns 用户 accept / reject
+ */
 
 type HitlWaiter = {
   resolve: (decision: HitlUserDecision) => void

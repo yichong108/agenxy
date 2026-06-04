@@ -1,35 +1,22 @@
-﻿import {
-  AIMessage,
-  type BaseMessage,
-  HumanMessage,
-  SystemMessage,
-  ToolMessage
-} from '@langchain/core/messages'
+﻿import { AIMessage, type BaseMessage, HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { createReactAgent } from '@langchain/langgraph/prebuilt'
 import { ChatOpenAI } from '@langchain/openai'
-import type { CallbackHandler } from '@langfuse/langchain'
 import type { WebContents } from 'electron'
 
 import { agentLog } from '@/main/agent/agent-log'
-import type { NamedTool } from '@/main/agent/agent-tooling'
 import { StreamBatcher } from '@/main/agent/batcher'
 import { AGENXY_INTERNAL_KW, AGENXY_USER_DISPLAY_KW } from '@/main/agent/constants'
+import { runReactAgentWithGuard } from '@/main/agent/graph/react-agent-runner'
 import { runAgenxyGraph } from '@/main/agent/graph/run-graph'
 import {
   agentCheckpointer,
-  buildRejectionStateMessages,
   cancelAllHitlWaiters,
-  extractPendingToolCalls,
   formatToolArgs,
   type HitlUserDecision,
-  isPausedBeforeTools,
   isRejectedToolResult,
-  makeHitlId,
-  partitionPendingToolCalls,
   type PendingToolCall,
   submitHitlDecision,
-  TOOL_REJECTED_RESULT,
-  waitForHitlDecision
+  TOOL_REJECTED_RESULT
 } from '@/main/agent/hitl'
 import { ConcurrencyQueue } from '@/main/agent/queue'
 import { isAbortError } from '@/main/agent/run-utils'
@@ -66,9 +53,10 @@ type SessionRuntime = {
   controller: AbortController | null
   /** Consistent with terminal key for the session */
   terminalKey: string
-  /** Active LangGraph HITL wait (tool approval before tools node) */
+  /** LangGraph HITL 暂停：等待 Command.resume（经 IPC 桥接） */
   pendingHitl?: {
     hitlId: string
+    threadId: string
     toolCalls: PendingToolCall[]
   }
 }
@@ -303,160 +291,6 @@ async function streamPlanAfterTool(
   return acc.trim()
 }
 
-type ReactAgentRunContext = {
-  sessionId: string
-  runId: string
-  traceId: string
-  threadId: string
-  hitlEnabled: boolean
-  toolsByName: Map<string, NamedTool>
-  onPendingHitl: (hitlId: string, toolCalls: PendingToolCall[]) => void
-  emitHitlRequired: (hitlId: string, toolCalls: PendingToolCall[]) => void
-  onToolsRejected?: (toolCalls: PendingToolCall[]) => void
-}
-
-async function executePendingToolCalls(
-  pending: PendingToolCall[],
-  toolsByName: Map<string, NamedTool>
-): Promise<ToolMessage[]> {
-  const out: ToolMessage[] = []
-  for (const tc of pending) {
-    const impl = toolsByName.get(tc.name)
-    if (!impl) {
-      out.push(
-        new ToolMessage({
-          content: `Tool not found: ${tc.name}`,
-          tool_call_id: tc.id,
-          name: tc.name,
-          status: 'error'
-        })
-      )
-      continue
-    }
-    try {
-      const result = await impl.invoke(tc.args)
-      const content = typeof result === 'string' ? result : JSON.stringify(result)
-      out.push(
-        new ToolMessage({
-          content,
-          tool_call_id: tc.id,
-          name: tc.name
-        })
-      )
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e)
-      out.push(
-        new ToolMessage({
-          content: message,
-          tool_call_id: tc.id,
-          name: tc.name,
-          status: 'error'
-        })
-      )
-    }
-  }
-  return out
-}
-
-/**
- * Run ReAct agent with timeout guard; optional LangGraph interruptBefore tools + Command.resume loop.
- */
-async function runReactAgentWithGuard(
-  agent: ReturnType<typeof createReactAgent>,
-  messages: BaseMessage[],
-  ac: AbortController,
-  onToken: (token: string) => void,
-  options: {
-    recursionLimit: number
-    timeoutMs: number
-    langfuseHandler?: CallbackHandler | null
-  },
-  runCtx: ReactAgentRunContext
-): Promise<BaseMessage[]> {
-  const { recursionLimit, timeoutMs, langfuseHandler } = options
-  const graphConfig = {
-    configurable: { thread_id: runCtx.threadId },
-    signal: ac.signal,
-    recursionLimit,
-    callbacks: [
-      {
-        handleLLMNewToken(token: string) {
-          onToken(token)
-        }
-      },
-      ...(langfuseHandler ? [langfuseHandler] : [])
-    ]
-  }
-
-  let timer: ReturnType<typeof setTimeout> | null = null
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      ac.abort()
-      reject(new Error(`Model-tool loop timeout (>${timeoutMs}ms), run aborted`))
-    }, timeoutMs)
-  })
-
-  let input: { messages: BaseMessage[] } | null = { messages }
-  let hitlRound = 0
-  const graphStateConfig = { configurable: { thread_id: runCtx.threadId } }
-
-  try {
-    agentLog.info(
-      `[runReactAgentWithGuard] thread=${runCtx.threadId} hitl=${runCtx.hitlEnabled} recursionLimit=${recursionLimit}`
-    )
-
-    while (true) {
-      const result = await Promise.race([agent.invoke(input, graphConfig), timeoutPromise])
-      const state = await agent.getState(graphStateConfig)
-      const stateMessages = (state.values?.messages ?? []) as BaseMessage[]
-
-      if (!runCtx.hitlEnabled || !isPausedBeforeTools(state.next)) {
-        if (stateMessages.length > 0) return stateMessages
-        const fallback = (result as { messages?: BaseMessage[] })?.messages
-        return Array.isArray(fallback) && fallback.length > 0 ? fallback : stateMessages
-      }
-
-      const pending = extractPendingToolCalls(stateMessages)
-      if (pending.length === 0) {
-        agentLog.warn('[runReactAgentWithGuard] interrupt before tools but no tool_calls in state')
-        return stateMessages
-      }
-
-      const { approvalRequired, autoExecute } = partitionPendingToolCalls(pending)
-      if (approvalRequired.length === 0) {
-        agentLog.info(
-          `[runReactAgentWithGuard] read-only tools only (${autoExecute.map((t) => t.name).join(', ')}), skip HITL`
-        )
-        input = null
-        continue
-      }
-
-      const hitlId = makeHitlId(runCtx.runId, hitlRound++)
-      runCtx.onPendingHitl(hitlId, approvalRequired)
-      runCtx.emitHitlRequired(hitlId, approvalRequired)
-
-      const decision = await waitForHitlDecision(hitlId, ac.signal)
-      agentLog.info(`[runReactAgentWithGuard] hitl decision=${decision} hitlId=${hitlId}`)
-
-      if (decision === 'reject') {
-        const autoResults =
-          autoExecute.length > 0
-            ? await executePendingToolCalls(autoExecute, runCtx.toolsByName)
-            : []
-        await agent.updateState(graphStateConfig, {
-          messages: [...autoResults, ...buildRejectionStateMessages(approvalRequired)]
-        })
-        runCtx.onToolsRejected?.(approvalRequired)
-      }
-
-      // Approve: null continues into tools node. Reject: null after synthetic tool results above.
-      input = null
-    }
-  } finally {
-    if (timer) clearTimeout(timer)
-  }
-}
-
 function contentToText(content: unknown): string {
   if (typeof content === 'string') return content
   if (Array.isArray(content)) {
@@ -515,13 +349,21 @@ export function cancelRun(sessionId: string): void {
   void killCommand(`term:${sessionId}`)
 }
 
+/**
+ * 恢复 LangGraph HITL：将用户决策交给 IPC 桥接，由 runReactAgentWithGuard 发出 Command.resume。
+ *
+ * @param sessionId - 会话 ID
+ * @param hitlId - 审批批次 ID
+ * @param decision - accept / reject
+ */
 export function resumeAgentHitl(
   sessionId: string,
   hitlId: string,
   decision: HitlUserDecision
 ): { ok: true } | { ok: false; error: string } {
   const s = sessions.get(sessionId)
-  if (!s?.pendingHitl || s.pendingHitl.hitlId !== hitlId) {
+  const pending = s?.pendingHitl
+  if (!s || !pending || pending.hitlId !== hitlId) {
     return { ok: false, error: '当前会话没有待审批的工具调用' }
   }
   s.pendingHitl = undefined
@@ -529,6 +371,9 @@ export function resumeAgentHitl(
   if (!submitted) {
     return { ok: false, error: '审批请求已过期或已处理' }
   }
+  agentLog.info(
+    `[resumeAgentHitl] hitlId=${hitlId} decision=${decision} thread=${pending.threadId}`
+  )
   return { ok: true }
 }
 
@@ -812,7 +657,7 @@ export async function runUserMessage(
                     hitlEnabled,
                     toolsByName,
                     onPendingHitl: (hitlId, toolCalls) => {
-                      session.pendingHitl = { hitlId, toolCalls }
+                      session.pendingHitl = { hitlId, threadId, toolCalls }
                     },
                     emitHitlRequired: (hitlId, toolCalls) => {
                       streamedChars = 0
