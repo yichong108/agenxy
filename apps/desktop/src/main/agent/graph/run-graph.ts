@@ -3,6 +3,7 @@ import type { BaseMessage } from '@langchain/core/messages'
 import { getAgenxyGraph } from '@/main/agent/graph/build-graph'
 import type { ExecuteReactPhaseFn } from '@/main/agent/graph/nodes/execute-react'
 import type { InitRunCallbacks } from '@/main/agent/graph/nodes/init-run'
+import type { AgenxyGraphRunContext } from '@/main/agent/graph/run-context'
 import type { AgenxyGraphStateType, AgenxyRunMeta } from '@/main/agent/graph/state'
 import type { AgentComposerMode } from '@/shared/ipc'
 
@@ -10,6 +11,7 @@ export type RunAgenxyGraphInput = {
   composerMode: AgentComposerMode
   runMeta: AgenxyRunMeta
   messages: BaseMessage[]
+  runContext: AgenxyGraphRunContext
   initRunCallbacks: InitRunCallbacks
   runPhase: ExecuteReactPhaseFn
   signal?: AbortSignal
@@ -21,9 +23,9 @@ export type RunAgenxyGraphResult = {
 }
 
 /**
- * 通过外层 StateGraph 执行一次用户消息处理（P1：init_run + execute_react 桥接）。
+ * 通过外层 StateGraph 执行一次用户消息处理。
  *
- * @param input - graph 初始状态与运行时回调
+ * @param input - graph 初始状态、runContext 与 execute_react 回调
  * @returns 运行结束后的 messages 与 toolEvents
  */
 export async function runAgenxyGraph(input: RunAgenxyGraphInput): Promise<RunAgenxyGraphResult> {
@@ -36,11 +38,13 @@ export async function runAgenxyGraph(input: RunAgenxyGraphInput): Promise<RunAge
       composerMode: input.composerMode,
       runMeta: input.runMeta,
       detectedIntents: [],
+      tooling: null,
       toolEvents: []
     },
     {
       configurable: {
         thread_id: threadId,
+        runContext: input.runContext,
         initRunCallbacks: input.initRunCallbacks,
         runPhase: input.runPhase
       },

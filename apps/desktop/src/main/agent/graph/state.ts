@@ -1,8 +1,17 @@
 import type { BaseMessage } from '@langchain/core/messages'
 import { Annotation, messagesStateReducer } from '@langchain/langgraph'
 
+import type { NamedTool } from '@/main/agent/agent-tooling'
 import type { UserIntent } from '@/main/agent/intent-classifier'
 import type { AgentComposerMode, ToolTimelineEvent } from '@/shared/ipc'
+
+/**
+ * prepare_tooling 节点写入的工具与 prompt 快照。
+ */
+export type PreparedTooling = {
+  tools: NamedTool[]
+  runPrompt: string
+}
 
 /**
  * 单次 agent 运行的元数据，供 graph 节点与 IPC 桥接共享。
@@ -40,8 +49,6 @@ export type AgenxyGraphState = {
 
 /**
  * Agenxy 外层 StateGraph 的状态定义。
- *
- * P1 仅使用 messages / composerMode / runMeta；其余字段为后续阶段（意图、Plan、Memory）预留。
  */
 export const AgenxyGraphAnnotation = Annotation.Root({
   messages: Annotation<BaseMessage[]>({
@@ -68,6 +75,10 @@ export const AgenxyGraphAnnotation = Annotation.Root({
   detectedIntents: Annotation<UserIntent[]>({
     reducer: (_, next) => next,
     default: () => []
+  }),
+  tooling: Annotation<PreparedTooling | null>({
+    reducer: (_, next) => next,
+    default: () => null
   }),
   toolEvents: Annotation<ToolTimelineEvent[]>({
     reducer: (prev, next) => [...prev, ...next],

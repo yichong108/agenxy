@@ -5,9 +5,9 @@ import type { AgenxyGraphStateType, AgenxyReactPhaseResult } from '@/main/agent/
 export type ExecuteReactPhaseFn = (state: AgenxyGraphStateType) => Promise<AgenxyReactPhaseResult>
 
 /**
- * ReAct 执行节点：委托 configurable.runPhase 完成意图分类、工具准备与 LangGraph ReAct 循环。
+ * ReAct 执行节点：委托 configurable.runPhase 完成 LangGraph ReAct 循环。
  *
- * P1 仍调用 agent-service 内的原有 runPhase 闭包，后续阶段逐步内联为独立节点。
+ * 意图分类与工具准备已由上游节点完成；state.tooling 须已就绪。
  *
  * @param state - init_run 之后的 graph 状态
  * @param config - 需含 configurable.runPhase

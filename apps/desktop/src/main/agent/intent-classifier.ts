@@ -1,8 +1,8 @@
-import { agentLog } from './agent-service'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { ChatOpenAI } from '@langchain/openai'
 import { z } from 'zod'
 
+import { agentLog } from '@/main/agent/agent-log'
 import { SKILLS_WITH_TAGS } from '@/main/agent/skills'
 import type { AppSettings } from '@/shared/ipc'
 import { getActiveProviderProfile } from '@/shared/ipc'

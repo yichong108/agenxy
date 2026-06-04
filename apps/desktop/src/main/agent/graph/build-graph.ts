@@ -1,22 +1,31 @@
 import { END, START, StateGraph } from '@langchain/langgraph'
 
+import { classifyIntentNode } from '@/main/agent/graph/nodes/classify-intent'
 import { executeReactNode } from '@/main/agent/graph/nodes/execute-react'
 import { initRunNode } from '@/main/agent/graph/nodes/init-run'
+import { prepareToolingNode } from '@/main/agent/graph/nodes/prepare-tooling'
+import { routeAfterInit } from '@/main/agent/graph/routing'
 import { AgenxyGraphAnnotation } from '@/main/agent/graph/state'
 
 let compiledGraph: ReturnType<typeof buildAgenxyGraph> | null = null
 
 /**
- * 编译 Agenxy 外层 StateGraph（init_run → execute_react → END）。
+ * 编译 Agenxy 外层 StateGraph。
+ *
+ * init_run → (build: classify_intent | ask/plan: skip) → prepare_tooling → execute_react → END
  *
  * @returns 可 invoke 的 compiled graph
  */
 function buildAgenxyGraph() {
   return new StateGraph(AgenxyGraphAnnotation)
     .addNode('init_run', initRunNode)
+    .addNode('classify_intent', classifyIntentNode)
+    .addNode('prepare_tooling', prepareToolingNode)
     .addNode('execute_react', executeReactNode)
     .addEdge(START, 'init_run')
-    .addEdge('init_run', 'execute_react')
+    .addConditionalEdges('init_run', routeAfterInit, ['classify_intent', 'prepare_tooling'])
+    .addEdge('classify_intent', 'prepare_tooling')
+    .addEdge('prepare_tooling', 'execute_react')
     .addEdge('execute_react', END)
     .compile()
 }
