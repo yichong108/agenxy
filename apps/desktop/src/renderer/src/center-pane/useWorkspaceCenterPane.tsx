@@ -136,7 +136,6 @@ export function useWorkspaceCenterPane({
     Record<string, { hitlId: string; toolCalls: HitlToolCallPayload[] }>
   >({})
   const streamBuf = useRef<Record<string, string>>({})
-  const intentBuf = useRef<Record<string, string>>({})
   const assistantMsgId = useRef<Record<string, string | null>>({})
   const hydratedMessageSessions = useRef<Set<string>>(new Set())
 
@@ -267,7 +266,6 @@ export function useWorkspaceCenterPane({
           }
         }))
         streamBuf.current[e.sessionId] = ''
-        intentBuf.current[e.sessionId] = ''
         const aid = randomId()
         assistantMsgId.current[e.sessionId] = aid
         if (lastSendComposerModeRef.current === 'plan') {
@@ -289,24 +287,6 @@ export function useWorkspaceCenterPane({
       }
       if (e.type === 'queued') {
         setQueued((q) => ({ ...q, [e.sessionId]: e.position }))
-        return
-      }
-      if (e.type === 'intent-delta') {
-        intentBuf.current[e.sessionId] = (intentBuf.current[e.sessionId] ?? '') + e.text
-        const buf = intentBuf.current[e.sessionId]!
-        const amId = assistantMsgId.current[e.sessionId]
-        if (!amId) return
-        setMessages((m) => {
-          const cur = [...(m[e.sessionId] ?? [])]
-          const idx = cur.findIndex((c) => c.id === amId)
-          if (idx < 0) return m
-          const next = { ...cur[idx]!, intentThinking: buf }
-          cur[idx] = next
-          return { ...m, [e.sessionId]: cur }
-        })
-        return
-      }
-      if (e.type === 'intent-end') {
         return
       }
       if (e.type === 'plan-step-start') {
@@ -462,7 +442,6 @@ export function useWorkspaceCenterPane({
           }
         })
         streamBuf.current[e.sessionId] = ''
-        intentBuf.current[e.sessionId] = ''
         assistantMsgId.current[e.sessionId] = null
         void ensureSessionMessages(e.sessionId, true)
       }

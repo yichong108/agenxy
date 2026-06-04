@@ -221,22 +221,16 @@ function persistSessionMessages(
   sessionId: string,
   coreMessages: BaseMessage[],
   opts?: {
-    intentThinkingForLastAssistant?: string
     toolEventsForLastAssistant?: ToolTimelineEvent[]
   }
 ): void {
   const list = toPersistedMessages(coreMessages)
-  const intent = opts?.intentThinkingForLastAssistant?.trim()
   const toolEvents = opts?.toolEventsForLastAssistant
-  if (intent || (toolEvents && toolEvents.length > 0)) {
+  if (toolEvents && toolEvents.length > 0) {
     for (let i = list.length - 1; i >= 0; i -= 1) {
       const row = list[i]
       if (row?.role === 'assistant') {
-        list[i] = {
-          ...row,
-          ...(intent ? { intentThinking: intent } : {}),
-          ...(toolEvents && toolEvents.length > 0 ? { toolEvents } : {})
-        }
+        list[i] = { ...row, toolEvents }
         break
       }
     }
@@ -382,8 +376,6 @@ function buildPlanSystemPrompt(root: string, settings: AppSettings): string {
 ${webRule}`
 }
 
-const INTENT_SUMMARY_TIMEOUT_MS = 18_000
-const INTENT_SUMMARY_MAX_CHARS = 900
 const PLAN_STEP_TIMEOUT_MS = 14_000
 const PLAN_STEP_MAX_CHARS = 480
 const MAX_PLAN_STEPS_PER_RUN = 16
@@ -392,43 +384,6 @@ function isAbortError(e: unknown): boolean {
   return (
     e instanceof Error && (e.name === 'AbortError' || e.message.toLowerCase().includes('abort'))
   )
-}
-
-/**
- * Short streaming "intent thinking" before ReAct/main dialogue loop,
- * displayed in UI before entering tool loop.
- */
-async function streamIntentSummary(
-  settings: AppSettings,
-  userText: string,
-  ac: AbortController,
-  intentBatcher: StreamBatcher
-): Promise<string> {
-  const model = createLanguageModel(settings)
-  const system = new SystemMessage(
-    '你是「意图思考」助手。仅根据用户**最新一条消息**（可含技术术语），用**中文**写 2–5 句完整话说明：\n' +
-      '（1）用户的大致目标或问题类型；\n' +
-      '（2）若需查阅代码/文档或执行操作，你**打算如何推进**（只写思路概要，不要列具体工具名，不要 Markdown 标题或代码块）。\n' +
-      '语气简洁、面向用户；不要复述本系统说明。'
-  )
-  const human = new HumanMessage(userText.trim() ? userText.trim() : '（空消息）')
-  const deadline = Date.now() + INTENT_SUMMARY_TIMEOUT_MS
-  let acc = ''
-  try {
-    const stream = await model.stream([system, human], { signal: ac.signal })
-    for await (const chunk of stream) {
-      if (Date.now() > deadline) break
-      const piece = contentToText((chunk as { content?: unknown }).content)
-      if (!piece) continue
-      acc += piece
-      intentBatcher.push(piece)
-      if (acc.length >= INTENT_SUMMARY_MAX_CHARS) break
-    }
-  } catch (e) {
-    if (isAbortError(e)) throw e
-    agentLog.warn('[streamIntentSummary] failed:', e instanceof Error ? e.message : e)
-  }
-  return acc.trim()
 }
 
 type PlanAfterToolContext = {
@@ -1203,25 +1158,6 @@ export async function runUserMessage(
     )
     persistSessionMessages(session.workspaceId, sessionId, session.messages)
 
-    const intentBatcher = new StreamBatcher(STREAM_FLUSH_MS, STREAM_FLUSH_CHARS, (t) => {
-      emit({ type: 'intent-delta', sessionId, text: t, runId, traceId })
-    })
-    let intentThinking = ''
-    try {
-      intentThinking = await streamIntentSummary(
-        settings,
-        userDisplayText || agentUserText,
-        ac,
-        intentBatcher
-      )
-    } catch (e) {
-      intentBatcher.flush()
-      emit({ type: 'intent-end', sessionId, runId, traceId })
-      throw e
-    }
-    intentBatcher.flush()
-    emit({ type: 'intent-end', sessionId, runId, traceId })
-
     const batcher = new StreamBatcher(STREAM_FLUSH_MS, STREAM_FLUSH_CHARS, (t) => {
       emit({ type: 'text-delta', sessionId, text: t, runId, traceId })
     })
@@ -1411,7 +1347,6 @@ export async function runUserMessage(
       }
       batcher.flush()
       persistSessionMessages(session.workspaceId, sessionId, session.messages, {
-        intentThinkingForLastAssistant: intentThinking,
         toolEventsForLastAssistant: runToolEvents
       })
       emit({
@@ -1455,7 +1390,6 @@ export async function runUserMessage(
         durationMs: Date.now() - runStartedAt
       })
       persistSessionMessages(session.workspaceId, sessionId, session.messages, {
-        intentThinkingForLastAssistant: intentThinking,
         toolEventsForLastAssistant: runToolEvents
       })
     } finally {

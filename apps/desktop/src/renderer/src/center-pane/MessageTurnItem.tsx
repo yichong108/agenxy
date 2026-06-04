@@ -62,7 +62,6 @@ type MessageCardView = {
   isLatestAssistant: boolean
   isStreaming: boolean
   displayTimeline: ToolTimelineEvent[]
-  intentText: string | undefined
   timelineExpanded: boolean
   showTimelineAccordion: boolean
   isPlanMessage: boolean
@@ -86,8 +85,9 @@ function buildMessageCardView(msg: ChatMessage, ctx: MessageCardContext): Messag
     isStreaming,
     ctx.currentTimeline
   )
-  const showTimelineAccordion = displayTimeline.length > 0
-  const intentText = msg.intentThinking?.trim() || undefined
+  // 有工具/计划事件，或当前 run 中的最新 assistant：均显示耗时手风琴（不依赖已移除的意图思考）
+  const showTimelineAccordion =
+    displayTimeline.length > 0 || (isLatestAssistant && Boolean(ctx.isRun))
   const timelineExpanded =
     ctx.timelineOpenOverride[msg.id] !== undefined
       ? ctx.timelineOpenOverride[msg.id]!
@@ -97,7 +97,6 @@ function buildMessageCardView(msg: ChatMessage, ctx: MessageCardContext): Messag
     isLatestAssistant,
     isStreaming,
     displayTimeline,
-    intentText,
     timelineExpanded,
     showTimelineAccordion,
     isPlanMessage: ctx.planAssistantIds.has(msg.id),
@@ -186,19 +185,12 @@ function TimelineEventItem({ event }: TimelineEventItemProps) {
 type TimelineAccordionProps = {
   expanded: boolean
   wallMs: number
-  intentText: string | undefined
   events: ToolTimelineEvent[]
   onToggle: () => void
 }
 
-/** 工具时间线手风琴：思考摘要 + 工具/计划事件列表 */
-function TimelineAccordion({
-  expanded,
-  wallMs,
-  intentText,
-  events,
-  onToggle
-}: TimelineAccordionProps) {
+/** 工具时间线手风琴：工具/计划事件列表 */
+function TimelineAccordion({ expanded, wallMs, events, onToggle }: TimelineAccordionProps) {
   return (
     <div className="app-timeline-accordion">
       <button
@@ -212,14 +204,6 @@ function TimelineAccordion({
       </button>
       {expanded ? (
         <div className="app-timeline-wrap">
-          {intentText ? (
-            <div className="app-timeline-item">
-              <Text type="secondary" className="app-timeline-plan-label">
-                思考
-              </Text>
-              <div className="app-intent-preamble">{intentText}</div>
-            </div>
-          ) : null}
           {events.map((event, index) => (
             <div
               key={timelineEventKey(event, index)}
@@ -291,15 +275,12 @@ type AssistantMessageBodyProps = {
 
 /** assistant 消息正文：时间线手风琴 + Plan 或普通 Markdown */
 function AssistantMessageBody({ msg, view, ctx }: AssistantMessageBodyProps) {
-  const showTimeline = view.showTimelineAccordion || Boolean(view.intentText)
-
   return (
     <>
-      {showTimeline ? (
+      {view.showTimelineAccordion ? (
         <TimelineAccordion
           expanded={view.timelineExpanded}
           wallMs={ctx.timelineWallMs}
-          intentText={view.intentText}
           events={view.displayTimeline}
           onToggle={() =>
             ctx.setTimelineOpenOverride((prev) => ({
