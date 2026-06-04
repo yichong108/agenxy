@@ -22,7 +22,7 @@ export async function prepareToolingNode(
   }
 
   const { composerMode, runMeta, detectedIntents } = state
-  const { settings, onTool } = runContext
+  const { settings, onTool, afterToolEnd } = runContext
   const { sessionId, root, runId, traceId } = runMeta
 
   const toolingBundle = await prepareAgentTooling(
@@ -30,7 +30,7 @@ export async function prepareToolingNode(
     sessionId,
     root,
     settings,
-    { runId, traceId, onTool },
+    { runId, traceId, onTool, afterToolEnd },
     composerMode === 'build' ? { filterIntents: detectedIntents } : undefined
   )
 

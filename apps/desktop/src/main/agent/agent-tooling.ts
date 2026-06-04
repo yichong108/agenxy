@@ -1,6 +1,7 @@
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
 
+import type { ToolEndedCall } from '@/main/agent/graph/plan-after-tool'
 import { HITL_EXEMPT_TOOL_NAMES } from '@/main/agent/hitl'
 import type { UserIntent } from '@/main/agent/intent-classifier'
 import { buildSkillBundle } from '@/main/agent/skills/index'
@@ -48,6 +49,8 @@ export type ToolExecutorContext = {
   runId: string
   traceId: string
   onTool: (e: ToolTimelineEvent) => void
+  /** 工具 end 后、结果返回 ReAct 前 await（plan-after-tool 串行） */
+  afterToolEnd?: (ended: ToolEndedCall) => Promise<void>
 }
 
 type ToolDefinition<T extends z.ZodTypeAny> = {
@@ -118,6 +121,21 @@ function defineTool<T extends z.ZodTypeAny>(
         timestampMs: Date.now(),
         durationMs: Date.now() - startedAt
       })
+
+      if (runCtx.afterToolEnd) {
+        await runCtx.afterToolEnd({
+          kind: 'tool',
+          id,
+          name,
+          status: 'end',
+          args,
+          result: truncated,
+          runId: runCtx.runId,
+          traceId: runCtx.traceId,
+          timestampMs: Date.now(),
+          durationMs: Date.now() - startedAt
+        })
+      }
 
       return result
     },

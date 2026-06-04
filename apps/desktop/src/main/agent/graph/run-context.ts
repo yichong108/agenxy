@@ -1,3 +1,4 @@
+import type { ToolEndedCall } from '@/main/agent/graph/plan-after-tool'
 import type { AppSettings, StreamEvent, ToolTimelineEvent } from '@/shared/ipc'
 
 /**
@@ -5,6 +6,11 @@ import type { AppSettings, StreamEvent, ToolTimelineEvent } from '@/shared/ipc'
  */
 export type AgenxyGraphRunContext = {
   settings: AppSettings
+  signal: AbortSignal
   onTool: (event: ToolTimelineEvent) => void
   emit: (event: StreamEvent) => void
+  /** 可变 tool/plan timeline，execute_react 结束后写回持久化 */
+  runToolEvents: ToolTimelineEvent[]
+  /** 由 init_plan_after_tool 节点注入：工具结束后串行 plan */
+  afterToolEnd?: (ended: ToolEndedCall) => Promise<void>
 }

@@ -6,6 +6,8 @@ import type { AgenxyGraphStateType } from '@/main/agent/graph/state'
  * @param state - 当前 graph 状态
  * @returns 下一节点名
  */
-export function routeAfterInit(state: AgenxyGraphStateType): 'classify_intent' | 'prepare_tooling' {
-  return state.composerMode === 'build' ? 'classify_intent' : 'prepare_tooling'
+export function routeAfterInit(
+  state: AgenxyGraphStateType
+): 'classify_intent' | 'init_plan_after_tool' {
+  return state.composerMode === 'build' ? 'classify_intent' : 'init_plan_after_tool'
 }

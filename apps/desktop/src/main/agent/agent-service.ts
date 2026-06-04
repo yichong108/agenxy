@@ -13,13 +13,11 @@ import {
   cancelAllHitlWaiters,
   formatToolArgs,
   type HitlUserDecision,
-  isRejectedToolResult,
   type PendingToolCall,
   submitHitlDecision,
   TOOL_REJECTED_RESULT
 } from '@/main/agent/hitl'
 import { ConcurrencyQueue } from '@/main/agent/queue'
-import { isAbortError } from '@/main/agent/run-utils'
 import { flushLangfuseTracing, runLangfuseReactObservation } from '@/main/langfuse'
 import { extractMemoriesAfterRun } from '@/main/memory/memory-extractor'
 import { getSessionMessages, getSettings, getWorkspaceById, setSessionMessages } from '@/main/store'
@@ -36,7 +34,6 @@ import {
   STREAM_FLUSH_CHARS,
   STREAM_FLUSH_MS,
   type StreamEvent,
-  type ToolCallEvent,
   type ToolTimelineEvent
 } from '@/shared/ipc'
 
@@ -236,61 +233,6 @@ function buildAgentMessageWithPlan(userText: string, planContext: string): strin
   ].join('\n')
 }
 
-const PLAN_STEP_TIMEOUT_MS = 14_000
-const PLAN_STEP_MAX_CHARS = 480
-const MAX_PLAN_STEPS_PER_RUN = 16
-
-type PlanAfterToolContext = {
-  toolName: string
-  args?: string
-  result?: string
-}
-
-/**
- * After a tool returns, stream a short "next step" plan (Cursor-style) before the ReAct loop continues.
- */
-async function streamPlanAfterTool(
-  settings: AppSettings,
-  userText: string,
-  ctx: PlanAfterToolContext,
-  ac: AbortController,
-  planBatcher: StreamBatcher
-): Promise<string> {
-  const model = createLanguageModel(settings)
-  const system = new SystemMessage(
-    '你是「下一步计划」助手。编码智能体刚完成一次工具调用，将继续处理同一用户任务。\n' +
-      '根据用户目标与工具输出，用**中文**写 1–3 句简短完整话描述**接下来**要做什么（仅高层概要；不要写具体工具函数名；不要 Markdown 标题或代码块）。\n' +
-      '若输出为空、失败或异常，简要说明如何补救。语气简洁、面向用户。'
-  )
-  const human = new HumanMessage(
-    [
-      `用户消息：\n${userText.trim() || '（空消息）'}`,
-      `已完成工具：${ctx.toolName}`,
-      ctx.args ? `参数：${ctx.args}` : '',
-      ctx.result ? `输出（已截断）：\n${ctx.result.slice(0, 700)}` : ''
-    ]
-      .filter(Boolean)
-      .join('\n\n')
-  )
-  const deadline = Date.now() + PLAN_STEP_TIMEOUT_MS
-  let acc = ''
-  try {
-    const stream = await model.stream([system, human], { signal: ac.signal })
-    for await (const chunk of stream) {
-      if (Date.now() > deadline) break
-      const piece = contentToText((chunk as { content?: unknown }).content)
-      if (!piece) continue
-      acc += piece
-      planBatcher.push(piece)
-      if (acc.length >= PLAN_STEP_MAX_CHARS) break
-    }
-  } catch (e) {
-    if (isAbortError(e)) throw e
-    agentLog.warn('[streamPlanAfterTool] failed:', e instanceof Error ? e.message : e)
-  }
-  return acc.trim()
-}
-
 function contentToText(content: unknown): string {
   if (typeof content === 'string') return content
   if (Array.isArray(content)) {
@@ -438,8 +380,6 @@ export async function runUserMessage(
     emit({ type: 'run-start', sessionId, runId, traceId, timestampMs: runStartedAt })
 
     const runToolEvents: ToolTimelineEvent[] = []
-    let planStepsThisRun = 0
-    let planChain: Promise<void> = Promise.resolve()
 
     const emitTool = (e: ToolTimelineEvent) => {
       emit({
@@ -456,100 +396,9 @@ export async function runUserMessage(
       })
     }
 
-    type ToolEndedCall = ToolCallEvent & { status: 'end' }
-
-    const schedulePlanAfterTool = (ended: ToolEndedCall) => {
-      if (ac.signal.aborted) return
-      if (composerMode === 'plan') return
-      if (planStepsThisRun >= MAX_PLAN_STEPS_PER_RUN) return
-      planStepsThisRun += 1
-      const stepId = `plan-${ended.id}`
-      const startedAt = Date.now()
-
-      planChain = planChain
-        .then(async () => {
-          if (ac.signal.aborted) return
-          emit({
-            type: 'plan-step-start',
-            sessionId,
-            runId,
-            traceId,
-            stepId,
-            afterToolId: ended.id,
-            toolName: ended.name
-          })
-
-          const planRecord = {
-            kind: 'plan' as const,
-            id: stepId,
-            afterToolId: ended.id,
-            toolName: ended.name,
-            status: 'streaming' as const,
-            text: '',
-            runId,
-            traceId,
-            timestampMs: startedAt
-          }
-          runToolEvents.push(planRecord)
-
-          const planBatcher = new StreamBatcher(STREAM_FLUSH_MS, STREAM_FLUSH_CHARS, (t) => {
-            emit({ type: 'plan-delta', sessionId, stepId, text: t, runId, traceId })
-            const idx = runToolEvents.findIndex((x) => x.kind === 'plan' && x.id === stepId)
-            if (idx >= 0) {
-              const row = runToolEvents[idx]
-              if (row?.kind === 'plan') {
-                runToolEvents[idx] = { ...row, text: row.text + t }
-              }
-            }
-          })
-
-          let text = ''
-          try {
-            text = await streamPlanAfterTool(
-              settings,
-              userText,
-              { toolName: ended.name, args: ended.args, result: ended.result },
-              ac,
-              planBatcher
-            )
-          } catch (e) {
-            planBatcher.flush()
-            if (isAbortError(e)) throw e
-            throw e
-          }
-          planBatcher.flush()
-
-          const idx = runToolEvents.findIndex((x) => x.kind === 'plan' && x.id === stepId)
-          if (idx >= 0) {
-            const prev = runToolEvents[idx]
-            const prevText = prev?.kind === 'plan' ? prev.text : ''
-            runToolEvents[idx] = {
-              kind: 'plan',
-              id: stepId,
-              afterToolId: ended.id,
-              toolName: ended.name,
-              status: 'end',
-              text: text || prevText,
-              runId,
-              traceId,
-              timestampMs: startedAt,
-              durationMs: Date.now() - startedAt
-            }
-          }
-          emit({ type: 'plan-step-end', sessionId, stepId, runId, traceId })
-        })
-        .catch((e) => {
-          if (isAbortError(e)) return
-          agentLog.warn('[schedulePlanAfterTool] failed:', e instanceof Error ? e.message : e)
-        })
-    }
-
     const onTool = (e: ToolTimelineEvent) => {
       runToolEvents.push(e)
       emitTool(e)
-      if (e.kind === 'tool' && e.status === 'end' && !isRejectedToolResult(e.result)) {
-        schedulePlanAfterTool(e as ToolEndedCall)
-      }
     }
     const recursionLimit = settings.maxAgentLoopSteps
     const invokeTimeoutMs = settings.agentRunTimeoutMs
@@ -579,8 +428,10 @@ export async function runUserMessage(
         },
         runContext: {
           settings,
+          signal: ac.signal,
           onTool,
-          emit
+          emit,
+          runToolEvents
         },
         initRunCallbacks: {
           persistMessages: (messages) => {
@@ -642,71 +493,68 @@ export async function runUserMessage(
                 langfuseHandler: reactLangfuseHandler
               }
 
-              const [msgs] = await Promise.all([
-                runReactAgentWithGuard(
-                  agent,
-                  graphState.messages,
-                  ac,
-                  onStreamToken,
-                  agentInvokeOpts,
-                  {
-                    sessionId,
-                    runId,
-                    traceId,
-                    threadId,
-                    hitlEnabled,
-                    toolsByName,
-                    onPendingHitl: (hitlId, toolCalls) => {
-                      session.pendingHitl = { hitlId, threadId, toolCalls }
-                    },
-                    emitHitlRequired: (hitlId, toolCalls) => {
-                      streamedChars = 0
-                      emit({ type: 'stream-reset', sessionId, runId, traceId })
-                      emit({
-                        type: 'hitl-required',
-                        sessionId,
+              const msgs = await runReactAgentWithGuard(
+                agent,
+                graphState.messages,
+                ac,
+                onStreamToken,
+                agentInvokeOpts,
+                {
+                  sessionId,
+                  runId,
+                  traceId,
+                  threadId,
+                  hitlEnabled,
+                  toolsByName,
+                  onPendingHitl: (hitlId, toolCalls) => {
+                    session.pendingHitl = { hitlId, threadId, toolCalls }
+                  },
+                  emitHitlRequired: (hitlId, toolCalls) => {
+                    streamedChars = 0
+                    emit({ type: 'stream-reset', sessionId, runId, traceId })
+                    emit({
+                      type: 'hitl-required',
+                      sessionId,
+                      runId,
+                      traceId,
+                      hitlId,
+                      toolCalls: toolCalls.map((t) => ({
+                        id: t.id,
+                        name: t.name,
+                        args: formatToolArgs(t.args)
+                      }))
+                    })
+                  },
+                  onToolsRejected: (toolCalls) => {
+                    streamedChars = 0
+                    emit({ type: 'stream-reset', sessionId, runId, traceId })
+                    const now = Date.now()
+                    for (const tc of toolCalls) {
+                      onTool({
+                        kind: 'tool',
+                        id: tc.id,
+                        name: tc.name,
+                        status: 'start',
+                        args: formatToolArgs(tc.args),
                         runId,
                         traceId,
-                        hitlId,
-                        toolCalls: toolCalls.map((t) => ({
-                          id: t.id,
-                          name: t.name,
-                          args: formatToolArgs(t.args)
-                        }))
+                        timestampMs: now
                       })
-                    },
-                    onToolsRejected: (toolCalls) => {
-                      streamedChars = 0
-                      emit({ type: 'stream-reset', sessionId, runId, traceId })
-                      const now = Date.now()
-                      for (const tc of toolCalls) {
-                        onTool({
-                          kind: 'tool',
-                          id: tc.id,
-                          name: tc.name,
-                          status: 'start',
-                          args: formatToolArgs(tc.args),
-                          runId,
-                          traceId,
-                          timestampMs: now
-                        })
-                        onTool({
-                          kind: 'tool',
-                          id: tc.id,
-                          name: tc.name,
-                          status: 'end',
-                          result: TOOL_REJECTED_RESULT,
-                          runId,
-                          traceId,
-                          timestampMs: now,
-                          durationMs: 0
-                        })
-                      }
+                      onTool({
+                        kind: 'tool',
+                        id: tc.id,
+                        name: tc.name,
+                        status: 'end',
+                        result: TOOL_REJECTED_RESULT,
+                        runId,
+                        traceId,
+                        timestampMs: now,
+                        durationMs: 0
+                      })
                     }
                   }
-                ),
-                planChain
-              ]).then(([msgs]) => [msgs])
+                }
+              )
 
               return msgs
             },
