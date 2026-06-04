@@ -1,0 +1,369 @@
+import {
+  assistantDisplayTimeline,
+  formatWorkedDuration,
+  type MessageTurn,
+  remarkLinkifyBareUrls
+} from './center-pane-utils'
+import { RightOutlined } from '@ant-design/icons'
+import { Button, Card, Typography } from 'antd'
+import React from 'react'
+import ReactMarkdown from 'react-markdown'
+import rehypeHighlight from 'rehype-highlight'
+import remarkGfm from 'remark-gfm'
+
+import { parseAgentPlan } from '@/renderer/src/plan/parse-plan'
+import { PlanChecklistPanel } from '@/renderer/src/plan/PlanChecklistPanel'
+import type { ChatMessage, ToolTimelineEvent } from '@/shared/ipc'
+
+const { Text } = Typography
+
+const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkLinkifyBareUrls]
+const MARKDOWN_REHYPE_PLUGINS = [rehypeHighlight]
+
+export type MessageTurnItemProps = {
+  /** 单个消息回合（用户消息及其后的 assistant 回复等） */
+  turn: MessageTurn
+  /** 当前会话最新 assistant 消息 id，用于时间线与流式态判定 */
+  latestAssistantMessageId: string | null
+  /** 当前会话是否正在执行 */
+  isRun: boolean
+  /** 当前会话的工具时间线 */
+  currentTimeline: ToolTimelineEvent[]
+  /** 工具时间线手风琴展开状态覆盖表，key 为 assistant message id */
+  timelineOpenOverride: Record<string, boolean>
+  /** 更新工具时间线手风琴展开状态 */
+  setTimelineOpenOverride: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  /** 当前运行耗时（毫秒），用于时间线标题展示 */
+  timelineWallMs: number
+  /** Plan 模式生成的 assistant 消息 id 集合 */
+  planAssistantIds: Set<string>
+  /** 将计划正文挂到会话并切换到 Build 模式 */
+  onPreparePlanExecution: (planContent: string) => void
+  /** Markdown 区域点击外链时的确认处理 */
+  onMarkdownClick: (event: React.MouseEvent<HTMLDivElement>) => void
+}
+
+/** 单条消息卡片渲染所需的会话级上下文 */
+type MessageCardContext = Pick<
+  MessageTurnItemProps,
+  | 'latestAssistantMessageId'
+  | 'isRun'
+  | 'currentTimeline'
+  | 'timelineOpenOverride'
+  | 'setTimelineOpenOverride'
+  | 'timelineWallMs'
+  | 'planAssistantIds'
+  | 'onPreparePlanExecution'
+  | 'onMarkdownClick'
+>
+
+/** 单条消息的派生展示状态，将分支判断集中在 JSX 之外 */
+type MessageCardView = {
+  isLatestAssistant: boolean
+  isStreaming: boolean
+  displayTimeline: ToolTimelineEvent[]
+  intentText: string | undefined
+  timelineExpanded: boolean
+  showTimelineAccordion: boolean
+  isPlanMessage: boolean
+  contentPlaceholder: string
+  showPlanExecuteFallback: boolean
+}
+
+/**
+ * 根据消息与会话上下文计算单条消息的展示派生状态。
+ *
+ * @param msg - 当前消息
+ * @param ctx - 会话级展示上下文
+ * @returns 供子组件使用的只读视图模型
+ */
+function buildMessageCardView(msg: ChatMessage, ctx: MessageCardContext): MessageCardView {
+  const isLatestAssistant = msg.role === 'assistant' && msg.id === ctx.latestAssistantMessageId
+  const isStreaming = Boolean(ctx.isRun && isLatestAssistant)
+  const displayTimeline = assistantDisplayTimeline(
+    msg,
+    ctx.latestAssistantMessageId,
+    isStreaming,
+    ctx.currentTimeline
+  )
+  const showTimelineAccordion = displayTimeline.length > 0
+  const intentText = msg.intentThinking?.trim() || undefined
+  const timelineExpanded =
+    ctx.timelineOpenOverride[msg.id] !== undefined
+      ? ctx.timelineOpenOverride[msg.id]!
+      : Boolean(ctx.isRun && showTimelineAccordion)
+
+  return {
+    isLatestAssistant,
+    isStreaming,
+    displayTimeline,
+    intentText,
+    timelineExpanded,
+    showTimelineAccordion,
+    isPlanMessage: ctx.planAssistantIds.has(msg.id),
+    contentPlaceholder: isStreaming ? '…' : '',
+    showPlanExecuteFallback: Boolean(msg.content.trim() && !isStreaming)
+  }
+}
+
+/** 生成时间线事件列表项的稳定 key */
+function timelineEventKey(event: ToolTimelineEvent, index: number): string {
+  return `${event.kind}-${'id' in event ? event.id : index}-${index}`
+}
+
+/** 判断工具调用结果是否为用户拒绝 */
+function isToolCallRejected(result?: string): boolean {
+  return Boolean(result?.includes('用户已拒绝') || result?.includes('Rejected by user'))
+}
+
+/** 工具调用在时间线上的状态符号 */
+function toolCallStatusSymbol(status: 'start' | 'end', result?: string): string {
+  if (status === 'start') return '…'
+  return isToolCallRejected(result) ? '✗' : '✓'
+}
+
+type MessageMarkdownProps = {
+  content: string
+  className?: string
+  onMarkdownClick: (event: React.MouseEvent<HTMLDivElement>) => void
+}
+
+/** 消息区 Markdown 渲染，统一 remark/rehype 插件配置 */
+function MessageMarkdown({
+  content,
+  className = 'app-message-markdown',
+  onMarkdownClick
+}: MessageMarkdownProps) {
+  return (
+    <div className={className} onClick={onMarkdownClick}>
+      <ReactMarkdown
+        remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+        rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  )
+}
+
+type TimelineEventItemProps = {
+  event: ToolTimelineEvent
+}
+
+/** 单条工具时间线事件，按 kind 分支渲染 */
+function TimelineEventItem({ event }: TimelineEventItemProps) {
+  if (event.kind === 'error') {
+    return <Text type="danger">{event.message}</Text>
+  }
+
+  if (event.kind === 'plan') {
+    return (
+      <>
+        <Text type="secondary" className="app-timeline-plan-label">
+          下一步
+          {event.toolName ? <Text type="secondary"> · 在 {event.toolName} 之后</Text> : null}
+        </Text>
+        <div className="app-timeline-plan">
+          {event.text || (event.status === 'streaming' ? '…' : '')}
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <Text code>
+        {event.name} {toolCallStatusSymbol(event.status, event.result)}
+      </Text>
+      {event.args ? <Text type="secondary"> {event.args}</Text> : null}
+      {event.status === 'end' && event.result ? (
+        <pre className="app-timeline-result">{event.result}</pre>
+      ) : null}
+    </>
+  )
+}
+
+type TimelineAccordionProps = {
+  expanded: boolean
+  wallMs: number
+  intentText: string | undefined
+  events: ToolTimelineEvent[]
+  onToggle: () => void
+}
+
+/** 工具时间线手风琴：思考摘要 + 工具/计划事件列表 */
+function TimelineAccordion({
+  expanded,
+  wallMs,
+  intentText,
+  events,
+  onToggle
+}: TimelineAccordionProps) {
+  return (
+    <div className="app-timeline-accordion">
+      <button
+        type="button"
+        className="app-timeline-accordion-head"
+        aria-expanded={expanded}
+        onClick={onToggle}
+      >
+        <RightOutlined className={`app-timeline-chevron${expanded ? ' is-open' : ''}`} />
+        <span className="app-timeline-accordion-title">耗时 {formatWorkedDuration(wallMs)}</span>
+      </button>
+      {expanded ? (
+        <div className="app-timeline-wrap">
+          {intentText ? (
+            <div className="app-timeline-item">
+              <Text type="secondary" className="app-timeline-plan-label">
+                思考
+              </Text>
+              <div className="app-intent-preamble">{intentText}</div>
+            </div>
+          ) : null}
+          {events.map((event, index) => (
+            <div
+              key={timelineEventKey(event, index)}
+              className={`app-timeline-item${event.kind === 'plan' ? ' is-plan' : ''}`}
+            >
+              <TimelineEventItem event={event} />
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+type PlanMessageBodyProps = {
+  msg: ChatMessage
+  view: MessageCardView
+  ctx: MessageCardContext
+}
+
+/** Plan 模式 assistant 消息：清单面板 + 完整说明或执行入口 */
+function PlanMessageBody({ msg, view, ctx }: PlanMessageBodyProps) {
+  const hasStructuredPlan = Boolean(parseAgentPlan(msg.content))
+  const markdownContent = msg.content || view.contentPlaceholder
+
+  return (
+    <>
+      <PlanChecklistPanel
+        content={msg.content}
+        streaming={view.isStreaming}
+        onExecutePlan={() => ctx.onPreparePlanExecution(msg.content)}
+        executeDisabled={Boolean(ctx.isRun)}
+      />
+      {hasStructuredPlan ? (
+        <details className="app-plan-full-details">
+          <summary>查看完整说明</summary>
+          <MessageMarkdown
+            content={msg.content}
+            className="app-message-markdown app-message-markdown--plan-extra"
+            onMarkdownClick={ctx.onMarkdownClick}
+          />
+        </details>
+      ) : (
+        <>
+          <MessageMarkdown content={markdownContent} onMarkdownClick={ctx.onMarkdownClick} />
+          {view.showPlanExecuteFallback ? (
+            <div className="app-plan-execute-fallback">
+              <Button
+                type="primary"
+                size="small"
+                disabled={Boolean(ctx.isRun)}
+                onClick={() => ctx.onPreparePlanExecution(msg.content)}
+              >
+                执行计划
+              </Button>
+            </div>
+          ) : null}
+        </>
+      )}
+    </>
+  )
+}
+
+type AssistantMessageBodyProps = {
+  msg: ChatMessage
+  view: MessageCardView
+  ctx: MessageCardContext
+}
+
+/** assistant 消息正文：时间线手风琴 + Plan 或普通 Markdown */
+function AssistantMessageBody({ msg, view, ctx }: AssistantMessageBodyProps) {
+  const showTimeline = view.showTimelineAccordion || Boolean(view.intentText)
+
+  return (
+    <>
+      {showTimeline ? (
+        <TimelineAccordion
+          expanded={view.timelineExpanded}
+          wallMs={ctx.timelineWallMs}
+          intentText={view.intentText}
+          events={view.displayTimeline}
+          onToggle={() =>
+            ctx.setTimelineOpenOverride((prev) => ({
+              ...prev,
+              [msg.id]: !view.timelineExpanded
+            }))
+          }
+        />
+      ) : null}
+      {view.isPlanMessage ? (
+        <PlanMessageBody msg={msg} view={view} ctx={ctx} />
+      ) : (
+        <MessageMarkdown
+          content={msg.content || view.contentPlaceholder}
+          onMarkdownClick={ctx.onMarkdownClick}
+        />
+      )}
+    </>
+  )
+}
+
+type MessageCardProps = {
+  msg: ChatMessage
+  ctx: MessageCardContext
+}
+
+/** 单条消息卡片：用户消息直接展示文本，assistant 走专用正文组件 */
+function MessageCard({ msg, ctx }: MessageCardProps) {
+  const isUser = msg.role === 'user'
+
+  if (isUser) {
+    return (
+      <Card size="small" bordered className="app-message-card is-user is-sticky-prompt">
+        <div className="app-message-content">{msg.content}</div>
+      </Card>
+    )
+  }
+
+  const view = buildMessageCardView(msg, ctx)
+
+  return (
+    <Card size="small" bordered={false} className="app-message-card is-assistant">
+      <div className="app-message-content">
+        <AssistantMessageBody msg={msg} view={view} ctx={ctx} />
+      </div>
+    </Card>
+  )
+}
+
+/**
+ * 渲染单个消息回合：包含该回合内所有消息卡片（用户 / assistant、时间线、计划清单等）。
+ *
+ * 从 `WorkspaceMessagesInner` 抽离，便于独立维护单回合 UI 与后续 memo 优化。
+ *
+ * @param props - 回合数据与会话级展示状态
+ */
+export function MessageTurnItem(props: MessageTurnItemProps) {
+  const { turn, ...ctx } = props
+
+  return (
+    <div className="app-message-turn">
+      {turn.messages.map((msg) => (
+        <MessageCard key={msg.id} msg={msg} ctx={ctx} />
+      ))}
+    </div>
+  )
+}
