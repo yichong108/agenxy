@@ -137,6 +137,7 @@ export async function runReactAgentWithGuard(
 
   let input: ReactAgentInvokeInput = { messages }
   let hitlRound = 0
+  let invokeRound = 0
   const graphStateConfig = { configurable: { thread_id: runCtx.threadId } }
 
   try {
@@ -145,7 +146,15 @@ export async function runReactAgentWithGuard(
     )
 
     while (true) {
-      const result = await Promise.race([agent.invoke(input, graphConfig), timeoutPromise])
+      const round = invokeRound++
+      const invokeConfig =
+        round === 0
+          ? graphConfig
+          : {
+              ...graphConfig,
+              runName: `LangGraph-resume-${round}`
+            }
+      const result = await Promise.race([agent.invoke(input, invokeConfig), timeoutPromise])
       const state = await agent.getState(graphStateConfig)
       const stateMessages = (state.values?.messages ?? []) as BaseMessage[]
 

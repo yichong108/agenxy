@@ -1,3 +1,5 @@
+import type { Serialized } from '@langchain/core/load/serializable'
+import type { ChainValues } from '@langchain/core/utils/types'
 import { configureGlobalLogger, LogLevel, propagateAttributes } from '@langfuse/core'
 import { CallbackHandler } from '@langfuse/langchain'
 import { LangfuseSpanProcessor } from '@langfuse/otel'
@@ -170,11 +172,64 @@ export function createLangfuseCallbackHandler(ctx: LangfuseRunContext): Callback
 }
 
 /**
- * 用单一 Langfuse trace 包裹完整 ReAct 运行（含 Build HITL 多次 `invoke` / `invoke(null)` 恢复）。
+ * 将 HITL 多次 `agent.invoke` 产生的顶层 LangGraph span 挂到首条 chain 下。
  *
- * LangGraph 每次顶层 invoke 会触发 CallbackHandler 新建 chain span；若无外层 observation，
- * 这些 span 会成为独立 trace（Langfuse UI 出现多条「LangGraph」）。本函数在 OTEL 活跃上下文中
- * 创建根 agent observation，使多次 invoke 归并为同一 trace 下的子 span。
+ * LangGraph 每次顶层 invoke 都会触发 CallbackHandler 新建无 parentRunId 的 chain span；
+ * 本 wrapper 把后续 invoke 的 chain 作为第一条 LangGraph 的子 span，避免 Langfuse UI 出现并列 sibling。
+ *
+ * @param handler - 原始 Langfuse CallbackHandler
+ * @returns 可安全复用于 while-loop 多次 invoke 的 handler
+ */
+export function wrapLangfuseHandlerForMultiInvoke(handler: CallbackHandler): CallbackHandler {
+  let rootChainRunId: string | null = null
+
+  return new Proxy(handler, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver)
+      if (prop === 'handleChainStart' && typeof value === 'function') {
+        return async (
+          chain: Serialized,
+          inputs: ChainValues,
+          runId: string,
+          parentRunId?: string,
+          tags?: string[],
+          metadata?: Record<string, unknown>,
+          runType?: string,
+          name?: string
+        ) => {
+          let effectiveParentRunId = parentRunId
+          if (!effectiveParentRunId) {
+            if (rootChainRunId && rootChainRunId !== runId) {
+              effectiveParentRunId = rootChainRunId
+            } else if (!rootChainRunId) {
+              rootChainRunId = runId
+            }
+          }
+          return value.call(
+            target,
+            chain,
+            inputs,
+            runId,
+            effectiveParentRunId,
+            tags,
+            metadata,
+            runType,
+            name
+          )
+        }
+      }
+      if (typeof value === 'function') {
+        return value.bind(target)
+      }
+      return value
+    }
+  }) as CallbackHandler
+}
+
+/**
+ * 用单一 Langfuse trace 包裹完整 ReAct 运行（含 Build HITL 多次 `invoke` / `Command.resume` 恢复）。
+ *
+ * 层级：`agenxy-graph` (agent) → `react` (chain) → LangGraph…；多次 invoke 经 wrapLangfuseHandlerForMultiInvoke 嵌套。
  *
  * @param ctx - session、tags、metadata、traceId、可选 input
  * @param fn - 接收 CallbackHandler 的执行函数（未配置 Langfuse 时 handler 为 null）
@@ -189,7 +244,8 @@ export async function runLangfuseReactObservation<T>(
   const keys = readLangfuseKeys()
   if (!keys) return fn(null)
 
-  const handler = createLangfuseCallbackHandler(ctx)
+  const baseHandler = createLangfuseCallbackHandler(ctx)
+  const handler = baseHandler ? wrapLangfuseHandlerForMultiInvoke(baseHandler) : null
   const traceName = ctx.traceName ?? 'agenxy-react'
   const metadata = toPropagatedMetadata(ctx.traceMetadata)
 
@@ -207,14 +263,18 @@ export async function runLangfuseReactObservation<T>(
         obs.update({ input: ctx.input })
       }
 
-      const result = await propagateAttributes(
-        {
-          sessionId: ctx.sessionId,
-          tags: ctx.tags?.length ? ctx.tags : ['agenxy'],
-          metadata,
-          traceName
-        },
-        () => fn(handler)
+      const result = await startActiveObservation(
+        'react',
+        async () =>
+          propagateAttributes(
+            {
+              sessionId: ctx.sessionId,
+              tags: ctx.tags?.length ? ctx.tags : ['agenxy'],
+              metadata
+            },
+            () => fn(handler)
+          ),
+        { asType: 'chain' }
       )
 
       if (options?.formatOutput) {
