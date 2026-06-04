@@ -1,9 +1,12 @@
-import { configureGlobalLogger, LogLevel } from '@langfuse/core'
+import { configureGlobalLogger, LogLevel, propagateAttributes } from '@langfuse/core'
 import { CallbackHandler } from '@langfuse/langchain'
 import { LangfuseSpanProcessor } from '@langfuse/otel'
+import { startActiveObservation } from '@langfuse/tracing'
 import { NodeSDK } from '@opentelemetry/sdk-node'
 
 import { mainLog } from '@/main/logger'
+
+const TRACE_METADATA_MAX_LEN = 200
 
 let sdk: NodeSDK | null = null
 let spanProcessor: LangfuseSpanProcessor | null = null
@@ -102,11 +105,45 @@ export type LangfuseRunContext = {
   traceMetadata?: Record<string, unknown>
 }
 
+export type LangfuseReactTraceContext = LangfuseRunContext & {
+  /** Agenxy 侧 trace id（sessionId:runId），写入 metadata 便于关联 */
+  traceId: string
+  /** Langfuse trace 展示名，默认 `agenxy-react` */
+  traceName?: string
+  /** 写入根 observation 的用户输入 */
+  input?: unknown
+}
+
 /**
+ * 将 traceMetadata 转为 Langfuse propagateAttributes 要求的 string map。
  *
- * @param ctx 运行上下文
- * @param callback 回调函数
- * @returns 回调处理函数
+ * @param metadata - 任意键值 metadata
+ * @returns 值长度 ≤200 的 string 记录；空对象时返回 undefined
+ */
+function toPropagatedMetadata(
+  metadata?: Record<string, unknown>
+): Record<string, string> | undefined {
+  if (!metadata) return undefined
+
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(metadata)) {
+    if (value === undefined || value === null) continue
+    const raw = typeof value === 'string' ? value : JSON.stringify(value)
+    out[key] =
+      raw.length > TRACE_METADATA_MAX_LEN ? `${raw.slice(0, TRACE_METADATA_MAX_LEN - 1)}…` : raw
+  }
+
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+/**
+ * 为 LangChain 调用创建 Langfuse CallbackHandler。
+ *
+ * 产品策略：仅挂到主 ReAct（`createReactAgent` / `runReactAgentWithGuard`），
+ * 不上报意图思考、意图分类、工具后计划、记忆提取等辅助 LLM，避免 LangGraph/RunnableSequence 噪音。
+ *
+ * @param ctx - sessionId、tags、traceMetadata（建议含 run_id / trace_id）
+ * @returns 已配置时返回 handler，否则 null
  */
 export function createLangfuseCallbackHandler(ctx: LangfuseRunContext): CallbackHandler | null {
   const keys = readLangfuseKeys()
@@ -117,7 +154,6 @@ export function createLangfuseCallbackHandler(ctx: LangfuseRunContext): Callback
   process.env.LANGFUSE_SECRET_KEY = keys.secretKey
 
   try {
-    // TODO: 不知道怎么查看发出的请求
     const options = {
       sessionId: ctx.sessionId,
       tags: ctx.tags?.length ? ctx.tags : ['agenxy'],
@@ -131,4 +167,62 @@ export function createLangfuseCallbackHandler(ctx: LangfuseRunContext): Callback
     mainLog.warn('[langfuse] CallbackHandler 创建失败:', e instanceof Error ? e.message : e)
     return null
   }
+}
+
+/**
+ * 用单一 Langfuse trace 包裹完整 ReAct 运行（含 Build HITL 多次 `invoke` / `invoke(null)` 恢复）。
+ *
+ * LangGraph 每次顶层 invoke 会触发 CallbackHandler 新建 chain span；若无外层 observation，
+ * 这些 span 会成为独立 trace（Langfuse UI 出现多条「LangGraph」）。本函数在 OTEL 活跃上下文中
+ * 创建根 agent observation，使多次 invoke 归并为同一 trace 下的子 span。
+ *
+ * @param ctx - session、tags、metadata、traceId、可选 input
+ * @param fn - 接收 CallbackHandler 的执行函数（未配置 Langfuse 时 handler 为 null）
+ * @param options.formatOutput - 运行结束后写入根 observation 的 output
+ * @returns fn 的返回值
+ */
+export async function runLangfuseReactObservation<T>(
+  ctx: LangfuseReactTraceContext,
+  fn: (handler: CallbackHandler | null) => Promise<T>,
+  options?: { formatOutput?: (result: T) => unknown }
+): Promise<T> {
+  const keys = readLangfuseKeys()
+  if (!keys) return fn(null)
+
+  const handler = createLangfuseCallbackHandler(ctx)
+  const traceName = ctx.traceName ?? 'agenxy-react'
+  const metadata = toPropagatedMetadata(ctx.traceMetadata)
+
+  mainLog.info('[langfuse] runLangfuseReactObservation:', {
+    sessionId: ctx.sessionId,
+    traceId: ctx.traceId,
+    traceName,
+    handler: Boolean(handler)
+  })
+
+  return startActiveObservation(
+    traceName,
+    async (obs) => {
+      if (ctx.input !== undefined) {
+        obs.update({ input: ctx.input })
+      }
+
+      const result = await propagateAttributes(
+        {
+          sessionId: ctx.sessionId,
+          tags: ctx.tags?.length ? ctx.tags : ['agenxy'],
+          metadata,
+          traceName
+        },
+        () => fn(handler)
+      )
+
+      if (options?.formatOutput) {
+        obs.update({ output: options.formatOutput(result) })
+      }
+
+      return result
+    },
+    { asType: 'agent' }
+  )
 }

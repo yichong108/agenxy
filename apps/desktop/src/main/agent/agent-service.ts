@@ -34,7 +34,7 @@ import {
 import { classifyIntent, type UserIntent } from '@/main/agent/intent-classifier'
 import { ConcurrencyQueue } from '@/main/agent/queue'
 import { buildSkillBundle } from '@/main/agent/skills/index'
-import { createLangfuseCallbackHandler, flushLangfuseTracing } from '@/main/langfuse'
+import { flushLangfuseTracing, runLangfuseReactObservation } from '@/main/langfuse'
 import { logScope } from '@/main/logger'
 import { buildMcpLangChainTools } from '@/main/mcp/mcp-runtime'
 import { extractMemoriesAfterRun } from '@/main/memory/memory-extractor'
@@ -402,8 +402,7 @@ async function streamIntentSummary(
   settings: AppSettings,
   userText: string,
   ac: AbortController,
-  intentBatcher: StreamBatcher,
-  langfuseHandler?: CallbackHandler | null
+  intentBatcher: StreamBatcher
 ): Promise<string> {
   const model = createLanguageModel(settings)
   const system = new SystemMessage(
@@ -416,10 +415,7 @@ async function streamIntentSummary(
   const deadline = Date.now() + INTENT_SUMMARY_TIMEOUT_MS
   let acc = ''
   try {
-    const stream = await model.stream([system, human], {
-      signal: ac.signal,
-      ...(langfuseHandler ? { callbacks: [langfuseHandler] } : {})
-    })
+    const stream = await model.stream([system, human], { signal: ac.signal })
     for await (const chunk of stream) {
       if (Date.now() > deadline) break
       const piece = contentToText((chunk as { content?: unknown }).content)
@@ -449,8 +445,7 @@ async function streamPlanAfterTool(
   userText: string,
   ctx: PlanAfterToolContext,
   ac: AbortController,
-  planBatcher: StreamBatcher,
-  langfuseHandler?: CallbackHandler | null
+  planBatcher: StreamBatcher
 ): Promise<string> {
   const model = createLanguageModel(settings)
   const system = new SystemMessage(
@@ -471,10 +466,7 @@ async function streamPlanAfterTool(
   const deadline = Date.now() + PLAN_STEP_TIMEOUT_MS
   let acc = ''
   try {
-    const stream = await model.stream([system, human], {
-      signal: ac.signal,
-      ...(langfuseHandler ? { callbacks: [langfuseHandler] } : {})
-    })
+    const stream = await model.stream([system, human], { signal: ac.signal })
     for await (const chunk of stream) {
       if (Date.now() > deadline) break
       const piece = contentToText((chunk as { content?: unknown }).content)
@@ -1082,17 +1074,6 @@ export async function runUserMessage(
     const runStartedAt = Date.now()
     session.controller = ac
 
-    const langfuseHandler = createLangfuseCallbackHandler({
-      sessionId,
-      tags: ['agenxy', composerMode],
-      traceMetadata: {
-        run_id: runId,
-        trace_id: traceId,
-        workspace_id: session.workspaceId
-      }
-    })
-    agentLog.info(`[runUserMessage] langfuseHandler: ${langfuseHandler ? '已创建' : '未创建'}`)
-
     agentLog.info(
       `[runUserMessage] run-start: ${runId}, traceId: ${traceId}, sessionId: ${sessionId}, timestampMs: ${runStartedAt}`
     )
@@ -1171,8 +1152,7 @@ export async function runUserMessage(
               userText,
               { toolName: ended.name, args: ended.args, result: ended.result },
               ac,
-              planBatcher,
-              langfuseHandler
+              planBatcher
             )
           } catch (e) {
             planBatcher.flush()
@@ -1232,8 +1212,7 @@ export async function runUserMessage(
         settings,
         userDisplayText || agentUserText,
         ac,
-        intentBatcher,
-        langfuseHandler
+        intentBatcher
       )
     } catch (e) {
       intentBatcher.flush()
@@ -1257,8 +1236,7 @@ export async function runUserMessage(
           const classification = await classifyIntent(
             userDisplayText || agentUserText,
             settings,
-            ac.signal,
-            langfuseHandler
+            ac.signal
           )
           if (classification.intent !== 'general' && classification.confidence > 0.6) {
             detectedIntents = [classification.intent]
@@ -1319,70 +1297,103 @@ export async function runUserMessage(
         streamedChars += token.length
         batcher.push(token)
       }
-      const agentInvokeOpts = {
-        recursionLimit,
-        timeoutMs: invokeTimeoutMs,
-        langfuseHandler
-      }
 
-      const runMessages = await Promise.all([
-        runReactAgentWithGuard(agent, session.messages, ac, onStreamToken, agentInvokeOpts, {
+      // Langfuse：仅主 ReAct 上报；用根 observation 合并 HITL 多次 invoke，避免多条 LangGraph trace
+      const runMessages = await runLangfuseReactObservation(
+        {
           sessionId,
-          runId,
-          traceId,
-          threadId,
-          hitlEnabled,
-          toolsByName,
-          onPendingHitl: (hitlId, toolCalls) => {
-            session.pendingHitl = { hitlId, toolCalls }
+          tags: ['agenxy', 'react', composerMode],
+          traceMetadata: {
+            run_id: runId,
+            trace_id: traceId,
+            workspace_id: session.workspaceId,
+            step: 'react'
           },
-          emitHitlRequired: (hitlId, toolCalls) => {
-            streamedChars = 0
-            emit({ type: 'stream-reset', sessionId, runId, traceId })
-            emit({
-              type: 'hitl-required',
+          traceId,
+          traceName: 'agenxy-react',
+          input: userDisplayText || agentUserText
+        },
+        async (reactLangfuseHandler) => {
+          agentLog.info(
+            `[runUserMessage] react Langfuse: ${reactLangfuseHandler ? '已启用' : '未配置'}`
+          )
+
+          const agentInvokeOpts = {
+            recursionLimit,
+            timeoutMs: invokeTimeoutMs,
+            langfuseHandler: reactLangfuseHandler
+          }
+
+          const [msgs] = await Promise.all([
+            runReactAgentWithGuard(agent, session.messages, ac, onStreamToken, agentInvokeOpts, {
               sessionId,
               runId,
               traceId,
-              hitlId,
-              toolCalls: toolCalls.map((t) => ({
-                id: t.id,
-                name: t.name,
-                args: formatToolArgs(t.args)
-              }))
-            })
-          },
-          onToolsRejected: (toolCalls) => {
-            streamedChars = 0
-            emit({ type: 'stream-reset', sessionId, runId, traceId })
-            const now = Date.now()
-            for (const tc of toolCalls) {
-              onTool({
-                kind: 'tool',
-                id: tc.id,
-                name: tc.name,
-                status: 'start',
-                args: formatToolArgs(tc.args),
-                runId,
-                traceId,
-                timestampMs: now
-              })
-              onTool({
-                kind: 'tool',
-                id: tc.id,
-                name: tc.name,
-                status: 'end',
-                result: TOOL_REJECTED_RESULT,
-                runId,
-                traceId,
-                timestampMs: now,
-                durationMs: 0
-              })
-            }
+              threadId,
+              hitlEnabled,
+              toolsByName,
+              onPendingHitl: (hitlId, toolCalls) => {
+                session.pendingHitl = { hitlId, toolCalls }
+              },
+              emitHitlRequired: (hitlId, toolCalls) => {
+                streamedChars = 0
+                emit({ type: 'stream-reset', sessionId, runId, traceId })
+                emit({
+                  type: 'hitl-required',
+                  sessionId,
+                  runId,
+                  traceId,
+                  hitlId,
+                  toolCalls: toolCalls.map((t) => ({
+                    id: t.id,
+                    name: t.name,
+                    args: formatToolArgs(t.args)
+                  }))
+                })
+              },
+              onToolsRejected: (toolCalls) => {
+                streamedChars = 0
+                emit({ type: 'stream-reset', sessionId, runId, traceId })
+                const now = Date.now()
+                for (const tc of toolCalls) {
+                  onTool({
+                    kind: 'tool',
+                    id: tc.id,
+                    name: tc.name,
+                    status: 'start',
+                    args: formatToolArgs(tc.args),
+                    runId,
+                    traceId,
+                    timestampMs: now
+                  })
+                  onTool({
+                    kind: 'tool',
+                    id: tc.id,
+                    name: tc.name,
+                    status: 'end',
+                    result: TOOL_REJECTED_RESULT,
+                    runId,
+                    traceId,
+                    timestampMs: now,
+                    durationMs: 0
+                  })
+                }
+              }
+            }),
+            planChain
+          ]).then(([msgs]) => [msgs])
+
+          return msgs
+        },
+        {
+          formatOutput: (messages) => {
+            const lastAi = [...messages]
+              .reverse()
+              .find((msg) => getBaseMessageType(msg) === 'ai') as AIMessage | undefined
+            return lastAi ? contentToText(lastAi.content) : ''
           }
-        }),
-        planChain
-      ]).then(([msgs]) => msgs)
+        }
+      )
 
       if (runMessages.length > 0) {
         session.messages = runMessages

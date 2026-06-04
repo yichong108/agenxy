@@ -2,7 +2,6 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { ChatOpenAI } from '@langchain/openai'
 import { z } from 'zod'
 
-import { createLangfuseCallbackHandler } from '@/main/langfuse'
 import { logScope } from '@/main/logger'
 import {
   applyMemoryExtractionActions,
@@ -111,22 +110,16 @@ export async function extractMemoriesAfterRun(opts: {
     truncateTurnText(assistantText)
   ].join('\n')
 
-  const langfuseHandler = createLangfuseCallbackHandler({
-    sessionId: opts.sessionId,
-    tags: ['agenxy', 'memory-extract'],
-    traceMetadata: { session_id: opts.sessionId }
-  })
-
   try {
     const model = createLanguageModel(settings).withStructuredOutput(MemoryExtractionSchema, {
       name: 'extract_user_memories',
       strict: true
     })
 
-    const result = await model.invoke(
-      [new SystemMessage(systemPrompt), new HumanMessage(humanPrompt)],
-      langfuseHandler ? { callbacks: [langfuseHandler] } : {}
-    )
+    const result = await model.invoke([
+      new SystemMessage(systemPrompt),
+      new HumanMessage(humanPrompt)
+    ])
 
     const actions = (result.actions ?? []) as MemoryExtractionAction[]
     if (!actions.length) return

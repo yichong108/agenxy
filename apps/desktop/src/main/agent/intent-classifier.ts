@@ -1,7 +1,6 @@
 import { agentLog } from './agent-service'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { ChatOpenAI } from '@langchain/openai'
-import type { CallbackHandler } from '@langfuse/langchain'
 import { z } from 'zod'
 
 import { SKILLS_WITH_TAGS } from '@/main/agent/skills'
@@ -86,8 +85,7 @@ function createLanguageModel(settings: AppSettings) {
 export async function classifyIntent(
   userText: string,
   settings: AppSettings,
-  signal?: AbortSignal,
-  langfuseHandler?: CallbackHandler | null
+  signal?: AbortSignal
 ): Promise<IntentClassification> {
   const model = createLanguageModel(settings).withStructuredOutput(IntentClassificationSchema, {
     name: 'classify_user_intent',
@@ -111,10 +109,7 @@ export async function classifyIntent(
 
   try {
     const messages = [new SystemMessage(systemPrompt), new HumanMessage(userText)]
-    const result = await model.invoke(messages, {
-      signal,
-      ...(langfuseHandler ? { callbacks: [langfuseHandler] } : {})
-    })
+    const result = await model.invoke(messages, { signal })
 
     // Additional validation to ensure intent value is valid (handle unexpected enum values from model)
     const intent = validateIntent(result.intent)
