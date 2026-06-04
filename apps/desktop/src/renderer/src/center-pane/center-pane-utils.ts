@@ -4,6 +4,9 @@ import type { ChatMessage, SessionInfo, ToolTimelineEvent } from '@/shared/ipc'
 
 export const PRELOAD_MISSING_ERROR = '未检测到 preload 注入（window.bridge 不存在）'
 
+/**
+ * 根据消息与会话上下文计算单条消息的展示派生状态。
+ */
 export function assistantDisplayTimeline(
   message: ChatMessage,
   latestAssistantId: string | null,
@@ -51,7 +54,9 @@ export type MessageTurn = {
 }
 
 /**
- * 将消息转换为消息回合
+ * 将消息转换为消息回合(比如一轮用户消息和一轮 assistant 消息算作一个回合)
+ *
+ * TODO: fix用户发送第二个回合消息后，第一个回合的 assistant 消息不见了。
  *
  * 将线性数组归类为回合数组，每个回合包含多个消息。
  *

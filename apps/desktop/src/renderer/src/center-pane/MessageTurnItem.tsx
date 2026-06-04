@@ -91,7 +91,7 @@ function buildMessageCardView(msg: ChatMessage, ctx: MessageCardContext): Messag
   const timelineExpanded =
     ctx.timelineOpenOverride[msg.id] !== undefined
       ? ctx.timelineOpenOverride[msg.id]!
-      : Boolean(ctx.isRun && showTimelineAccordion)
+      : Boolean(ctx.isRun)
 
   return {
     isLatestAssistant,
