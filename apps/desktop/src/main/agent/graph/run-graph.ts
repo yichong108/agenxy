@@ -1,7 +1,6 @@
 import type { BaseMessage } from '@langchain/core/messages'
 
 import { getAgenxyGraph } from '@/main/agent/graph/build-graph'
-import type { ExecuteReactPhaseFn } from '@/main/agent/graph/nodes/execute-react'
 import type { InitRunCallbacks } from '@/main/agent/graph/nodes/init-run'
 import type { AgenxyGraphRunContext } from '@/main/agent/graph/run-context'
 import type { AgenxyGraphStateType, AgenxyRunMeta } from '@/main/agent/graph/state'
@@ -13,7 +12,6 @@ export type RunAgenxyGraphInput = {
   messages: BaseMessage[]
   runContext: AgenxyGraphRunContext
   initRunCallbacks: InitRunCallbacks
-  runPhase: ExecuteReactPhaseFn
   signal?: AbortSignal
 }
 
@@ -23,9 +21,9 @@ export type RunAgenxyGraphResult = {
 }
 
 /**
- * 通过外层 StateGraph 执行一次用户消息处理。
+ * 通过外层 StateGraph 执行一次用户消息处理（完整流水线）。
  *
- * @param input - graph 初始状态、runContext 与 execute_react 回调
+ * @param input - graph 初始状态与 runContext（含 reactBridge）
  * @returns 运行结束后的 messages 与 toolEvents
  */
 export async function runAgenxyGraph(input: RunAgenxyGraphInput): Promise<RunAgenxyGraphResult> {
@@ -45,8 +43,7 @@ export async function runAgenxyGraph(input: RunAgenxyGraphInput): Promise<RunAge
       configurable: {
         thread_id: threadId,
         runContext: input.runContext,
-        initRunCallbacks: input.initRunCallbacks,
-        runPhase: input.runPhase
+        initRunCallbacks: input.initRunCallbacks
       },
       signal: input.signal
     }

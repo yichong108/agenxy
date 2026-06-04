@@ -1,15 +1,12 @@
 ﻿import { AIMessage, type BaseMessage, HumanMessage, SystemMessage } from '@langchain/core/messages'
-import { createReactAgent } from '@langchain/langgraph/prebuilt'
-import { ChatOpenAI } from '@langchain/openai'
 import type { WebContents } from 'electron'
 
 import { agentLog } from '@/main/agent/agent-log'
 import { StreamBatcher } from '@/main/agent/batcher'
 import { AGENXY_INTERNAL_KW, AGENXY_USER_DISPLAY_KW } from '@/main/agent/constants'
-import { runReactAgentWithGuard } from '@/main/agent/graph/react-agent-runner'
+import type { ReactRunBridge } from '@/main/agent/graph/react-run-bridge'
 import { runAgenxyGraph } from '@/main/agent/graph/run-graph'
 import {
-  agentCheckpointer,
   cancelAllHitlWaiters,
   formatToolArgs,
   type HitlUserDecision,
@@ -17,19 +14,16 @@ import {
   submitHitlDecision,
   TOOL_REJECTED_RESULT
 } from '@/main/agent/hitl'
+import { contentToText, findLastAiMessage, getBaseMessageType } from '@/main/agent/message-utils'
 import { ConcurrencyQueue } from '@/main/agent/queue'
-import { flushLangfuseTracing, runLangfuseReactObservation } from '@/main/langfuse'
-import { extractMemoriesAfterRun } from '@/main/memory/memory-extractor'
+import { flushLangfuseTracing } from '@/main/langfuse'
 import { getSessionMessages, getSettings, getWorkspaceById, setSessionMessages } from '@/main/store'
 import { killCommand } from '@/main/tools/terminal'
 import {
   type AgentSendOptions,
-  type AppSettings,
   type ChatMessage,
   EVENTS,
-  getActiveProviderProfile,
   MAX_CONCURRENT_AGENT_STREAMS,
-  type ModelProviderId,
   normalizeComposerMode,
   STREAM_FLUSH_CHARS,
   STREAM_FLUSH_MS,
@@ -87,14 +81,6 @@ function emit(event: StreamEvent): void {
 function trimPersistedMessages(messages: ChatMessage[]): ChatMessage[] {
   if (messages.length <= MAX_PERSISTED_MESSAGES) return messages
   return messages.slice(-MAX_PERSISTED_MESSAGES)
-}
-
-function getBaseMessageType(msg: BaseMessage): string {
-  const maybeGetType = (msg as { getType?: () => string }).getType
-  if (typeof maybeGetType === 'function') return maybeGetType.call(msg)
-  const maybeInternalType = (msg as { _getType?: () => string })._getType
-  if (typeof maybeInternalType === 'function') return maybeInternalType.call(msg)
-  return ''
 }
 
 function isInternalGraphMessage(msg: BaseMessage): boolean {
@@ -190,34 +176,6 @@ function persistSessionMessages(
   setSessionMessages(workspaceId, sessionId, list)
 }
 
-function ensureOpenAiV1BaseUrl(baseUrl: string, fallback: string): string {
-  const u = baseUrl.trim() || fallback
-  if (!u) return fallback
-  if (/\/v1\/?$/i.test(u)) return u.replace(/\/+$/, '')
-  return `${u.replace(/\/+$/, '')}/v1`
-}
-
-function openAiBaseUrlForProvider(_provider: ModelProviderId, rawBaseUrl: string): string {
-  const deepseekDefault = 'https://api.deepseek.com/v1'
-  return ensureOpenAiV1BaseUrl(rawBaseUrl, deepseekDefault)
-}
-
-function createLanguageModel(settings: AppSettings) {
-  const profile = getActiveProviderProfile(settings)
-  if (!profile.apiKey?.trim()) {
-    throw new Error('请先在设置中配置 API Key')
-  }
-  const apiKey = profile.apiKey.trim()
-  const baseURL = openAiBaseUrlForProvider(settings.provider, profile.baseUrl)
-  return new ChatOpenAI({
-    apiKey,
-    model: profile.model,
-    configuration: { baseURL },
-    streaming: true,
-    temperature: 0
-  })
-}
-
 function buildAgentMessageWithPlan(userText: string, planContext: string): string {
   const userPart = userText.trim() || '（用户未附加说明，请严格按计划步骤实施。）'
   return [
@@ -231,23 +189,6 @@ function buildAgentMessageWithPlan(userText: string, planContext: string): strin
     '用户消息：',
     userPart
   ].join('\n')
-}
-
-function contentToText(content: unknown): string {
-  if (typeof content === 'string') return content
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === 'string') return part
-        if (part && typeof part === 'object' && 'text' in part) {
-          const text = (part as { text?: unknown }).text
-          return typeof text === 'string' ? text : ''
-        }
-        return ''
-      })
-      .join('')
-  }
-  return ''
 }
 
 export function bindAgentIpc(wc: WebContents): void {
@@ -409,7 +350,64 @@ export async function runUserMessage(
     })
 
     try {
-      let streamedChars = 0
+      const streamedCharsRef = { current: 0 }
+
+      const reactBridge: ReactRunBridge = {
+        abortController: ac,
+        recursionLimit,
+        invokeTimeoutMs,
+        streamedCharsRef,
+        pushStreamToken: (token) => batcher.push(token),
+        resetStream: () => {
+          streamedCharsRef.current = 0
+          emit({ type: 'stream-reset', sessionId, runId, traceId })
+        },
+        setPendingHitl: (hitlId, hitlThreadId, toolCalls) => {
+          session.pendingHitl = { hitlId, threadId: hitlThreadId, toolCalls }
+        },
+        emitHitlRequired: (hitlId, toolCalls) => {
+          reactBridge.resetStream()
+          emit({
+            type: 'hitl-required',
+            sessionId,
+            runId,
+            traceId,
+            hitlId,
+            toolCalls: toolCalls.map((t) => ({
+              id: t.id,
+              name: t.name,
+              args: formatToolArgs(t.args)
+            }))
+          })
+        },
+        emitToolsRejected: (toolCalls) => {
+          reactBridge.resetStream()
+          const now = Date.now()
+          for (const tc of toolCalls) {
+            onTool({
+              kind: 'tool',
+              id: tc.id,
+              name: tc.name,
+              status: 'start',
+              args: formatToolArgs(tc.args),
+              runId,
+              traceId,
+              timestampMs: now
+            })
+            onTool({
+              kind: 'tool',
+              id: tc.id,
+              name: tc.name,
+              status: 'end',
+              result: TOOL_REJECTED_RESULT,
+              runId,
+              traceId,
+              timestampMs: now,
+              durationMs: 0
+            })
+          }
+        }
+      }
 
       const graphResult = await runAgenxyGraph({
         composerMode,
@@ -431,146 +429,13 @@ export async function runUserMessage(
           signal: ac.signal,
           onTool,
           emit,
-          runToolEvents
+          runToolEvents,
+          reactBridge
         },
         initRunCallbacks: {
           persistMessages: (messages) => {
             session.messages = messages
             persistSessionMessages(session.workspaceId, sessionId, messages)
-          }
-        },
-        runPhase: async (graphState) => {
-          const prepared = graphState.tooling
-          if (!prepared) {
-            throw new Error('[runPhase] tooling not prepared by graph')
-          }
-          const { tools, runPrompt } = prepared
-
-          agentLog.info(
-            `[runUserMessage] mode=${composerMode} runPrompt: ${JSON.stringify(runPrompt, null, 2)}`
-          )
-
-          const hitlEnabled = composerMode === 'build' && settings.toolApprovalInBuild !== false
-          const toolsByName = new Map(tools.map((t) => [t.name, t]))
-
-          const model = createLanguageModel(settings).bindTools(tools as never[])
-
-          const agent = createReactAgent({
-            llm: model,
-            tools: tools as never[],
-            prompt: runPrompt,
-            checkpointer: agentCheckpointer,
-            ...(hitlEnabled ? { interruptBefore: ['tools'] as const } : {})
-          })
-
-          const onStreamToken = (token: string) => {
-            streamedChars += token.length
-            batcher.push(token)
-          }
-
-          const runMessages = await runLangfuseReactObservation(
-            {
-              sessionId,
-              tags: ['agenxy', 'graph', 'react', composerMode],
-              traceMetadata: {
-                run_id: runId,
-                trace_id: traceId,
-                workspace_id: session.workspaceId,
-                step: 'react'
-              },
-              traceId,
-              traceName: 'agenxy-graph',
-              input: userDisplayText || agentUserText
-            },
-            async (reactLangfuseHandler) => {
-              agentLog.info(
-                `[runUserMessage] react Langfuse: ${reactLangfuseHandler ? '已启用' : '未配置'}`
-              )
-
-              const agentInvokeOpts = {
-                recursionLimit,
-                timeoutMs: invokeTimeoutMs,
-                langfuseHandler: reactLangfuseHandler
-              }
-
-              const msgs = await runReactAgentWithGuard(
-                agent,
-                graphState.messages,
-                ac,
-                onStreamToken,
-                agentInvokeOpts,
-                {
-                  sessionId,
-                  runId,
-                  traceId,
-                  threadId,
-                  hitlEnabled,
-                  toolsByName,
-                  onPendingHitl: (hitlId, toolCalls) => {
-                    session.pendingHitl = { hitlId, threadId, toolCalls }
-                  },
-                  emitHitlRequired: (hitlId, toolCalls) => {
-                    streamedChars = 0
-                    emit({ type: 'stream-reset', sessionId, runId, traceId })
-                    emit({
-                      type: 'hitl-required',
-                      sessionId,
-                      runId,
-                      traceId,
-                      hitlId,
-                      toolCalls: toolCalls.map((t) => ({
-                        id: t.id,
-                        name: t.name,
-                        args: formatToolArgs(t.args)
-                      }))
-                    })
-                  },
-                  onToolsRejected: (toolCalls) => {
-                    streamedChars = 0
-                    emit({ type: 'stream-reset', sessionId, runId, traceId })
-                    const now = Date.now()
-                    for (const tc of toolCalls) {
-                      onTool({
-                        kind: 'tool',
-                        id: tc.id,
-                        name: tc.name,
-                        status: 'start',
-                        args: formatToolArgs(tc.args),
-                        runId,
-                        traceId,
-                        timestampMs: now
-                      })
-                      onTool({
-                        kind: 'tool',
-                        id: tc.id,
-                        name: tc.name,
-                        status: 'end',
-                        result: TOOL_REJECTED_RESULT,
-                        runId,
-                        traceId,
-                        timestampMs: now,
-                        durationMs: 0
-                      })
-                    }
-                  }
-                }
-              )
-
-              return msgs
-            },
-            {
-              formatOutput: (messages) => {
-                const lastAi = [...messages]
-                  .reverse()
-                  .find((msg) => getBaseMessageType(msg) === 'ai') as AIMessage | undefined
-                return lastAi ? contentToText(lastAi.content) : ''
-              }
-            }
-          )
-
-          return {
-            messages: runMessages.length > 0 ? runMessages : graphState.messages,
-            toolEvents: runToolEvents
           }
         }
       })
@@ -578,10 +443,8 @@ export async function runUserMessage(
       session.messages = graphResult.messages
       session.pendingHitl = undefined
 
-      if (streamedChars === 0) {
-        const lastAi = [...session.messages]
-          .reverse()
-          .find((msg) => getBaseMessageType(msg) === 'ai') as AIMessage | undefined
+      if (streamedCharsRef.current === 0) {
+        const lastAi = findLastAiMessage(session.messages)
         const fallback = lastAi ? contentToText(lastAi.content) : ''
         if (fallback) {
           batcher.push(fallback)
@@ -598,18 +461,6 @@ export async function runUserMessage(
         traceId,
         timestampMs: Date.now(),
         durationMs: Date.now() - runStartedAt
-      })
-
-      const lastAi = [...session.messages]
-        .reverse()
-        .find((msg) => getBaseMessageType(msg) === 'ai') as AIMessage | undefined
-      const assistantForMemory = lastAi ? contentToText(lastAi.content) : ''
-      void extractMemoriesAfterRun({
-        sessionId,
-        userText: userDisplayText || agentUserText,
-        assistantText: assistantForMemory
-      }).catch((err) => {
-        agentLog.warn('[runUserMessage] memory extract:', err instanceof Error ? err.message : err)
       })
     } catch (e) {
       batcher.flush()

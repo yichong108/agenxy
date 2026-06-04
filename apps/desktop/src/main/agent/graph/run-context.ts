@@ -1,4 +1,5 @@
 import type { ToolEndedCall } from '@/main/agent/graph/plan-after-tool'
+import type { ReactRunBridge } from '@/main/agent/graph/react-run-bridge'
 import type { AppSettings, StreamEvent, ToolTimelineEvent } from '@/shared/ipc'
 
 /**
@@ -13,4 +14,6 @@ export type AgenxyGraphRunContext = {
   runToolEvents: ToolTimelineEvent[]
   /** 由 init_plan_after_tool 节点注入：工具结束后串行 plan */
   afterToolEnd?: (ended: ToolEndedCall) => Promise<void>
+  /** execute_react 所需的 IPC/HITL/流式桥接 */
+  reactBridge: ReactRunBridge
 }
