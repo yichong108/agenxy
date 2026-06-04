@@ -6,8 +6,9 @@ import {
   ToolMessage
 } from '@langchain/core/messages'
 
-/** Marks graph-only messages that must not appear in chat history. */
-export const AGENXY_INTERNAL_KW = 'agenxy_internal'
+import { AGENXY_INTERNAL_KW } from '@/main/agent/constants'
+
+export { AGENXY_INTERNAL_KW }
 import { MemorySaver } from '@langchain/langgraph'
 
 export const TOOL_REJECTED_RESULT = '用户已拒绝执行（未运行）'

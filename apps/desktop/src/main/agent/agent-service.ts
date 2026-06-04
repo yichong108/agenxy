@@ -13,9 +13,10 @@ import type { WebContents } from 'electron'
 import { z } from 'zod'
 
 import { StreamBatcher } from '@/main/agent/batcher'
+import { AGENXY_INTERNAL_KW, AGENXY_USER_DISPLAY_KW } from '@/main/agent/constants'
+import { runAgenxyGraph } from '@/main/agent/graph/run-graph'
 import {
   agentCheckpointer,
-  AGENXY_INTERNAL_KW,
   buildRejectionStateMessages,
   cancelAllHitlWaiters,
   extractPendingToolCalls,
@@ -305,8 +306,8 @@ const commonPrompt = `
   当前日期时间（UTC）：${new Date().toLocaleString()}；
 `
 
-/** 持久化用户消息时优先使用该展示文案（Plan 执行等场景） */
-export const AGENXY_USER_DISPLAY_KW = 'agenxy_user_display'
+/** @deprecated 从 `@/main/agent/constants` 导入 */
+export { AGENXY_USER_DISPLAY_KW } from '@/main/agent/constants'
 
 function buildAgentMessageWithPlan(userText: string, planContext: string): string {
   const userPart = userText.trim() || '（用户未附加说明，请严格按计划步骤实施。）'
@@ -1150,13 +1151,7 @@ export async function runUserMessage(
     }
     const recursionLimit = settings.maxAgentLoopSteps
     const invokeTimeoutMs = settings.agentRunTimeoutMs
-    session.messages.push(
-      new HumanMessage({
-        content: agentUserText,
-        additional_kwargs: planContext ? { [AGENXY_USER_DISPLAY_KW]: userDisplayText } : {}
-      })
-    )
-    persistSessionMessages(session.workspaceId, sessionId, session.messages)
+    const threadId = `${sessionId}:${runId}`
 
     const batcher = new StreamBatcher(STREAM_FLUSH_MS, STREAM_FLUSH_CHARS, (t) => {
       emit({ type: 'text-delta', sessionId, text: t, runId, traceId })
@@ -1165,175 +1160,206 @@ export async function runUserMessage(
     try {
       let streamedChars = 0
 
-      // Intent classification: use LLM for intent classification in Build mode
-      let detectedIntents: UserIntent[] = []
-      if (composerMode === 'build') {
-        try {
-          const classification = await classifyIntent(
-            userDisplayText || agentUserText,
-            settings,
-            ac.signal
-          )
-          if (classification.intent !== 'general' && classification.confidence > 0.6) {
-            detectedIntents = [classification.intent]
+      const graphResult = await runAgenxyGraph({
+        composerMode,
+        messages: session.messages,
+        signal: ac.signal,
+        runMeta: {
+          sessionId,
+          runId,
+          traceId,
+          threadId,
+          workspaceId: session.workspaceId,
+          root,
+          userDisplayText,
+          agentUserText,
+          planContext
+        },
+        initRunCallbacks: {
+          persistMessages: (messages) => {
+            session.messages = messages
+            persistSessionMessages(session.workspaceId, sessionId, messages)
+          }
+        },
+        runPhase: async (graphState) => {
+          // Intent classification: use LLM for intent classification in Build mode
+          let detectedIntents: UserIntent[] = []
+          if (composerMode === 'build') {
+            try {
+              const classification = await classifyIntent(
+                userDisplayText || agentUserText,
+                settings,
+                ac.signal
+              )
+              if (classification.intent !== 'general' && classification.confidence > 0.6) {
+                detectedIntents = [classification.intent]
+              }
+              agentLog.info(
+                `[runUserMessage] Intent classified: ${classification.intent} (confidence: ${classification.confidence.toFixed(2)})`
+              )
+            } catch (e) {
+              if (isAbortError(e)) throw e
+              agentLog.warn('[runUserMessage] Intent classification failed:', e)
+              const message = e instanceof Error ? e.message : String(e)
+              emit({
+                type: 'intent-classified',
+                sessionId,
+                runId,
+                traceId,
+                intent: 'general',
+                skillNames: [],
+                error: message
+              })
+            }
           }
           agentLog.info(
-            `[runUserMessage] Intent classified: ${classification.intent} (confidence: ${classification.confidence.toFixed(2)})`
+            `[runUserMessage] detectedIntents: ${JSON.stringify(detectedIntents, null, 2)}`
           )
-        } catch (e) {
-          if (isAbortError(e)) throw e
-          agentLog.warn('[runUserMessage] Intent classification failed:', e)
-          // Notify UI when intent classification fails
-          const message = e instanceof Error ? e.message : String(e)
-          emit({
-            type: 'intent-classified',
+
+          const tooling = await prepareAgentTooling(
+            composerMode,
             sessionId,
-            runId,
-            traceId,
-            intent: 'general',
-            skillNames: [],
-            error: message
+            root,
+            settings,
+            { runId, traceId, onTool },
+            composerMode === 'build' ? { filterIntents: detectedIntents } : undefined
+          )
+          const { tools } = tooling
+
+          const model = createLanguageModel(settings).bindTools(tools as never[])
+          const runPrompt = buildAgentRunPrompt(composerMode, root, settings, tooling)
+
+          agentLog.info(
+            `[runUserMessage] mode=${composerMode} runPrompt: ${JSON.stringify(runPrompt, null, 2)}`
+          )
+
+          const hitlEnabled = composerMode === 'build' && settings.toolApprovalInBuild !== false
+          const toolsByName = new Map(tools.map((t) => [t.name, t]))
+
+          const agent = createReactAgent({
+            llm: model,
+            tools: tools as never[],
+            prompt: runPrompt,
+            checkpointer: agentCheckpointer,
+            ...(hitlEnabled ? { interruptBefore: ['tools'] as const } : {})
           })
+
+          const onStreamToken = (token: string) => {
+            streamedChars += token.length
+            batcher.push(token)
+          }
+
+          const runMessages = await runLangfuseReactObservation(
+            {
+              sessionId,
+              tags: ['agenxy', 'graph', 'react', composerMode],
+              traceMetadata: {
+                run_id: runId,
+                trace_id: traceId,
+                workspace_id: session.workspaceId,
+                step: 'react'
+              },
+              traceId,
+              traceName: 'agenxy-graph',
+              input: userDisplayText || agentUserText
+            },
+            async (reactLangfuseHandler) => {
+              agentLog.info(
+                `[runUserMessage] react Langfuse: ${reactLangfuseHandler ? '已启用' : '未配置'}`
+              )
+
+              const agentInvokeOpts = {
+                recursionLimit,
+                timeoutMs: invokeTimeoutMs,
+                langfuseHandler: reactLangfuseHandler
+              }
+
+              const [msgs] = await Promise.all([
+                runReactAgentWithGuard(
+                  agent,
+                  graphState.messages,
+                  ac,
+                  onStreamToken,
+                  agentInvokeOpts,
+                  {
+                    sessionId,
+                    runId,
+                    traceId,
+                    threadId,
+                    hitlEnabled,
+                    toolsByName,
+                    onPendingHitl: (hitlId, toolCalls) => {
+                      session.pendingHitl = { hitlId, toolCalls }
+                    },
+                    emitHitlRequired: (hitlId, toolCalls) => {
+                      streamedChars = 0
+                      emit({ type: 'stream-reset', sessionId, runId, traceId })
+                      emit({
+                        type: 'hitl-required',
+                        sessionId,
+                        runId,
+                        traceId,
+                        hitlId,
+                        toolCalls: toolCalls.map((t) => ({
+                          id: t.id,
+                          name: t.name,
+                          args: formatToolArgs(t.args)
+                        }))
+                      })
+                    },
+                    onToolsRejected: (toolCalls) => {
+                      streamedChars = 0
+                      emit({ type: 'stream-reset', sessionId, runId, traceId })
+                      const now = Date.now()
+                      for (const tc of toolCalls) {
+                        onTool({
+                          kind: 'tool',
+                          id: tc.id,
+                          name: tc.name,
+                          status: 'start',
+                          args: formatToolArgs(tc.args),
+                          runId,
+                          traceId,
+                          timestampMs: now
+                        })
+                        onTool({
+                          kind: 'tool',
+                          id: tc.id,
+                          name: tc.name,
+                          status: 'end',
+                          result: TOOL_REJECTED_RESULT,
+                          runId,
+                          traceId,
+                          timestampMs: now,
+                          durationMs: 0
+                        })
+                      }
+                    }
+                  }
+                ),
+                planChain
+              ]).then(([msgs]) => [msgs])
+
+              return msgs
+            },
+            {
+              formatOutput: (messages) => {
+                const lastAi = [...messages]
+                  .reverse()
+                  .find((msg) => getBaseMessageType(msg) === 'ai') as AIMessage | undefined
+                return lastAi ? contentToText(lastAi.content) : ''
+              }
+            }
+          )
+
+          return {
+            messages: runMessages.length > 0 ? runMessages : graphState.messages,
+            toolEvents: runToolEvents
+          }
         }
-      }
-      agentLog.info(`[runUserMessage] detectedIntents: ${JSON.stringify(detectedIntents, null, 2)}`)
-
-      const tooling = await prepareAgentTooling(
-        composerMode,
-        sessionId,
-        root,
-        settings,
-        { runId, traceId, onTool },
-        composerMode === 'build' ? { filterIntents: detectedIntents } : undefined
-      )
-      const { tools } = tooling
-
-      const model = createLanguageModel(settings).bindTools(tools as never[])
-      const runPrompt = buildAgentRunPrompt(composerMode, root, settings, tooling)
-
-      agentLog.info(
-        `[runUserMessage] mode=${composerMode} runPrompt: ${JSON.stringify(runPrompt, null, 2)}`
-      )
-
-      const hitlEnabled = composerMode === 'build' && settings.toolApprovalInBuild !== false
-      const threadId = `${sessionId}:${runId}`
-
-      const toolsByName = new Map(tools.map((t) => [t.name, t]))
-
-      const agent = createReactAgent({
-        llm: model,
-        tools: tools as never[],
-        prompt: runPrompt,
-        // All modes need a checkpointer: runReactAgentWithGuard reads graph state after invoke.
-        checkpointer: agentCheckpointer,
-        ...(hitlEnabled ? { interruptBefore: ['tools'] as const } : {})
       })
 
-      const onStreamToken = (token: string) => {
-        streamedChars += token.length
-        batcher.push(token)
-      }
-
-      // Langfuse：仅主 ReAct 上报；用根 observation 合并 HITL 多次 invoke，避免多条 LangGraph trace
-      const runMessages = await runLangfuseReactObservation(
-        {
-          sessionId,
-          tags: ['agenxy', 'react', composerMode],
-          traceMetadata: {
-            run_id: runId,
-            trace_id: traceId,
-            workspace_id: session.workspaceId,
-            step: 'react'
-          },
-          traceId,
-          traceName: 'agenxy-react',
-          input: userDisplayText || agentUserText
-        },
-        async (reactLangfuseHandler) => {
-          agentLog.info(
-            `[runUserMessage] react Langfuse: ${reactLangfuseHandler ? '已启用' : '未配置'}`
-          )
-
-          const agentInvokeOpts = {
-            recursionLimit,
-            timeoutMs: invokeTimeoutMs,
-            langfuseHandler: reactLangfuseHandler
-          }
-
-          const [msgs] = await Promise.all([
-            runReactAgentWithGuard(agent, session.messages, ac, onStreamToken, agentInvokeOpts, {
-              sessionId,
-              runId,
-              traceId,
-              threadId,
-              hitlEnabled,
-              toolsByName,
-              onPendingHitl: (hitlId, toolCalls) => {
-                session.pendingHitl = { hitlId, toolCalls }
-              },
-              emitHitlRequired: (hitlId, toolCalls) => {
-                streamedChars = 0
-                emit({ type: 'stream-reset', sessionId, runId, traceId })
-                emit({
-                  type: 'hitl-required',
-                  sessionId,
-                  runId,
-                  traceId,
-                  hitlId,
-                  toolCalls: toolCalls.map((t) => ({
-                    id: t.id,
-                    name: t.name,
-                    args: formatToolArgs(t.args)
-                  }))
-                })
-              },
-              onToolsRejected: (toolCalls) => {
-                streamedChars = 0
-                emit({ type: 'stream-reset', sessionId, runId, traceId })
-                const now = Date.now()
-                for (const tc of toolCalls) {
-                  onTool({
-                    kind: 'tool',
-                    id: tc.id,
-                    name: tc.name,
-                    status: 'start',
-                    args: formatToolArgs(tc.args),
-                    runId,
-                    traceId,
-                    timestampMs: now
-                  })
-                  onTool({
-                    kind: 'tool',
-                    id: tc.id,
-                    name: tc.name,
-                    status: 'end',
-                    result: TOOL_REJECTED_RESULT,
-                    runId,
-                    traceId,
-                    timestampMs: now,
-                    durationMs: 0
-                  })
-                }
-              }
-            }),
-            planChain
-          ]).then(([msgs]) => [msgs])
-
-          return msgs
-        },
-        {
-          formatOutput: (messages) => {
-            const lastAi = [...messages]
-              .reverse()
-              .find((msg) => getBaseMessageType(msg) === 'ai') as AIMessage | undefined
-            return lastAi ? contentToText(lastAi.content) : ''
-          }
-        }
-      )
-
-      if (runMessages.length > 0) {
-        session.messages = runMessages
-      }
+      session.messages = graphResult.messages
       session.pendingHitl = undefined
 
       if (streamedChars === 0) {
@@ -1347,7 +1373,7 @@ export async function runUserMessage(
       }
       batcher.flush()
       persistSessionMessages(session.workspaceId, sessionId, session.messages, {
-        toolEventsForLastAssistant: runToolEvents
+        toolEventsForLastAssistant: graphResult.toolEvents
       })
       emit({
         type: 'done',
@@ -1390,7 +1416,7 @@ export async function runUserMessage(
         durationMs: Date.now() - runStartedAt
       })
       persistSessionMessages(session.workspaceId, sessionId, session.messages, {
-        toolEventsForLastAssistant: runToolEvents
+        toolEventsForLastAssistant: runToolEvents.length > 0 ? runToolEvents : undefined
       })
     } finally {
       session.controller = null
