@@ -260,6 +260,11 @@ export function resumeAgentHitl(
   return { ok: true }
 }
 
+/**
+ * 运行用户消息。
+ *
+ * 分两段是为了 「工具执行前可拦截」；web_search 分两段，是因为它也走 tools 节点，只是免审批所以自动 resume，不会弹审批框。这是 HITL 架构的代价，不是业务上要把一次问答拆成两次。
+ */
 export async function runUserMessage(
   sessionId: string,
   userText: string,
@@ -352,6 +357,7 @@ export async function runUserMessage(
     try {
       const streamedCharsRef = { current: 0 }
 
+      // 桥接 LangGraph ReAct 运行与 IPC 流。
       const reactBridge: ReactRunBridge = {
         abortController: ac,
         recursionLimit,
