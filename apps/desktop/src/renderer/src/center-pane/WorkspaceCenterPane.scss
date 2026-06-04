@@ -369,6 +369,15 @@
   background: var(--aw-color-fill-secondary);
 }
 
+.app-message-markdown hr {
+  border: none;
+  border-top: 1px solid var(--aw-color-border);
+  margin-block-start: 1.5em;
+  margin-block-end: 1.5em;
+  margin-inline-start: auto;
+  margin-inline-end: auto;
+}
+
 .app-message-markdown pre {
   margin: 8px 0;
   padding: 10px;
