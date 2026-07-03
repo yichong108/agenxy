@@ -1,7 +1,15 @@
-export { AGENXY_INTERNAL_KW, AGENXY_USER_DISPLAY_KW } from './constants.js'
-export { StreamBatcher } from './batcher.js'
-export { ConcurrencyQueue } from './queue.js'
-export { isAbortError } from './run-utils.js'
+/**
+ * @agenxy/agent 公共 API — 以 createAgent 为入口，辅以工具定义与宿主持久化所需类型。
+ */
+
+export {
+  createAgent,
+  type Agent,
+  type AgentRunCallbacks,
+  type AgentRunInput,
+  type AgentRunResult,
+  type CreateAgentOptions
+} from './create-agent.js'
 
 export { defineTool, type NamedTool, type ToolExecutorContext } from './define-tool.js'
 
@@ -14,61 +22,15 @@ export {
   getAgentMessageType,
   getBaseMessageType,
   humanMessage,
-  isInternalAgentMessage,
-  systemMessage,
-  toModelMessages,
-  toolMessage
+  isInternalAgentMessage
 } from './messages.js'
 
-export {
-  HITL_EXEMPT_TOOL_NAMES,
-  TOOL_REJECTED_RESULT,
-  buildRejectionStateMessages,
-  cancelAllHitlWaiters,
-  cancelHitlWaiter,
-  extractPendingToolCalls,
-  formatToolArgs,
-  isRejectedToolResult,
-  makeHitlId,
-  partitionPendingToolCalls,
-  requiresHitlApproval,
-  submitHitlDecision,
-  waitForHitlDecision,
-  type HitlUserDecision,
-  type PendingToolCall
-} from './hitl.js'
+export type { HitlUserDecision, PendingToolCall } from './hitl.js'
+export { HITL_EXEMPT_TOOL_NAMES } from './hitl.js'
 
-export { createOpenAiProvider, getAuxChatModel, getChatModel } from './llm.js'
-export { agentLog, setAgentLogger, type AgentLogger } from './logger.js'
-
-export {
-  classifyIntent,
-  shouldLoadSkill,
-  type IntentClassification,
-  type UserIntent
-} from './intent-classifier.js'
-
+export { shouldLoadSkill, type UserIntent } from './intent-classifier.js'
 export { SKILLS_WITH_TAGS, type SkillTagEntry } from './skill-tags.js'
 
-export { buildToolDeclarations, runReactLoop, type ReactAgentRunContext } from './react-loop.js'
+export { getAuxChatModel } from './llm.js'
 
-export { createPlanAfterToolCoordinator, type ToolEndedCall } from './graph/plan-after-tool.js'
-export type { ReactRunBridge } from './graph/react-run-bridge.js'
-export type { AgenxyGraphRunContext } from './graph/run-context.js'
-export type {
-  AgenxyGraphState,
-  AgenxyGraphStateType,
-  AgenxyReactPhaseResult,
-  AgenxyRunMeta,
-  PreparedTooling
-} from './graph/state.js'
-
-export {
-  runAgenxyGraph,
-  runAgenxyPipeline,
-  type InitRunCallbacks,
-  type PipelineDeps,
-  type ReactObservationContext,
-  type RunAgenxyPipelineInput,
-  type RunAgenxyPipelineResult
-} from './run-pipeline.js'
+export { setAgentLogger, type AgentLogger } from './logger.js'

@@ -1,26 +1,17 @@
 ﻿import {
-  agentLog,
   type AgentMessage,
-  AGENXY_USER_DISPLAY_KW,
   aiMessage,
-  cancelAllHitlWaiters,
-  ConcurrencyQueue,
   contentToText,
-  findLastAiMessage,
-  formatToolArgs,
   getAgentMessageType,
   type HitlUserDecision,
   humanMessage,
   isInternalAgentMessage,
-  type PendingToolCall,
-  type ReactRunBridge,
-  StreamBatcher,
-  submitHitlDecision,
-  TOOL_REJECTED_RESULT
+  type PendingToolCall
 } from '@agenxy/agent'
 import type { WebContents } from 'electron'
 
-import { runAgenxyGraph } from '@/main/agent/run-bridge'
+import { desktopAgent } from '@/main/agent/agent-instance'
+import { agentLog } from '@/main/agent/agent-log'
 import { flushLangfuseTracing } from '@/main/langfuse'
 import { getSessionMessages, getSettings, getWorkspaceById, setSessionMessages } from '@/main/store'
 import { killCommand } from '@/main/tools/terminal'
@@ -28,16 +19,10 @@ import {
   type AgentSendOptions,
   type ChatMessage,
   EVENTS,
-  MAX_CONCURRENT_AGENT_STREAMS,
   normalizeComposerMode,
-  STREAM_FLUSH_CHARS,
-  STREAM_FLUSH_MS,
   type StreamEvent,
   type ToolTimelineEvent
 } from '@/shared/ipc'
-
-/** @deprecated 从 `@agenxy/agent` 导入 */
-export { AGENXY_USER_DISPLAY_KW }
 
 /** @deprecated 从 `@/main/agent/agent-log` 导入 */
 export { agentLog } from '@/main/agent/agent-log'
@@ -56,7 +41,6 @@ type SessionRuntime = {
 
 const sessions = new Map<string, SessionRuntime>()
 let webContents: WebContents | null = null
-let agentQueue: ConcurrencyQueue | null = null
 const MAX_PERSISTED_MESSAGES = 200
 
 function makeRunId(): string {
@@ -65,13 +49,6 @@ function makeRunId(): string {
 
 function makeTraceId(sessionId: string, runId: string): string {
   return `${sessionId}:${runId}`
-}
-
-function getQueue(): ConcurrencyQueue {
-  if (!agentQueue) {
-    agentQueue = new ConcurrencyQueue(Math.max(1, MAX_CONCURRENT_AGENT_STREAMS))
-  }
-  return agentQueue
 }
 
 function emit(event: StreamEvent): void {
@@ -221,12 +198,12 @@ export function cancelRun(sessionId: string): void {
   if (s) {
     s.pendingHitl = undefined
   }
-  cancelAllHitlWaiters('运行已取消')
+  desktopAgent.cancelAllHitlWaiters('运行已取消')
   void killCommand(`term:${sessionId}`)
 }
 
 /**
- * 恢复 HITL：将用户决策交给 IPC 桥接，由 runReactLoop 继续执行。
+ * 恢复 HITL：将用户决策交给 agent，由 ReAct 循环继续执行。
  *
  * @param sessionId - 会话 ID
  * @param hitlId - 审批批次 ID
@@ -243,7 +220,7 @@ export function resumeAgentHitl(
     return { ok: false, error: '当前会话没有待审批的工具调用' }
   }
   s.pendingHitl = undefined
-  const submitted = submitHitlDecision(hitlId, decision)
+  const submitted = desktopAgent.submitHitlDecision(hitlId, decision)
   if (!submitted) {
     return { ok: false, error: '审批请求已过期或已处理' }
   }
@@ -293,122 +270,60 @@ export async function runUserMessage(
     })
     return
   }
-  const queue = getQueue()
-  if (queue.willBlock()) {
-    onQueued(queue.waiting + 1)
-  }
-  await queue.run(async () => {
-    onQueued(0)
-    const session = sessions.get(sessionId)
-    if (!session) {
-      agentLog.error(`[runUserMessage] session not found for sessionId: ${sessionId}`)
-      emit({ type: 'error', sessionId, message: '会话不存在或已过期' })
-      return
-    }
-    const ac = new AbortController()
-    const runId = makeRunId()
-    const traceId = makeTraceId(sessionId, runId)
-    const runStartedAt = Date.now()
-    session.controller = ac
 
-    agentLog.info(
-      `[runUserMessage] run-start: ${runId}, traceId: ${traceId}, sessionId: ${sessionId}, timestampMs: ${runStartedAt}`
-    )
-    emit({ type: 'run-start', sessionId, runId, traceId, timestampMs: runStartedAt })
+  let runId = ''
+  let traceId = ''
+  let runStartedAt = 0
+  let runToolEvents: ToolTimelineEvent[] = []
 
-    const runToolEvents: ToolTimelineEvent[] = []
-
-    const emitTool = (e: ToolTimelineEvent) => {
-      emit({
-        type: 'tool',
-        sessionId,
-        runId,
-        traceId,
-        event: {
-          ...e,
-          runId: e.runId ?? runId,
-          traceId: e.traceId ?? traceId,
-          timestampMs: e.timestampMs ?? Date.now()
-        }
-      })
-    }
-
-    const onTool = (e: ToolTimelineEvent) => {
-      runToolEvents.push(e)
-      emitTool(e)
-    }
-    const recursionLimit = settings.maxAgentLoopSteps
-    const invokeTimeoutMs = settings.agentRunTimeoutMs
-    const threadId = `${sessionId}:${runId}`
-
-    const batcher = new StreamBatcher(STREAM_FLUSH_MS, STREAM_FLUSH_CHARS, (t) => {
-      emit({ type: 'text-delta', sessionId, text: t, runId, traceId })
-    })
-
-    try {
-      const streamedCharsRef = { current: 0 }
-
-      const reactBridge: ReactRunBridge = {
-        abortController: ac,
-        recursionLimit,
-        invokeTimeoutMs,
-        streamedCharsRef,
-        pushStreamToken: (token) => batcher.push(token),
-        resetStream: () => {
-          streamedCharsRef.current = 0
-          emit({ type: 'stream-reset', sessionId, runId, traceId })
-        },
-        setPendingHitl: (hitlId, hitlThreadId, toolCalls) => {
-          session.pendingHitl = { hitlId, threadId: hitlThreadId, toolCalls }
-        },
-        emitHitlRequired: (hitlId, toolCalls) => {
-          reactBridge.resetStream()
-          emit({
-            type: 'hitl-required',
-            sessionId,
-            runId,
-            traceId,
-            hitlId,
-            toolCalls: toolCalls.map((t) => ({
-              id: t.id,
-              name: t.name,
-              args: formatToolArgs(t.args)
-            }))
-          })
-        },
-        emitToolsRejected: (toolCalls) => {
-          reactBridge.resetStream()
-          const now = Date.now()
-          for (const tc of toolCalls) {
-            onTool({
-              kind: 'tool',
-              id: tc.id,
-              name: tc.name,
-              status: 'start',
-              args: formatToolArgs(tc.args),
-              runId,
-              traceId,
-              timestampMs: now
-            })
-            onTool({
-              kind: 'tool',
-              id: tc.id,
-              name: tc.name,
-              status: 'end',
-              result: TOOL_REJECTED_RESULT,
-              runId,
-              traceId,
-              timestampMs: now,
-              durationMs: 0
-            })
-          }
-        }
+  try {
+    const graphResult = await desktopAgent.runQueued(async () => {
+      const session = sessions.get(sessionId)
+      if (!session) {
+        agentLog.error(`[runUserMessage] session not found for sessionId: ${sessionId}`)
+        emit({ type: 'error', sessionId, message: '会话不存在或已过期' })
+        throw new Error('会话不存在或已过期')
       }
 
-      const graphResult = await runAgenxyGraph({
+      const ac = new AbortController()
+      runId = makeRunId()
+      traceId = makeTraceId(sessionId, runId)
+      runStartedAt = Date.now()
+      session.controller = ac
+      runToolEvents = []
+
+      agentLog.info(
+        `[runUserMessage] run-start: ${runId}, traceId: ${traceId}, sessionId: ${sessionId}, timestampMs: ${runStartedAt}`
+      )
+      emit({ type: 'run-start', sessionId, runId, traceId, timestampMs: runStartedAt })
+
+      const threadId = `${sessionId}:${runId}`
+
+      const emitTool = (e: ToolTimelineEvent) => {
+        emit({
+          type: 'tool',
+          sessionId,
+          runId,
+          traceId,
+          event: {
+            ...e,
+            runId: e.runId ?? runId,
+            traceId: e.traceId ?? traceId,
+            timestampMs: e.timestampMs ?? Date.now()
+          }
+        })
+      }
+
+      const onTool = (e: ToolTimelineEvent) => {
+        runToolEvents.push(e)
+        emitTool(e)
+      }
+
+      return {
         composerMode,
         messages: session.messages,
-        signal: ac.signal,
+        abortController: ac,
+        settings,
         runMeta: {
           sessionId,
           runId,
@@ -420,72 +335,96 @@ export async function runUserMessage(
           agentUserText,
           planContext
         },
-        runContext: {
-          settings,
-          signal: ac.signal,
+        recursionLimit: settings.maxAgentLoopSteps,
+        invokeTimeoutMs: settings.agentRunTimeoutMs,
+        callbacks: {
+          onTextDelta: (text) => {
+            emit({ type: 'text-delta', sessionId, text, runId, traceId })
+          },
+          onStreamReset: () => {
+            emit({ type: 'stream-reset', sessionId, runId, traceId })
+          },
+          onHitlRequired: (hitlId, toolCalls) => {
+            emit({
+              type: 'hitl-required',
+              sessionId,
+              runId,
+              traceId,
+              hitlId,
+              toolCalls
+            })
+          },
+          onToolsRejected: () => {},
           onTool,
           emit,
-          runToolEvents,
-          reactBridge
-        },
-        initRunCallbacks: {
           persistMessages: (messages) => {
             session.messages = messages
             persistSessionMessages(session.workspaceId, sessionId, messages)
+          },
+          setPendingHitl: (hitlId, hitlThreadId, toolCalls) => {
+            session.pendingHitl = { hitlId, threadId: hitlThreadId, toolCalls }
           }
         }
-      })
-
-      session.messages = graphResult.messages
-      session.pendingHitl = undefined
-
-      if (streamedCharsRef.current === 0) {
-        const lastAi = findLastAiMessage(session.messages)
-        const fallback = lastAi ? contentToText(lastAi.content) : ''
-        if (fallback) {
-          batcher.push(fallback)
-        }
       }
-      batcher.flush()
-      persistSessionMessages(session.workspaceId, sessionId, session.messages, {
-        toolEventsForLastAssistant: graphResult.toolEvents
-      })
+    }, onQueued)
+
+    const session = sessions.get(sessionId)
+    if (!session) return
+
+    session.messages = graphResult.messages
+    session.pendingHitl = undefined
+
+    persistSessionMessages(session.workspaceId, sessionId, session.messages, {
+      toolEventsForLastAssistant: graphResult.toolEvents
+    })
+    emit({
+      type: 'done',
+      sessionId,
+      runId,
+      traceId,
+      timestampMs: Date.now(),
+      durationMs: Date.now() - runStartedAt
+    })
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    if (message === '会话不存在或已过期') return
+
+    emit({
+      type: 'error',
+      sessionId,
+      message,
+      runId,
+      traceId,
+      timestampMs: Date.now(),
+      durationMs: runStartedAt > 0 ? Date.now() - runStartedAt : undefined
+    })
+
+    const session = sessions.get(sessionId)
+    if (session) {
       emit({
-        type: 'done',
+        type: 'tool',
         sessionId,
         runId,
         traceId,
-        timestampMs: Date.now(),
-        durationMs: Date.now() - runStartedAt
-      })
-    } catch (e) {
-      batcher.flush()
-      const message = e instanceof Error ? e.message : String(e)
-      emit({
-        type: 'error',
-        sessionId,
-        message,
-        runId,
-        traceId,
-        timestampMs: Date.now(),
-        durationMs: Date.now() - runStartedAt
-      })
-      onTool({
-        kind: 'error',
-        message,
-        runId,
-        traceId,
-        timestampMs: Date.now(),
-        durationMs: Date.now() - runStartedAt
+        event: {
+          kind: 'error',
+          message,
+          runId,
+          traceId,
+          timestampMs: Date.now(),
+          durationMs: runStartedAt > 0 ? Date.now() - runStartedAt : undefined
+        }
       })
       persistSessionMessages(session.workspaceId, sessionId, session.messages, {
         toolEventsForLastAssistant: runToolEvents.length > 0 ? runToolEvents : undefined
       })
-    } finally {
+    }
+  } finally {
+    const session = sessions.get(sessionId)
+    if (session) {
       session.controller = null
       session.pendingHitl = undefined
-      batcher.flush()
-      void flushLangfuseTracing()
     }
-  })
+    void flushLangfuseTracing()
+  }
 }

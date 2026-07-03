@@ -5,4 +5,4 @@ import { logScope } from '@/main/logger'
 const scope = logScope('agent')
 setAgentLogger(scope)
 
-export { agentLog } from '@agenxy/agent'
+export const agentLog = scope

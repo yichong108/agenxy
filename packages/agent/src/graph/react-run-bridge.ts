@@ -1,7 +1,9 @@
 import type { PendingToolCall } from '../hitl.js'
 
 /**
- * execute_react 与宿主 agent-service 之间的 IPC/HITL/流式桥接。
+ * ReAct 阶段与宿主 IPC 之间的桥接对象。
+ *
+ * 由 createAgent 在每次 run 内构造，宿主通过 callbacks 接收流式与 HITL 事件。
  */
 export type ReactRunBridge = {
   abortController: AbortController
