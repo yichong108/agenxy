@@ -1,60 +1,32 @@
+import { type AppSettings } from '@agenxy/shared'
 import { generateObject } from 'ai'
 import { z } from 'zod'
 
-import { agentLog } from '@/main/agent/agent-log'
-import { getAuxChatModel } from '@/main/agent/llm'
-import { SKILLS_WITH_TAGS } from '@/main/agent/skills'
-import type { AppSettings } from '@/shared/ipc'
+import { agentLog } from './logger.js'
+import { getAuxChatModel } from './llm.js'
+import { SKILLS_WITH_TAGS } from './skill-tags.js'
 
-/**
- * 意图分类结果 schema
- */
 const IntentClassificationSchema = z.object({
   intent: z.enum(['coding', 'general']).describe('用户意图类型'),
   confidence: z.number().min(0).max(1).describe('置信度 (0-1)'),
   reasoning: z.string().describe('分类理由说明')
 })
 
-/**
- * 用户意图类型 - 粗粒度分类
- * coding: 编程相关（代码修改、Bug修复、功能开发、代码评审等）
- * general: 其他通用任务
- */
 export type UserIntent = 'coding' | 'general'
 
-/**
- * 意图分类结果
- */
 export type IntentClassification = {
   intent: UserIntent
-  confidence: number // 0-1
-  reasoning: string // 分类理由
+  confidence: number
+  reasoning: string
 }
 
 /**
- * 所有技能的意图标签（用于反向映射）
- * 键为注册工具名：文件技能经 sanitizeToolName 后与 frontmatter/目录名一致（不自动加 skill_ 前缀）；内置代码技能仍为 skill_* 名称。
- */
-export const SKILL_INTENT_TAGS: Record<string, UserIntent[]> = {
-  // 编程相关技能（打包 skill.md）
-  bug_fix: ['coding'],
-  feature_implement: ['coding'],
-  code_review: ['coding'],
-  debug_workflow: ['coding'],
-  release_workflow: ['coding'],
-  // 非编程技能
-  frontend_slides: ['general'],
-  frontend_slides_ppt_controlled: ['general'],
-  triage_workflow: ['general'],
-  // 内置技能（所有意图都可用）
-  skill_inspect_workspace: ['coding', 'general'],
-  skill_write_file: ['coding', 'general'],
-  skill_run_terminal: ['coding', 'general']
-}
-
-/**
- * 对用户输入进行意图分类
- * 使用结构化输出确保可靠的 JSON 格式返回
+ * 对用户输入进行意图分类。
+ *
+ * @param userText - 用户消息
+ * @param settings - 应用设置
+ * @param signal - 可选取消信号
+ * @returns 意图分类结果
  */
 export async function classifyIntent(
   userText: string,
@@ -95,7 +67,6 @@ export async function classifyIntent(
       temperature: 0
     })
 
-    // Additional validation to ensure intent value is valid (handle unexpected enum values from model)
     const intent = validateIntent(result.intent)
     const confidence = Math.max(0, Math.min(1, result.confidence ?? 0.5))
 
@@ -126,17 +97,16 @@ function validateIntent(raw: unknown): UserIntent {
 }
 
 /**
- * 检查技能是否应该被加载
+ * 检查技能是否应该被加载。
  *
- * 技能没有定义标签的话，默认就是general
- * @param skillName 技能名
- * @param targetIntents 目标意图列表（空表示加载所有）
+ * @param skillName - 技能名
+ * @param targetIntents - 目标意图列表（空表示加载所有）
+ * @returns 是否应加载
  */
 export function shouldLoadSkill(skillName: string, targetIntents: UserIntent[]): boolean {
   if (targetIntents.length === 0 || targetIntents.includes('general')) return true
 
   const tags = SKILLS_WITH_TAGS.find((el) => el.id === skillName)?.tags || ['general']
 
-  // 检查技能和目标意图是否有交集
   return tags.some((el) => targetIntents.includes(el))
 }

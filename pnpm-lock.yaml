@@ -20,6 +20,12 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@agenxy/agent':
+        specifier: workspace:*
+        version: link:../../packages/agent
+      '@agenxy/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@ai-sdk/openai':
         specifier: ^1.3.22
         version: 1.3.24(zod@3.25.76)
@@ -256,6 +262,31 @@ importers:
       tailwindcss:
         specifier: ^3.4.3
         version: 3.4.19(yaml@2.9.0)
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
+  packages/agent:
+    dependencies:
+      '@agenxy/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@ai-sdk/openai':
+        specifier: ^1.3.22
+        version: 1.3.24(zod@3.25.76)
+      ai:
+        specifier: ^4.3.16
+        version: 4.3.19(react@18.3.1)(zod@3.25.76)
+      zod:
+        specifier: ^3.24.2
+        version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
+  packages/shared:
+    devDependencies:
       typescript:
         specifier: ^5.8.3
         version: 5.9.3

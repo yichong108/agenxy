@@ -1,10 +1,3 @@
-import { streamText } from 'ai'
-
-import { agentLog } from '@/main/agent/agent-log'
-import { StreamBatcher } from '@/main/agent/batcher'
-import { isRejectedToolResult } from '@/main/agent/hitl'
-import { getAuxChatModel } from '@/main/agent/llm'
-import { isAbortError } from '@/main/agent/run-utils'
 import {
   type AgentComposerMode,
   type AppSettings,
@@ -13,7 +6,14 @@ import {
   type StreamEvent,
   type ToolCallEvent,
   type ToolTimelineEvent
-} from '@/shared/ipc'
+} from '@agenxy/shared'
+import { streamText } from 'ai'
+
+import { StreamBatcher } from '../batcher.js'
+import { isRejectedToolResult } from '../hitl.js'
+import { getAuxChatModel } from '../llm.js'
+import { agentLog } from '../logger.js'
+import { isAbortError } from '../run-utils.js'
 
 const PLAN_STEP_TIMEOUT_MS = 14_000
 const PLAN_STEP_MAX_CHARS = 480
@@ -30,22 +30,13 @@ export type PlanAfterToolCoordinatorOptions = {
   settings: AppSettings
   signal: AbortSignal
   emit: (event: StreamEvent) => void
-  /** 可变 timeline 数组，plan 步骤写入其中供持久化 */
   runToolEvents: ToolTimelineEvent[]
 }
 
 export type PlanAfterToolCoordinator = {
-  /**
-   * 工具执行结束后串行触发 plan-after-tool（ReAct tools → plan → agent 语义）。
-   *
-   * @param ended - 已完成的工具 timeline 事件
-   */
   afterToolEnd: (ended: ToolEndedCall) => Promise<void>
 }
 
-/**
- * 流式生成工具后的「下一步计划」文案。
- */
 async function streamPlanAfterTool(
   settings: AppSettings,
   userText: string,
@@ -100,10 +91,8 @@ async function streamPlanAfterTool(
 /**
  * 创建 plan-after-tool 协调器：在每次工具结束后串行执行，再交还 ReAct 循环。
  *
- * Plan 模式跳过；Build/Ask 模式启用。
- *
  * @param opts - 运行上下文与 timeline 可变引用
- * @returns afterToolEnd 回调，供 ToolExecutorContext 在工具返回前 await
+ * @returns afterToolEnd 回调
  */
 export function createPlanAfterToolCoordinator(
   opts: PlanAfterToolCoordinatorOptions

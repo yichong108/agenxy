@@ -33,6 +33,7 @@ This file guides AI assistants and contributors working on this repository.
 - Keep diffs focused on the requested task; avoid unrelated refactors.
 - Match existing naming, imports, and patterns in touched files.
 - Run checks the project defines (e.g. `pnpm typecheck`, `pnpm lint`) before opening a PR when feasible.
+- 需要lint:fix并修复
 
 ### 注释规范
 

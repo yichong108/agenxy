@@ -1,8 +1,13 @@
+import {
+  defineTool,
+  HITL_EXEMPT_TOOL_NAMES,
+  type NamedTool,
+  type ToolExecutorContext,
+  type UserIntent
+} from '@agenxy/agent'
+import { type AgentComposerMode, type AppSettings, MAX_TERMINAL_OUTPUT_CHARS } from '@agenxy/shared'
 import { z } from 'zod'
 
-import { defineTool, type NamedTool, type ToolExecutorContext } from '@/main/agent/define-tool'
-import { HITL_EXEMPT_TOOL_NAMES } from '@/main/agent/hitl'
-import type { UserIntent } from '@/main/agent/intent-classifier'
 import { buildSkillBundle } from '@/main/agent/skills/index'
 import { buildMcpTools } from '@/main/mcp/mcp-runtime'
 import {
@@ -28,9 +33,8 @@ import {
 import { GREP_TOOL_DESCRIPTION, grepWorkspace } from '@/main/tools/grep'
 import { runCommand } from '@/main/tools/terminal'
 import { isTavilyConfigured, tavilyWebSearch } from '@/main/tools/web-search'
-import { type AgentComposerMode, type AppSettings, MAX_TERMINAL_OUTPUT_CHARS } from '@/shared/ipc'
 
-export type { NamedTool, ToolExecutorContext } from '@/main/agent/define-tool'
+export type { NamedTool, ToolExecutorContext } from '@agenxy/agent'
 
 /**
  * Agent 工具集与 prompt 片段（skills / MCP hints）。

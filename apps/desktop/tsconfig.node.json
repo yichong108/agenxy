@@ -13,7 +13,9 @@
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@agenxy/agent": ["../../packages/agent/src/index.ts"],
+      "@agenxy/shared": ["../../packages/shared/src/index.ts"]
     }
   },
   "include": ["electron.vite.config.ts", "src/main/**/*", "src/preload/**/*", "src/shared/**/*"]

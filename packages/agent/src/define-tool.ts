@@ -1,4 +1,7 @@
+import type { ToolTimelineEvent } from '@agenxy/shared'
 import type { z } from 'zod'
+
+import type { ToolEndedCall } from './graph/plan-after-tool.js'
 
 /**
  * Agent 工具定义：带 name、schema 与 invoke，供 ReAct 循环绑定。
@@ -23,11 +26,9 @@ type ToolDefinition<T extends z.ZodTypeAny> = {
 export type ToolExecutorContext = {
   runId: string
   traceId: string
-  onTool: (e: import('@/shared/ipc').ToolTimelineEvent) => void
+  onTool: (e: ToolTimelineEvent) => void
   /** 工具 end 后、结果返回 ReAct 前 await（plan-after-tool 串行） */
-  afterToolEnd?: (
-    ended: import('@/main/agent/graph/plan-after-tool').ToolEndedCall
-  ) => Promise<void>
+  afterToolEnd?: (ended: ToolEndedCall) => Promise<void>
 }
 
 /**

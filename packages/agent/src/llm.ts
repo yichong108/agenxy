@@ -1,7 +1,10 @@
 import { createOpenAI } from '@ai-sdk/openai'
+import {
+  type AppSettings,
+  getActiveProviderProfile,
+  type ModelProviderId
+} from '@agenxy/shared'
 import type { LanguageModel } from 'ai'
-
-import { type AppSettings, getActiveProviderProfile, type ModelProviderId } from '@/shared/ipc'
 
 function ensureOpenAiV1BaseUrl(baseUrl: string, fallback: string): string {
   const u = baseUrl.trim() || fallback

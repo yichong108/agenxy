@@ -2,11 +2,9 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
+import { type NamedTool, shouldLoadSkill, type UserIntent } from '@agenxy/agent'
 import { z } from 'zod'
 
-import type { NamedTool } from '@/main/agent/define-tool'
-import type { UserIntent } from '@/main/agent/intent-classifier'
-import { shouldLoadSkill } from '@/main/agent/intent-classifier'
 import {
   getBundledSkillsSourceDir,
   marketSkillsInstallRoot,
@@ -34,21 +32,8 @@ const MAX_LOADED_SKILLS = 96
 
 export const MAX_SKILL_MD_SIZE_BYTES = 10 * 1024 * 1024
 
-export type SkillTagEntry = {
-  id: string
-  tags: UserIntent[]
-}
-
-export const SKILLS_WITH_TAGS: readonly SkillTagEntry[] = [
-  { id: 'bug_fix', tags: ['coding'] },
-  { id: 'code_review', tags: ['coding'] },
-  { id: 'debug_workflow', tags: ['coding'] },
-  { id: 'feature_implement', tags: ['coding'] },
-  { id: 'release_workflow', tags: ['coding'] },
-  { id: 'triage_workflow', tags: ['coding'] },
-  { id: 'frontend_slides', tags: ['general'] },
-  { id: 'frontend_slides_ppt_controlled', tags: ['general'] }
-]
+export type { SkillTagEntry } from '@agenxy/agent'
+export { SKILLS_WITH_TAGS } from '@agenxy/agent'
 
 type MarkdownCollectOpts = {
   /** Only skip these top-level subdirectories when `current === rootAbs` */

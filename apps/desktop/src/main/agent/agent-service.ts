@@ -1,27 +1,26 @@
-﻿import type { WebContents } from 'electron'
-
-import { agentLog } from '@/main/agent/agent-log'
-import { StreamBatcher } from '@/main/agent/batcher'
-import type { ReactRunBridge } from '@/main/agent/graph/react-run-bridge'
-import { runAgenxyGraph } from '@/main/agent/graph/run-graph'
-import {
-  cancelAllHitlWaiters,
-  formatToolArgs,
-  type HitlUserDecision,
-  type PendingToolCall,
-  submitHitlDecision,
-  TOOL_REJECTED_RESULT
-} from '@/main/agent/hitl'
-import {
+﻿import {
+  agentLog,
   type AgentMessage,
+  AGENXY_USER_DISPLAY_KW,
   aiMessage,
+  cancelAllHitlWaiters,
+  ConcurrencyQueue,
   contentToText,
   findLastAiMessage,
+  formatToolArgs,
   getAgentMessageType,
+  type HitlUserDecision,
   humanMessage,
-  isInternalAgentMessage
-} from '@/main/agent/messages'
-import { ConcurrencyQueue } from '@/main/agent/queue'
+  isInternalAgentMessage,
+  type PendingToolCall,
+  type ReactRunBridge,
+  StreamBatcher,
+  submitHitlDecision,
+  TOOL_REJECTED_RESULT
+} from '@agenxy/agent'
+import type { WebContents } from 'electron'
+
+import { runAgenxyGraph } from '@/main/agent/run-bridge'
 import { flushLangfuseTracing } from '@/main/langfuse'
 import { getSessionMessages, getSettings, getWorkspaceById, setSessionMessages } from '@/main/store'
 import { killCommand } from '@/main/tools/terminal'
@@ -37,20 +36,17 @@ import {
   type ToolTimelineEvent
 } from '@/shared/ipc'
 
-/** @deprecated 从 `@/main/agent/constants` 导入 */
-export { AGENXY_USER_DISPLAY_KW } from '@/main/agent/constants'
+/** @deprecated 从 `@agenxy/agent` 导入 */
+export { AGENXY_USER_DISPLAY_KW }
 
 /** @deprecated 从 `@/main/agent/agent-log` 导入 */
 export { agentLog } from '@/main/agent/agent-log'
 
 type SessionRuntime = {
   workspaceId: string
-  /** System prompt is not included; it's appended at each request */
   messages: AgentMessage[]
   controller: AbortController | null
-  /** Consistent with terminal key for the session */
   terminalKey: string
-  /** HITL 暂停：等待用户审批（经 IPC 桥接） */
   pendingHitl?: {
     hitlId: string
     threadId: string

@@ -1,5 +1,7 @@
 /** IPC 与流式事件类型（主进程 / 预加载 / 渲染层共享） */
 
+import type { ToolTimelineEvent } from '@agenxy/shared'
+
 export const IPC = {
   WORKSPACE_SELECT: 'workspace:select',
   WORKSPACE_GET: 'workspace:get',
@@ -126,144 +128,67 @@ export type TerminalOutputEvent = {
   stream: 'stdout' | 'stderr'
 }
 
-export type ModelProviderId = 'deepseek'
+export type {
+  AgentComposerMode,
+  AgentSendOptions,
+  AppSettings,
+  McpServerEntry,
+  MemoryEntry,
+  MemoryExtractionDelta,
+  ModelProviderId,
+  ProviderProfile,
+  SettingsFormValues,
+  SkillInstallKind,
+  SkillsInstallResult,
+  SkillsRuntimeState,
+  SkillsUninstallPayload,
+  SkillsUninstallResult,
+  SkillUiEntry,
+  StreamDoneEvent,
+  StreamErrorEvent,
+  StreamEvent,
+  StreamHitlRequiredEvent,
+  StreamIntentClassifiedEvent,
+  StreamPlanDeltaEvent,
+  StreamPlanStepEndEvent,
+  StreamPlanStepStartEvent,
+  StreamQueuedEvent,
+  StreamRunStartEvent,
+  StreamStreamResetEvent,
+  StreamTextDeltaEvent,
+  StreamToolEvent,
+  ToolCallEvent,
+  ToolErrorEvent,
+  ToolPlanStepEvent,
+  ToolTimelineEvent,
+  UserMemoriesState,
+  UserMemoriesSyncPayload
+} from '@agenxy/shared'
+export {
+  applySettingsForm,
+  defaultProviderProfiles,
+  defaultSettings,
+  getActiveProviderProfile,
+  MAX_CONCURRENT_AGENT_STREAMS,
+  MAX_MCP_SERVERS,
+  MAX_MEMORY_CONTENT_CHARS,
+  MAX_MEMORY_ENTRIES,
+  MAX_MEMORY_PROMPT_CHARS,
+  MAX_TERMINAL_OUTPUT_CHARS,
+  mergeFormIntoProviderProfiles,
+  normalizeComposerMode,
+  parseMcpServersFromUnknown,
+  settingsToFormValues,
+  STREAM_FLUSH_CHARS,
+  STREAM_FLUSH_MS
+} from '@agenxy/shared'
 
-/**
- * 主输入区发送模式（对齐 Cursor）：
- * - build：可写文件、终端、技能/MCP
- * - ask：只读问答
- * - plan：只读探索并输出可执行计划，不修改工作区
- */
-export type AgentComposerMode = 'build' | 'ask' | 'plan'
+export type HitlResumeDecision = 'accept' | 'reject'
 
-export function normalizeComposerMode(mode?: AgentComposerMode): AgentComposerMode {
-  if (mode === 'ask' || mode === 'plan') return mode
-  return 'build'
-}
-
-export type AgentSendOptions = {
-  mode?: AgentComposerMode
-  /**
-   * Plan 模式确认执行时附带的计划正文（不显示在输入框）。
-   * 与用户输入一并发给模型；用户消息气泡仅展示 `userDisplayText` 或用户原文。
-   */
-  planContext?: string
-  /** 与 planContext 搭配：持久化/展示用的用户消息文案 */
-  userDisplayText?: string
-}
-
-/** 用户配置的 stdio MCP 服务器（与 Cursor MCP 配置形态相近） */
-export type McpServerEntry = {
+export type HitlToolCallPayload = {
   id: string
-  /** 展示名 */
   name: string
-  enabled: boolean
-  /** 可执行文件，如 npx、node、uvx */
-  command: string
-  args: string[]
-  /** 子进程工作目录，可选 */
-  cwd?: string
-  /**
-   * 追加环境变量（持久化可为任意 JSON 结构）。
-   * 启动子进程时非字符串值会经 JSON.stringify 转为字符串再传入 OS 环境（与 Node spawn 要求一致）。
-   */
-  env?: Record<string, unknown>
-}
-
-/** 与设置持久化、单次导入共用上限 */
-export const MAX_MCP_SERVERS = 24
-
-function newMcpEntryId(): string {
-  const c = globalThis.crypto
-  if (c && typeof c.randomUUID === 'function') return c.randomUUID()
-  return `mcp-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
-}
-
-function parseMcpEnvFromUnknown(envRaw: unknown): Record<string, unknown> | undefined {
-  let v = envRaw
-  if (typeof v === 'string' && v.trim()) {
-    try {
-      v = JSON.parse(v.trim()) as unknown
-    } catch {
-      return undefined
-    }
-  }
-  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined
-  const envObj: Record<string, unknown> = {}
-  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
-    if (val === undefined) continue
-    envObj[k] = val
-  }
-  return Object.keys(envObj).length > 0 ? envObj : undefined
-}
-
-function parseOneMcpServer(
-  o: Record<string, unknown>,
-  keyName?: string,
-  /** Cursor 风格对象常省略 enabled，默认 true；本应用数组项历史行为为省略则 false */
-  defaultEnabledWhenOmitted = false
-): McpServerEntry | null {
-  const command = typeof o.command === 'string' ? o.command.trim() : ''
-  if (!command) return null
-  const id = typeof o.id === 'string' && o.id.trim() ? o.id.trim() : newMcpEntryId()
-  const nameFromField = typeof o.name === 'string' && o.name.trim() ? o.name.trim() : ''
-  const name = nameFromField || (keyName?.trim() ? keyName.trim() : id)
-  const args = Array.isArray(o.args)
-    ? (o.args as unknown[]).filter((a): a is string => typeof a === 'string')
-    : []
-  const enabled = typeof o.enabled === 'boolean' ? o.enabled : defaultEnabledWhenOmitted
-  const env = parseMcpEnvFromUnknown(o.env)
-  const cwd = typeof o.cwd === 'string' && o.cwd.trim() ? o.cwd.trim() : undefined
-  const entry: McpServerEntry = { id, name, enabled, command, args }
-  if (env) entry.env = env
-  if (cwd) entry.cwd = cwd
-  return entry
-}
-
-/**
- * 解析 MCP 配置 JSON，支持：
- * - Cursor 形态：`{ "mcpServers": { "mysql": { "command", "args", "env?", ... } } }`（对象键为展示名）
- * - 数组形态：`McpServerEntry[]`（与本应用列表一致）
- * - `{ "mcpServers": [ ... ] }`
- */
-export function parseMcpServersFromUnknown(raw: unknown): McpServerEntry[] {
-  const out: McpServerEntry[] = []
-  const push = (e: McpServerEntry) => {
-    if (out.length >= MAX_MCP_SERVERS) return
-    out.push(e)
-  }
-
-  if (raw == null) return []
-
-  if (Array.isArray(raw)) {
-    for (const x of raw) {
-      if (!x || typeof x !== 'object') continue
-      const e = parseOneMcpServer(x as Record<string, unknown>, undefined, false)
-      if (e) push(e)
-    }
-    return out
-  }
-
-  if (typeof raw === 'object' && !Array.isArray(raw)) {
-    const root = raw as Record<string, unknown>
-    const ms = root.mcpServers
-    if (ms === undefined) return []
-
-    if (Array.isArray(ms)) {
-      return parseMcpServersFromUnknown(ms)
-    }
-
-    if (typeof ms === 'object' && ms !== null && !Array.isArray(ms)) {
-      for (const [key, val] of Object.entries(ms as Record<string, unknown>)) {
-        if (!val || typeof val !== 'object' || Array.isArray(val)) continue
-        const e = parseOneMcpServer(val as Record<string, unknown>, key, true)
-        if (e) push(e)
-      }
-      return out
-    }
-  }
-
-  return []
+  args: string
 }
 
 export type McpProbeToolInfo = {
@@ -288,65 +213,6 @@ export type McpWarmupStatus = {
   inFlight: boolean
 }
 
-/** 单个模型提供方的连接信息（分提供方持久化） */
-export type ProviderProfile = {
-  baseUrl: string
-  model: string
-  apiKey: string
-}
-
-/** 全局用户长期记忆单条 */
-export type MemoryEntry = {
-  id: string
-  content: string
-  source: 'manual' | 'auto'
-  createdAt: number
-  updatedAt: number
-  /** 自动提取时的来源会话 */
-  sourceSessionId?: string
-}
-
-export type UserMemoriesState = {
-  items: MemoryEntry[]
-}
-
-export type MemoryExtractionDelta = {
-  added: number
-  updated: number
-  deleted: number
-}
-
-export type UserMemoriesSyncPayload = UserMemoriesState & {
-  lastExtractionDelta?: MemoryExtractionDelta
-}
-
-/** 记忆条数硬上限 */
-export const MAX_MEMORY_ENTRIES = 64
-/** 单条记忆内容最大字符 */
-export const MAX_MEMORY_CONTENT_CHARS = 400
-/** 注入 system prompt 的记忆块总字符上限 */
-export const MAX_MEMORY_PROMPT_CHARS = 3200
-
-export type AppSettings = {
-  provider: ModelProviderId
-  /** 各提供方独立配置；切换提供方时从对应项回显 */
-  providerProfiles: Record<ModelProviderId, ProviderProfile>
-  /** ReAct 模型-工具循环最大步数 */
-  maxAgentLoopSteps: number
-  /** 单次 agent 运行超时（毫秒） */
-  agentRunTimeoutMs: number
-  /** Build 模式：工具执行前需用户批准 */
-  toolApprovalInBuild: boolean
-  /** Tavily 联网搜索 API Key（https://tavily.com），空则禁用检索能力 */
-  tavilyApiKey: string
-  /** 已保存的 MCP（stdio）服务器列表；启用项会在 Agent 工具流中挂载 */
-  mcpServers: McpServerEntry[]
-  /** 是否在 Agent 运行时注入全局用户记忆 */
-  memoryEnabled: boolean
-  /** 对话成功后是否自动提取/更新记忆 */
-  autoExtractMemory: boolean
-}
-
 /** 市场 catalog 单项（列表来自 ClawHub，安装包 URL 为官方 download 接口） */
 export type SkillsMarketCatalogItem = {
   id: string
@@ -359,127 +225,6 @@ export type SkillsMarketCatalogItem = {
 
 export type SkillsMarketCatalog = {
   items: SkillsMarketCatalogItem[]
-}
-
-export type SkillInstallKind = 'builtin_code' | 'builtin_packaged' | 'market' | 'legacy'
-
-/** 渲染层「已安装」表格行 */
-export type SkillUiEntry = {
-  /** 稳定键（表格 rowKey） */
-  key: string
-  kind: SkillInstallKind
-  /** 技能工具名（skill_*） */
-  toolName: string
-  title: string
-  description: string
-  sourceLabel: string
-  /** 市场安装目录名（`skills/market/<id>`） */
-  marketFolderId?: string
-  /** 兼容技能目录相对 `userData/skills`（不含 market/.cache） */
-  legacyFolderRelative?: string
-}
-
-export type SkillsRuntimeState = {
-  builtinCode: SkillUiEntry[]
-  builtinPackaged: SkillUiEntry[]
-  installedMarket: SkillUiEntry[]
-  legacyUser: SkillUiEntry[]
-}
-
-export type SkillsInstallResult = { ok: true } | { ok: false; error: string }
-
-export type SkillsUninstallResult = { ok: true } | { ok: false; error: string }
-
-export type SkillsUninstallPayload =
-  | { kind: 'market'; folderId: string }
-  | { kind: 'legacy'; legacyFolderRelative: string }
-
-/** 主进程全局 Agent 流并发上限（代码固定，不写入用户设置） */
-export const MAX_CONCURRENT_AGENT_STREAMS = 3
-
-/** 流式 IPC 合并间隔（内置，不暴露设置） */
-export const STREAM_FLUSH_MS = 32
-/** 流式 IPC 合并字符数（内置） */
-export const STREAM_FLUSH_CHARS = 320
-/** 终端/命令单条输出最大字符（内置） */
-export const MAX_TERMINAL_OUTPUT_CHARS = 10000
-
-export const defaultProviderProfiles = (): Record<ModelProviderId, ProviderProfile> => ({
-  deepseek: {
-    baseUrl: 'https://api.deepseek.com',
-    model: 'deepseek-chat',
-    apiKey: ''
-  }
-})
-
-export const defaultSettings: AppSettings = {
-  provider: 'deepseek',
-  providerProfiles: defaultProviderProfiles(),
-  maxAgentLoopSteps: 24,
-  agentRunTimeoutMs: 120_000,
-  toolApprovalInBuild: true,
-  tavilyApiKey: '',
-  mcpServers: [],
-  memoryEnabled: true,
-  autoExtractMemory: true
-}
-
-/** 当前选中提供方的连接配置 */
-export function getActiveProviderProfile(s: AppSettings): ProviderProfile {
-  return s.providerProfiles[s.provider]
-}
-
-/** 设置弹窗表单用的扁平字段（含当前提供方的 baseUrl/model/apiKey） */
-export type SettingsFormValues = Pick<
-  AppSettings,
-  'maxAgentLoopSteps' | 'agentRunTimeoutMs' | 'tavilyApiKey'
-> & {
-  baseUrl: string
-  model: string
-  apiKey: string
-}
-
-export function settingsToFormValues(s: AppSettings): SettingsFormValues {
-  const p = getActiveProviderProfile(s)
-  return {
-    baseUrl: p.baseUrl,
-    model: p.model,
-    apiKey: p.apiKey,
-    maxAgentLoopSteps: s.maxAgentLoopSteps,
-    agentRunTimeoutMs: s.agentRunTimeoutMs,
-    tavilyApiKey: s.tavilyApiKey ?? ''
-  }
-}
-
-/** 将弹窗当前表单写入对应提供方 profile，其余提供方保持 profiles 中已有值 */
-export function mergeFormIntoProviderProfiles(
-  profiles: Record<ModelProviderId, ProviderProfile>,
-  form: SettingsFormValues
-): Record<ModelProviderId, ProviderProfile> {
-  const next: Record<ModelProviderId, ProviderProfile> = {
-    deepseek: { ...profiles.deepseek }
-  }
-  next.deepseek = {
-    baseUrl: form.baseUrl.trim(),
-    model: form.model.trim(),
-    apiKey: (form.apiKey ?? '').trim()
-  }
-  return next
-}
-
-export function applySettingsForm(
-  prev: AppSettings,
-  form: SettingsFormValues,
-  providerProfiles: Record<ModelProviderId, ProviderProfile>
-): AppSettings {
-  return {
-    ...prev,
-    provider: 'deepseek',
-    providerProfiles,
-    maxAgentLoopSteps: form.maxAgentLoopSteps,
-    agentRunTimeoutMs: form.agentRunTimeoutMs,
-    tavilyApiKey: (form.tavilyApiKey ?? '').trim()
-  }
 }
 
 export type RendererUiState = {
@@ -574,141 +319,3 @@ export type ChatMessage = {
   /** 附带的工具/时间线（仅用于 UI 恢复，主进程有完整 tool 过程） */
   toolEvents?: ToolTimelineEvent[]
 }
-
-type RunRef = {
-  traceId?: string
-  runId?: string
-}
-
-type Timing = {
-  timestampMs?: number
-  durationMs?: number
-}
-
-type RunMeta = RunRef & Timing
-
-export type ToolCallEvent = {
-  kind: 'tool'
-  id: string
-  name: string
-  status: 'start' | 'end'
-  args?: string
-  result?: string
-} & RunMeta
-
-export type ToolErrorEvent = {
-  kind: 'error'
-  message: string
-  errorCode?: string
-} & RunMeta
-
-/** 单次工具完成后的「下一步计划」（对齐 Cursor plan next step） */
-export type ToolPlanStepEvent = {
-  kind: 'plan'
-  id: string
-  afterToolId: string
-  toolName: string
-  status: 'streaming' | 'end'
-  text: string
-} & RunMeta
-
-export type ToolTimelineEvent = ToolCallEvent | ToolErrorEvent | ToolPlanStepEvent
-
-type StreamBase = {
-  sessionId: string
-} & RunRef
-
-export type StreamTextDeltaEvent = StreamBase & {
-  type: 'text-delta'
-  text: string
-}
-
-/** 意图分类完成（Build 模式下按意图加载技能子集） */
-export type StreamIntentClassifiedEvent = StreamBase &
-  RunRef & {
-    type: 'intent-classified'
-    intent: string
-    skillNames: string[]
-    error?: string
-  }
-
-export type StreamToolEvent = StreamBase & {
-  type: 'tool'
-  event: ToolTimelineEvent
-}
-
-export type StreamErrorEvent = StreamBase &
-  Timing & {
-    type: 'error'
-    message: string
-    errorCode?: string
-  }
-
-export type StreamDoneEvent = StreamBase &
-  Timing & {
-    type: 'done'
-  }
-
-export type StreamQueuedEvent = StreamBase & {
-  type: 'queued'
-  position: number
-}
-
-export type StreamRunStartEvent = StreamBase & {
-  type: 'run-start'
-  timestampMs?: number
-}
-
-/** 工具结果回灌后，开始流式「下一步计划」 */
-export type StreamPlanStepStartEvent = StreamBase & {
-  type: 'plan-step-start'
-  stepId: string
-  afterToolId: string
-  toolName: string
-}
-
-export type StreamPlanDeltaEvent = StreamBase & {
-  type: 'plan-delta'
-  stepId: string
-  text: string
-}
-
-export type StreamPlanStepEndEvent = StreamBase & {
-  type: 'plan-step-end'
-  stepId: string
-}
-
-export type HitlToolCallPayload = {
-  id: string
-  name: string
-  args: string
-}
-
-/** ReAct 在 tools 节点前中断，等待用户批准/拒绝 */
-export type StreamHitlRequiredEvent = StreamBase & {
-  type: 'hitl-required'
-  hitlId: string
-  toolCalls: HitlToolCallPayload[]
-}
-
-/** 丢弃当前 run 已流式输出的 assistant 草稿（HITL 中断/拒绝后） */
-export type StreamStreamResetEvent = StreamBase & {
-  type: 'stream-reset'
-}
-
-export type HitlResumeDecision = 'accept' | 'reject'
-
-/** StreamEvent 根据 Agent 一次 run 生命周期的阶段变化定义。 */
-export type StreamEvent =
-  | StreamTextDeltaEvent
-  | StreamIntentClassifiedEvent
-  | StreamPlanStepStartEvent
-  | StreamPlanDeltaEvent
-  | StreamPlanStepEndEvent
-  | StreamHitlRequiredEvent
-  | StreamStreamResetEvent
-  | StreamToolEvent
-  | StreamErrorEvent
-  | StreamDoneEvent
-  | StreamQueuedEvent
-  | StreamRunStartEvent

@@ -27,8 +27,8 @@ export class StreamBatcher {
   flush(): void {
     if (this.timer) {
       clearTimeout(this.timer)
-      this.timer = null
     }
+    this.timer = null
     if (!this.buffer) return
     const t = this.buffer
     this.buffer = ''

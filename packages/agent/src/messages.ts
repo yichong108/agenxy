@@ -1,4 +1,4 @@
-import { AGENXY_INTERNAL_KW, AGENXY_USER_DISPLAY_KW } from '@/main/agent/constants'
+import { AGENXY_INTERNAL_KW, AGENXY_USER_DISPLAY_KW } from './constants.js'
 
 /**
  * 模型发起的工具调用（ReAct 循环中的 assistant tool_calls）。
@@ -11,8 +11,6 @@ export type AgentToolCall = {
 
 /**
  * Agent 会话消息（替代 LangChain BaseMessage）。
- *
- * 使用 `type` 字段区分角色，与历史 `getBaseMessageType` 语义一致。
  */
 export type AgentMessage =
   | { type: 'human'; content: string; displayText?: string }
@@ -186,5 +184,4 @@ export function toModelMessages(messages: AgentMessage[]): Array<{
 /** @deprecated 使用 getAgentMessageType */
 export const getBaseMessageType = getAgentMessageType
 
-/** 内部消息 additional_kwargs 键（兼容旧持久化逻辑引用） */
 export { AGENXY_INTERNAL_KW, AGENXY_USER_DISPLAY_KW }

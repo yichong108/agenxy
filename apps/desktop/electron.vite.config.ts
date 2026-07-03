@@ -19,6 +19,8 @@ function readGitShortHash(cwd: string): string {
   }
 }
 const aliasSrc = resolve(__dirname, 'src')
+const aliasAgent = resolve(__dirname, '../../packages/agent/src/index.ts')
+const aliasShared = resolve(__dirname, '../../packages/shared/src/index.ts')
 /** monaco-themes 未在 package exports 中暴露 themes/，需直连磁盘路径供 Vite 解析 */
 const monacoGithubLightThemeJson = resolve(
   rootDir,
@@ -33,10 +35,16 @@ export default defineConfig({
     },
     resolve: {
       alias: {
-        '@': aliasSrc
+        '@': aliasSrc,
+        '@agenxy/agent': aliasAgent,
+        '@agenxy/shared': aliasShared
       }
     },
-    plugins: [externalizeDepsPlugin()],
+    plugins: [
+      externalizeDepsPlugin({
+        exclude: ['@agenxy/agent', '@agenxy/shared']
+      })
+    ],
     build: {
       rollupOptions: {
         input: {
@@ -48,10 +56,16 @@ export default defineConfig({
   preload: {
     resolve: {
       alias: {
-        '@': aliasSrc
+        '@': aliasSrc,
+        '@agenxy/agent': aliasAgent,
+        '@agenxy/shared': aliasShared
       }
     },
-    plugins: [externalizeDepsPlugin()],
+    plugins: [
+      externalizeDepsPlugin({
+        exclude: ['@agenxy/agent', '@agenxy/shared']
+      })
+    ],
     build: {
       // 沙箱内 preload 以非 ES 模块方式执行，需输出 CJS
       lib: {

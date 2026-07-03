@@ -1,0 +1,22 @@
+{
+  "name": "@agenxy/agent",
+  "version": "0.0.0",
+  "description": "Agenxy agent core — ReAct loop, messages, HITL, pipeline",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@agenxy/shared": "workspace:*",
+    "@ai-sdk/openai": "^1.3.22",
+    "ai": "^4.3.16",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

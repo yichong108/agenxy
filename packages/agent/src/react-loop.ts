@@ -1,8 +1,8 @@
-import { tool, type ToolSet, type TypedToolCall } from 'ai'
+import { type AppSettings } from '@agenxy/shared'
+import { tool, type CoreMessage, type ToolSet } from 'ai'
 import { streamText } from 'ai'
 
-import { agentLog } from '@/main/agent/agent-log'
-import type { NamedTool } from '@/main/agent/define-tool'
+import type { NamedTool } from './define-tool.js'
 import {
   buildRejectionStateMessages,
   extractPendingToolCalls,
@@ -11,10 +11,10 @@ import {
   partitionPendingToolCalls,
   type PendingToolCall,
   waitForHitlDecision
-} from '@/main/agent/hitl'
-import { getChatModel } from '@/main/agent/llm'
-import { type AgentMessage, aiMessage, toModelMessages, toolMessage } from '@/main/agent/messages'
-import type { AppSettings } from '@/shared/ipc'
+} from './hitl.js'
+import { getChatModel } from './llm.js'
+import { agentLog } from './logger.js'
+import { type AgentMessage, aiMessage, toModelMessages, toolMessage } from './messages.js'
 
 export type ReactAgentRunContext = {
   sessionId: string
@@ -35,7 +35,7 @@ export type ReactAgentRunContext = {
  * @returns AI SDK tools 映射
  */
 export function buildToolDeclarations(namedTools: NamedTool[]): ToolSet {
-  const set: ToolSet = {}
+  const set = {} as ToolSet
   for (const t of namedTools) {
     set[t.name] = tool({
       description: t.description,
@@ -43,19 +43,11 @@ export function buildToolDeclarations(namedTools: NamedTool[]): ToolSet {
       execute: async () => {
         throw new Error('Tool execution is handled manually in the ReAct loop')
       }
-    })
+    }) as ToolSet[string]
   }
   return set
 }
 
-/**
- * 执行一批待处理工具调用并写入 ToolMessage。
- *
- * @param pending - 待执行工具调用
- * @param toolsByName - 工具名到实现的映射
- * @param signal - 可选取消信号
- * @returns tool 结果消息列表
- */
 async function executePendingToolCalls(
   pending: PendingToolCall[],
   toolsByName: Map<string, NamedTool>,
@@ -132,7 +124,7 @@ export async function runReactLoop(
     const result = streamText({
       model,
       system: systemPrompt,
-      messages: toModelMessages(working),
+      messages: toModelMessages(working) as CoreMessage[],
       tools: toolSet,
       abortSignal: ac.signal
     })
@@ -149,7 +141,7 @@ export async function runReactLoop(
 
     const assistantMsg = aiMessage(
       text,
-      toolCalls?.map((tc: TypedToolCall<ToolSet>) => ({
+      toolCalls?.map((tc) => ({
         id: tc.toolCallId,
         name: tc.toolName,
         args: ((tc as { args?: Record<string, unknown> }).args ??

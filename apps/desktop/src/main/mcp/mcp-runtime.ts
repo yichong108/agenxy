@@ -1,11 +1,11 @@
-﻿import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+﻿import type { NamedTool } from '@agenxy/agent'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import {
   getDefaultEnvironment,
   StdioClientTransport
 } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { z } from 'zod'
 
-import type { NamedTool } from '@/main/agent/define-tool'
 import { logScope } from '@/main/logger'
 import type {
   AppSettings,

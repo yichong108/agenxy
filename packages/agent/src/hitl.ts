@@ -1,6 +1,6 @@
-import { AGENXY_INTERNAL_KW } from '@/main/agent/constants'
-import type { AgentMessage, AgentToolCall } from '@/main/agent/messages'
-import { systemMessage, toolMessage } from '@/main/agent/messages'
+import { AGENXY_INTERNAL_KW } from './constants.js'
+import type { AgentMessage, AgentToolCall } from './messages.js'
+import { systemMessage, toolMessage } from './messages.js'
 
 export { AGENXY_INTERNAL_KW }
 
@@ -18,13 +18,6 @@ export type PendingToolCall = {
 
 export type HitlUserDecision = 'accept' | 'reject'
 
-/**
- * IPC 桥接：等待 renderer 通过 submitHitlDecision 传入用户决策。
- *
- * @param hitlId - 审批批次 ID
- * @param signal - 可选 AbortSignal
- * @returns 用户 accept / reject
- */
 type HitlWaiter = {
   resolve: (decision: HitlUserDecision) => void
   reject: (err: Error) => void
@@ -36,6 +29,13 @@ export function makeHitlId(runId: string, index: number): string {
   return `hitl-${runId}-${index}`
 }
 
+/**
+ * 等待用户 HITL 决策（由宿主通过 submitHitlDecision 提交）。
+ *
+ * @param hitlId - 审批批次 ID
+ * @param signal - 可选 AbortSignal
+ * @returns accept / reject
+ */
 export function waitForHitlDecision(
   hitlId: string,
   signal?: AbortSignal
@@ -73,10 +73,10 @@ export function submitHitlDecision(hitlId: string, decision: HitlUserDecision): 
 
 export function cancelAllHitlWaiters(reason = 'Cancelled'): void {
   const err = new Error(reason)
-  for (const [id, waiter] of waiters) {
-    waiters.delete(id)
+  for (const [, waiter] of waiters) {
     waiter.reject(err)
   }
+  waiters.clear()
 }
 
 export function cancelHitlWaiter(hitlId: string, reason = 'Cancelled'): void {
@@ -102,7 +102,6 @@ export function extractPendingToolCalls(messages: AgentMessage[]): PendingToolCa
   }))
 }
 
-/** Tools that may run without user approval in Build mode HITL. */
 export const HITL_EXEMPT_TOOL_NAMES = new Set([
   'read_file',
   'list_dir',

@@ -1,7 +1,7 @@
+import { getAuxChatModel } from '@agenxy/agent'
 import { generateObject } from 'ai'
 import { z } from 'zod'
 
-import { getAuxChatModel } from '@/main/agent/llm'
 import { logScope } from '@/main/logger'
 import {
   applyMemoryExtractionActions,
