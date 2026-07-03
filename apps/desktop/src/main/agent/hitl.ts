@@ -1,13 +1,6 @@
-import {
-  AIMessage,
-  type BaseMessage,
-  isAIMessage,
-  SystemMessage,
-  ToolMessage
-} from '@langchain/core/messages'
-import { Command, MemorySaver } from '@langchain/langgraph'
-
 import { AGENXY_INTERNAL_KW } from '@/main/agent/constants'
+import type { AgentMessage, AgentToolCall } from '@/main/agent/messages'
+import { systemMessage, toolMessage } from '@/main/agent/messages'
 
 export { AGENXY_INTERNAL_KW }
 
@@ -17,9 +10,6 @@ export function isRejectedToolResult(result?: string): boolean {
   return Boolean(result?.includes('用户已拒绝') || result?.includes('Rejected by user'))
 }
 
-/** Shared checkpointer for all agent threads (in-memory; keyed by thread_id). */
-export const agentCheckpointer = new MemorySaver()
-
 export type PendingToolCall = {
   id: string
   name: string
@@ -28,32 +18,13 @@ export type PendingToolCall = {
 
 export type HitlUserDecision = 'accept' | 'reject'
 
-/** LangGraph Command.resume 载荷：用户审批结果 */
-export type HitlResumeValue = HitlUserDecision
-
-/**
- * 构造 ReAct 子图 HITL 恢复用的 LangGraph Command。
- *
- * 配合 createReactAgent 的 interruptBefore: ['tools']，在用户审批后 resume 图执行。
- *
- * @param decision - accept 继续 tools 节点；reject 在 updateState 注入拒绝结果后 resume
- * @returns LangGraph Command 实例
- */
-export function createHitlResumeCommand(decision: HitlResumeValue): Command<HitlResumeValue> {
-  return new Command({ resume: decision })
-}
-
 /**
  * IPC 桥接：等待 renderer 通过 submitHitlDecision 传入用户决策。
- *
- * Electron 跨进程无法直接 Command.resume，故保留 Promise 等待；runReactAgentWithGuard
- * 收到决策后调用 createHitlResumeCommand 恢复 LangGraph checkpoint。
  *
  * @param hitlId - 审批批次 ID
  * @param signal - 可选 AbortSignal
  * @returns 用户 accept / reject
  */
-
 type HitlWaiter = {
   resolve: (decision: HitlUserDecision) => void
   reject: (err: Error) => void
@@ -115,25 +86,20 @@ export function cancelHitlWaiter(hitlId: string, reason = 'Cancelled'): void {
   waiter.reject(new Error(reason))
 }
 
-export function extractPendingToolCalls(messages: BaseMessage[]): PendingToolCall[] {
-  const lastAi = [...messages].reverse().find((m) => isAIMessage(m)) as AIMessage | undefined
-  if (!lastAi?.tool_calls?.length) return []
-  return lastAi.tool_calls.map((tc, idx) => {
-    const rawArgs = tc.args
-    const args =
-      typeof rawArgs === 'object' && rawArgs !== null && !Array.isArray(rawArgs)
-        ? (rawArgs as Record<string, unknown>)
-        : { input: rawArgs }
-    return {
-      id: tc.id ?? `${tc.name}-${idx}`,
-      name: tc.name,
-      args
-    }
-  })
-}
-
-export function isPausedBeforeTools(next: string[] | undefined): boolean {
-  return Array.isArray(next) && next.includes('tools')
+/**
+ * 从 messages 末尾 AI 消息提取待执行 tool_calls。
+ *
+ * @param messages - 会话消息
+ * @returns 待处理工具调用列表
+ */
+export function extractPendingToolCalls(messages: AgentMessage[]): PendingToolCall[] {
+  const lastAi = [...messages].reverse().find((m) => m.type === 'ai')
+  if (!lastAi?.toolCalls?.length) return []
+  return lastAi.toolCalls.map((tc: AgentToolCall, idx: number) => ({
+    id: tc.id ?? `${tc.name}-${idx}`,
+    name: tc.name,
+    args: tc.args
+  }))
 }
 
 /** Tools that may run without user approval in Build mode HITL. */
@@ -169,24 +135,27 @@ export function partitionPendingToolCalls(pending: PendingToolCall[]): {
   return { approvalRequired, autoExecute }
 }
 
-/** Synthetic tool results + internal system hint (not persisted / not shown as user text). */
-export function buildRejectionStateMessages(pending: PendingToolCall[]): BaseMessage[] {
+/**
+ * 构造工具拒绝后的 synthetic tool 结果与内部 system 提示。
+ *
+ * @param pending - 被拒绝的工具调用
+ * @returns tool + internal system 消息
+ */
+export function buildRejectionStateMessages(pending: PendingToolCall[]): AgentMessage[] {
   const names = pending.map((t) => t.name).join(', ')
-  const toolMessages = pending.map(
-    (tc) =>
-      new ToolMessage({
-        content: `用户已拒绝工具 ${tc.name}，本次未执行。本轮不得再次调用 ${tc.name}。`,
-        tool_call_id: tc.id,
-        name: tc.name,
-        status: 'error'
-      })
+  const toolMessages = pending.map((tc) =>
+    toolMessage(
+      tc.id,
+      tc.name,
+      `用户已拒绝工具 ${tc.name}，本次未执行。本轮不得再次调用 ${tc.name}。`,
+      'error'
+    )
   )
-  const systemHint = new SystemMessage({
-    content:
-      `用户拒绝了工具调用：${names}。本轮不要重试。` +
+  const systemHint = systemMessage(
+    `用户拒绝了工具调用：${names}。本轮不要重试。` +
       `用中文简要确认拒绝，并在不依赖这些工具的前提下给出替代方案。`,
-    additional_kwargs: { [AGENXY_INTERNAL_KW]: true }
-  })
+    true
+  )
   return [...toolMessages, systemHint]
 }
 

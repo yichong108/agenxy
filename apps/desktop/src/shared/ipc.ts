@@ -26,7 +26,7 @@ export const IPC = {
   SESSIONS_DELETE: 'sessions:delete',
   AGENT_SEND: 'agent:send',
   AGENT_CANCEL: 'agent:cancel',
-  /** Resume a paused tool-approval interrupt (LangGraph Command.resume) */
+  /** Resume a paused tool-approval interrupt */
   AGENT_HITL_RESUME: 'agent:hitl-resume',
   AGENT_STATUS: 'agent:status',
   DEVTOOLS_TOGGLE: 'devtools:toggle',
@@ -331,11 +331,11 @@ export type AppSettings = {
   provider: ModelProviderId
   /** 各提供方独立配置；切换提供方时从对应项回显 */
   providerProfiles: Record<ModelProviderId, ProviderProfile>
-  /** ReAct 模型-工具循环最大步数（LangGraph recursionLimit） */
+  /** ReAct 模型-工具循环最大步数 */
   maxAgentLoopSteps: number
   /** 单次 agent 运行超时（毫秒） */
   agentRunTimeoutMs: number
-  /** Build 模式：工具执行前需用户批准（LangGraph interruptBefore tools） */
+  /** Build 模式：工具执行前需用户批准 */
   toolApprovalInBuild: boolean
   /** Tavily 联网搜索 API Key（https://tavily.com），空则禁用检索能力 */
   tavilyApiKey: string
@@ -368,7 +368,7 @@ export type SkillUiEntry = {
   /** 稳定键（表格 rowKey） */
   key: string
   kind: SkillInstallKind
-  /** LangChain 工具名（skill_*） */
+  /** 技能工具名（skill_*） */
   toolName: string
   title: string
   description: string

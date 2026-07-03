@@ -1,11 +1,10 @@
-import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
 
-import type { ToolEndedCall } from '@/main/agent/graph/plan-after-tool'
+import { defineTool, type NamedTool, type ToolExecutorContext } from '@/main/agent/define-tool'
 import { HITL_EXEMPT_TOOL_NAMES } from '@/main/agent/hitl'
 import type { UserIntent } from '@/main/agent/intent-classifier'
 import { buildSkillBundle } from '@/main/agent/skills/index'
-import { buildMcpLangChainTools } from '@/main/mcp/mcp-runtime'
+import { buildMcpTools } from '@/main/mcp/mcp-runtime'
 import {
   isReservedMemoryFilePath,
   MEMORY_FILE_GUARD_MESSAGE
@@ -29,38 +28,9 @@ import {
 import { GREP_TOOL_DESCRIPTION, grepWorkspace } from '@/main/tools/grep'
 import { runCommand } from '@/main/tools/terminal'
 import { isTavilyConfigured, tavilyWebSearch } from '@/main/tools/web-search'
-import {
-  type AgentComposerMode,
-  type AppSettings,
-  MAX_TERMINAL_OUTPUT_CHARS,
-  type ToolTimelineEvent
-} from '@/shared/ipc'
+import { type AgentComposerMode, type AppSettings, MAX_TERMINAL_OUTPUT_CHARS } from '@/shared/ipc'
 
-/**
- * LangChain 工具包装：带 name 与 invoke，供 ReAct agent 绑定。
- */
-export type NamedTool = {
-  name: string
-  invoke: (input: unknown, config?: { signal?: AbortSignal }) => Promise<unknown>
-}
-
-/** 工具执行上下文：run 标识与 timeline 回调 */
-export type ToolExecutorContext = {
-  runId: string
-  traceId: string
-  onTool: (e: ToolTimelineEvent) => void
-  /** 工具 end 后、结果返回 ReAct 前 await（plan-after-tool 串行） */
-  afterToolEnd?: (ended: ToolEndedCall) => Promise<void>
-}
-
-type ToolDefinition<T extends z.ZodTypeAny> = {
-  name: string
-  description: string
-  schema: T
-  execute: (input: z.infer<T>, ctx: ToolExecutorContext) => Promise<unknown>
-  formatResult?: (result: unknown) => string
-  truncateTo?: number
-}
+export type { NamedTool, ToolExecutorContext } from '@/main/agent/define-tool'
 
 /**
  * Agent 工具集与 prompt 片段（skills / MCP hints）。
@@ -80,67 +50,13 @@ const commonPrompt = `
   当前日期时间（UTC）：${new Date().toLocaleString()}；
 `
 
-function defineTool<T extends z.ZodTypeAny>(
-  def: ToolDefinition<T>,
-  runCtx: ToolExecutorContext
-): NamedTool {
-  const { name, description, schema, execute, formatResult, truncateTo } = def
-
-  return tool(
-    async (input: z.infer<T>) => {
-      const id = `${name}-${Date.now()}`
-      const startedAt = Date.now()
-      const args =
-        typeof input === 'object' && input !== null
-          ? Object.values(input).join(', ')
-          : String(input)
-
-      runCtx.onTool({
-        kind: 'tool',
-        id,
-        name,
-        status: 'start',
-        args,
-        runId: runCtx.runId,
-        traceId: runCtx.traceId,
-        timestampMs: startedAt
-      })
-
-      const result = await execute(input, runCtx)
-      const resultStr = formatResult ? formatResult(result) : String(result)
-      const truncated = truncateTo ? resultStr.slice(0, truncateTo) : resultStr
-
-      runCtx.onTool({
-        kind: 'tool',
-        id,
-        name,
-        status: 'end',
-        result: truncated,
-        runId: runCtx.runId,
-        traceId: runCtx.traceId,
-        timestampMs: Date.now(),
-        durationMs: Date.now() - startedAt
-      })
-
-      if (runCtx.afterToolEnd) {
-        await runCtx.afterToolEnd({
-          kind: 'tool',
-          id,
-          name,
-          status: 'end',
-          args,
-          result: truncated,
-          runId: runCtx.runId,
-          traceId: runCtx.traceId,
-          timestampMs: Date.now(),
-          durationMs: Date.now() - startedAt
-        })
-      }
-
-      return result
-    },
-    { name, description, schema }
-  ) as unknown as NamedTool
+type ToolDefinition<T extends z.ZodTypeAny> = {
+  name: string
+  description: string
+  schema: T
+  execute: (input: z.infer<T>, ctx: ToolExecutorContext) => Promise<unknown>
+  formatResult?: (result: unknown) => string
+  truncateTo?: number
 }
 
 function buildUserMemoryToolDefs(
@@ -429,7 +345,7 @@ export async function prepareAgentTooling(
       { root, termKey, settings, runCtx, onTool: runCtx.onTool },
       filterIntents !== undefined ? { filterIntents } : undefined
     ),
-    buildMcpLangChainTools(settings, runCtx, runCtx.onTool)
+    buildMcpTools(settings, runCtx, runCtx.onTool)
   ])
   const tools = [...skillBundle.tools, ...baseTools, ...webSearchTools, ...mcpResult.tools]
   return {

@@ -1,7 +1,4 @@
-import type { Serialized } from '@langchain/core/load/serializable'
-import type { ChainValues } from '@langchain/core/utils/types'
 import { configureGlobalLogger, LogLevel, propagateAttributes } from '@langfuse/core'
-import { CallbackHandler } from '@langfuse/langchain'
 import { LangfuseSpanProcessor } from '@langfuse/otel'
 import { startActiveObservation } from '@langfuse/tracing'
 import { NodeSDK } from '@opentelemetry/sdk-node'
@@ -139,121 +136,30 @@ function toPropagatedMetadata(
 }
 
 /**
- * 为 LangChain 调用创建 Langfuse CallbackHandler。
+ * 用单一 Langfuse trace 包裹完整 ReAct 运行（含 Build HITL 多轮循环）。
  *
- * 产品策略：仅挂到主 ReAct（`createReactAgent` / `runReactAgentWithGuard`），
- * 不上报意图思考、意图分类、工具后计划、记忆提取等辅助 LLM，避免 LangGraph/RunnableSequence 噪音。
- *
- * @param ctx - sessionId、tags、traceMetadata（建议含 run_id / trace_id）
- * @returns 已配置时返回 handler，否则 null
- */
-export function createLangfuseCallbackHandler(ctx: LangfuseRunContext): CallbackHandler | null {
-  const keys = readLangfuseKeys()
-  if (!keys) return null
-
-  process.env.LANGFUSE_BASE_URL = keys.baseUrl
-  process.env.LANGFUSE_PUBLIC_KEY = keys.publicKey
-  process.env.LANGFUSE_SECRET_KEY = keys.secretKey
-
-  try {
-    const options = {
-      sessionId: ctx.sessionId,
-      tags: ctx.tags?.length ? ctx.tags : ['agenxy'],
-      traceMetadata: ctx.traceMetadata
-    }
-    mainLog.info('[langfuse] 创建 CallbackHandler:', options)
-
-    const handler = new CallbackHandler(options)
-    return handler
-  } catch (e) {
-    mainLog.warn('[langfuse] CallbackHandler 创建失败:', e instanceof Error ? e.message : e)
-    return null
-  }
-}
-
-/**
- * 将 HITL 多次 `agent.invoke` 产生的顶层 LangGraph span 挂到首条 chain 下。
- *
- * LangGraph 每次顶层 invoke 都会触发 CallbackHandler 新建无 parentRunId 的 chain span；
- * 本 wrapper 把后续 invoke 的 chain 作为第一条 LangGraph 的子 span，避免 Langfuse UI 出现并列 sibling。
- *
- * @param handler - 原始 Langfuse CallbackHandler
- * @returns 可安全复用于 while-loop 多次 invoke 的 handler
- */
-export function wrapLangfuseHandlerForMultiInvoke(handler: CallbackHandler): CallbackHandler {
-  let rootChainRunId: string | null = null
-
-  return new Proxy(handler, {
-    get(target, prop, receiver) {
-      const value = Reflect.get(target, prop, receiver)
-      if (prop === 'handleChainStart' && typeof value === 'function') {
-        return async (
-          chain: Serialized,
-          inputs: ChainValues,
-          runId: string,
-          parentRunId?: string,
-          tags?: string[],
-          metadata?: Record<string, unknown>,
-          runType?: string,
-          name?: string
-        ) => {
-          let effectiveParentRunId = parentRunId
-          if (!effectiveParentRunId) {
-            if (rootChainRunId && rootChainRunId !== runId) {
-              effectiveParentRunId = rootChainRunId
-            } else if (!rootChainRunId) {
-              rootChainRunId = runId
-            }
-          }
-          return value.call(
-            target,
-            chain,
-            inputs,
-            runId,
-            effectiveParentRunId,
-            tags,
-            metadata,
-            runType,
-            name
-          )
-        }
-      }
-      if (typeof value === 'function') {
-        return value.bind(target)
-      }
-      return value
-    }
-  }) as CallbackHandler
-}
-
-/**
- * 用单一 Langfuse trace 包裹完整 ReAct 运行（含 Build HITL 多次 `invoke` / `Command.resume` 恢复）。
- *
- * 层级：`agenxy-graph` (agent) → `react` (chain) → LangGraph…；多次 invoke 经 wrapLangfuseHandlerForMultiInvoke 嵌套。
+ * 层级：`agenxy-graph` (agent) → `react` (chain)；通过 OpenTelemetry SDK 自动采集 AI SDK 调用。
  *
  * @param ctx - session、tags、metadata、traceId、可选 input
- * @param fn - 接收 CallbackHandler 的执行函数（未配置 Langfuse 时 handler 为 null）
+ * @param fn - 执行函数
  * @param options.formatOutput - 运行结束后写入根 observation 的 output
  * @returns fn 的返回值
  */
 export async function runLangfuseReactObservation<T>(
   ctx: LangfuseReactTraceContext,
-  fn: (handler: CallbackHandler | null) => Promise<T>,
+  fn: () => Promise<T>,
   options?: { formatOutput?: (result: T) => unknown }
 ): Promise<T> {
   const keys = readLangfuseKeys()
-  if (!keys) return fn(null)
+  if (!keys) return fn()
 
-  const baseHandler = createLangfuseCallbackHandler(ctx)
-  const handler = baseHandler ? wrapLangfuseHandlerForMultiInvoke(baseHandler) : null
   const traceName = ctx.traceName ?? 'agenxy-react'
   const metadata = toPropagatedMetadata(ctx.traceMetadata)
 
   mainLog.info('[langfuse] runLangfuseReactObservation:', {
     sessionId: ctx.sessionId,
     traceId: ctx.traceId,
-    traceName,
-    handler: Boolean(handler)
+    traceName
   })
 
   return startActiveObservation(
@@ -272,7 +178,7 @@ export async function runLangfuseReactObservation<T>(
               tags: ctx.tags?.length ? ctx.tags : ['agenxy'],
               metadata
             },
-            () => fn(handler)
+            () => fn()
           ),
         { asType: 'chain' }
       )

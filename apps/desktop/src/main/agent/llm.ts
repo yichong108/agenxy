@@ -1,4 +1,5 @@
-import { ChatOpenAI } from '@langchain/openai'
+import { createOpenAI } from '@ai-sdk/openai'
+import type { LanguageModel } from 'ai'
 
 import { type AppSettings, getActiveProviderProfile, type ModelProviderId } from '@/shared/ipc'
 
@@ -14,24 +15,44 @@ function openAiBaseUrlForProvider(_provider: ModelProviderId, rawBaseUrl: string
 }
 
 /**
- * 创建用于 ReAct 主循环的流式 ChatOpenAI 实例。
+ * 创建 OpenAI 兼容 API 的 AI SDK provider。
  *
  * @param settings - 应用设置（含 provider profile）
- * @returns 绑定了 API Key 与 baseURL 的 ChatOpenAI
+ * @returns createOpenAI 实例
  * @throws 未配置 API Key 时抛出
  */
-export function createStreamingLanguageModel(settings: AppSettings) {
+export function createOpenAiProvider(settings: AppSettings) {
   const profile = getActiveProviderProfile(settings)
   if (!profile.apiKey?.trim()) {
     throw new Error('请先在设置中配置 API Key')
   }
   const apiKey = profile.apiKey.trim()
   const baseURL = openAiBaseUrlForProvider(settings.provider, profile.baseUrl)
-  return new ChatOpenAI({
-    apiKey,
-    model: profile.model,
-    configuration: { baseURL },
-    streaming: true,
-    temperature: 0
-  })
+  return createOpenAI({ apiKey, baseURL })
+}
+
+/**
+ * 获取用于 ReAct 主循环的聊天模型。
+ *
+ * @param settings - 应用设置
+ * @returns AI SDK LanguageModel
+ * @throws 未配置 API Key 时抛出
+ */
+export function getChatModel(settings: AppSettings): LanguageModel {
+  const profile = getActiveProviderProfile(settings)
+  const provider = createOpenAiProvider(settings)
+  return provider.chat(profile.model)
+}
+
+/**
+ * 获取用于辅助 LLM 调用的聊天模型（意图分类、记忆提取、plan-after-tool）。
+ *
+ * @param settings - 应用设置
+ * @returns AI SDK LanguageModel；无 API Key 时返回 null
+ */
+export function getAuxChatModel(settings: AppSettings): LanguageModel | null {
+  const profile = getActiveProviderProfile(settings)
+  if (!profile.apiKey?.trim()) return null
+  const provider = createOpenAiProvider(settings)
+  return provider.chat(profile.model)
 }

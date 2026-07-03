@@ -1,14 +1,14 @@
-import { HumanMessage, SystemMessage } from '@langchain/core/messages'
-import { ChatOpenAI } from '@langchain/openai'
+import { generateObject } from 'ai'
 import { z } from 'zod'
 
+import { getAuxChatModel } from '@/main/agent/llm'
 import { logScope } from '@/main/logger'
 import {
   applyMemoryExtractionActions,
   type MemoryExtractionAction
 } from '@/main/memory/memory-service'
 import { getSettings, getUserMemories } from '@/main/store'
-import { type AppSettings, getActiveProviderProfile } from '@/shared/ipc'
+import { getActiveProviderProfile } from '@/shared/ipc'
 
 const memLog = logScope('memory')
 
@@ -26,26 +26,6 @@ const MemoryExtractionSchema = z.object({
 
 const MIN_ASSISTANT_CHARS_FOR_EXTRACT = 24
 const MAX_TURN_TEXT_CHARS = 2000
-
-function ensureOpenAiV1BaseUrl(baseUrl: string, fallback: string): string {
-  const u = baseUrl.trim() || fallback
-  if (!u) return fallback
-  if (/\/v1\/?$/i.test(u)) return u.replace(/\/+$/, '')
-  return `${u.replace(/\/+$/, '')}/v1`
-}
-
-function createLanguageModel(settings: AppSettings) {
-  const profile = getActiveProviderProfile(settings)
-  const apiKey = profile.apiKey?.trim() || ''
-  const baseURL = ensureOpenAiV1BaseUrl(profile.baseUrl, 'https://api.deepseek.com/v1')
-  return new ChatOpenAI({
-    apiKey,
-    model: profile.model,
-    configuration: { baseURL },
-    streaming: false,
-    temperature: 0
-  })
-}
 
 function truncateTurnText(text: string): string {
   const t = text.trim()
@@ -73,6 +53,9 @@ export async function extractMemoriesAfterRun(opts: {
     memLog.warn('[extractMemoriesAfterRun] skipped: no API key')
     return
   }
+
+  const model = getAuxChatModel(settings)
+  if (!model) return
 
   const existing = getUserMemories().items
   const existingBlock =
@@ -111,15 +94,13 @@ export async function extractMemoriesAfterRun(opts: {
   ].join('\n')
 
   try {
-    const model = createLanguageModel(settings).withStructuredOutput(MemoryExtractionSchema, {
-      name: 'extract_user_memories',
-      strict: true
+    const { object: result } = await generateObject({
+      model,
+      schema: MemoryExtractionSchema,
+      system: systemPrompt,
+      prompt: humanPrompt,
+      temperature: 0
     })
-
-    const result = await model.invoke([
-      new SystemMessage(systemPrompt),
-      new HumanMessage(humanPrompt)
-    ])
 
     const actions = (result.actions ?? []) as MemoryExtractionAction[]
     if (!actions.length) return

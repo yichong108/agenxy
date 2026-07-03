@@ -1,14 +1,13 @@
-import { HumanMessage, SystemMessage } from '@langchain/core/messages'
-import { ChatOpenAI } from '@langchain/openai'
+import { streamText } from 'ai'
 
 import { agentLog } from '@/main/agent/agent-log'
 import { StreamBatcher } from '@/main/agent/batcher'
 import { isRejectedToolResult } from '@/main/agent/hitl'
+import { getAuxChatModel } from '@/main/agent/llm'
 import { isAbortError } from '@/main/agent/run-utils'
 import {
   type AgentComposerMode,
   type AppSettings,
-  getActiveProviderProfile,
   STREAM_FLUSH_CHARS,
   STREAM_FLUSH_MS,
   type StreamEvent,
@@ -44,43 +43,6 @@ export type PlanAfterToolCoordinator = {
   afterToolEnd: (ended: ToolEndedCall) => Promise<void>
 }
 
-function ensureOpenAiV1BaseUrl(baseUrl: string, fallback: string): string {
-  const u = baseUrl.trim() || fallback
-  if (!u) return fallback
-  if (/\/v1\/?$/i.test(u)) return u.replace(/\/+$/, '')
-  return `${u.replace(/\/+$/, '')}/v1`
-}
-
-function createPlanLanguageModel(settings: AppSettings) {
-  const profile = getActiveProviderProfile(settings)
-  const apiKey = profile.apiKey?.trim() || ''
-  const baseURL = ensureOpenAiV1BaseUrl(profile.baseUrl, 'https://api.deepseek.com/v1')
-  return new ChatOpenAI({
-    apiKey,
-    model: profile.model,
-    configuration: { baseURL },
-    streaming: true,
-    temperature: 0
-  })
-}
-
-function contentToText(content: unknown): string {
-  if (typeof content === 'string') return content
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === 'string') return part
-        if (part && typeof part === 'object' && 'text' in part) {
-          const text = (part as { text?: unknown }).text
-          return typeof text === 'string' ? text : ''
-        }
-        return ''
-      })
-      .join('')
-  }
-  return ''
-}
-
 /**
  * 流式生成工具后的「下一步计划」文案。
  */
@@ -91,29 +53,38 @@ async function streamPlanAfterTool(
   signal: AbortSignal,
   planBatcher: StreamBatcher
 ): Promise<string> {
-  const model = createPlanLanguageModel(settings)
-  const system = new SystemMessage(
+  const model = getAuxChatModel(settings)
+  if (!model) return ''
+
+  const system =
     '你是「下一步计划」助手。编码智能体刚完成一次工具调用，将继续处理同一用户任务。\n' +
-      '根据用户目标与工具输出，用**中文**写 1–3 句简短完整话描述**接下来**要做什么（仅高层概要；不要写具体工具函数名；不要 Markdown 标题或代码块）。\n' +
-      '若输出为空、失败或异常，简要说明如何补救。语气简洁、面向用户。'
-  )
-  const human = new HumanMessage(
-    [
-      `用户消息：\n${userText.trim() || '（空消息）'}`,
-      `已完成工具：${ctx.toolName}`,
-      ctx.args ? `参数：${ctx.args}` : '',
-      ctx.result ? `输出（已截断）：\n${ctx.result.slice(0, 700)}` : ''
-    ]
-      .filter(Boolean)
-      .join('\n\n')
-  )
+    '根据用户目标与工具输出，用**中文**写 1–3 句简短完整话描述**接下来**要做什么（仅高层概要；不要写具体工具函数名；不要 Markdown 标题或代码块）。\n' +
+    '若输出为空、失败或异常，简要说明如何补救。语气简洁、面向用户。'
+
+  const prompt = [
+    `用户消息：\n${userText.trim() || '（空消息）'}`,
+    `已完成工具：${ctx.toolName}`,
+    ctx.args ? `参数：${ctx.args}` : '',
+    ctx.result ? `输出（已截断）：\n${ctx.result.slice(0, 700)}` : ''
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+
   const deadline = Date.now() + PLAN_STEP_TIMEOUT_MS
   let acc = ''
   try {
-    const stream = await model.stream([system, human], { signal })
-    for await (const chunk of stream) {
+    const result = streamText({
+      model,
+      system,
+      prompt,
+      abortSignal: signal,
+      temperature: 0
+    })
+
+    for await (const chunk of result.fullStream) {
       if (Date.now() > deadline) break
-      const piece = contentToText((chunk as { content?: unknown }).content)
+      if (chunk.type !== 'text-delta') continue
+      const piece = 'textDelta' in chunk ? chunk.textDelta : (chunk as { text?: string }).text
       if (!piece) continue
       acc += piece
       planBatcher.push(piece)

@@ -8,7 +8,7 @@
  *
  * 例如：.env.production.local > .env.production > .env.local > .env
  *
- * 合并完成后关闭 LangChain 内置追踪（不使用 LangSmith / langsmith 客户端）。
+ * 合并完成后关闭第三方 LLM 内置追踪（不使用 LangSmith）。
  * Langfuse 见 `LANGFUSE_*` 环境变量，在 `index.ts` 中于本模块之后启动 OpenTelemetry。
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url'
 
 import { parse } from 'dotenv'
 
-function disableLangChainBuiltInTracing(): void {
+function disableThirdPartyLlmTracing(): void {
   process.env.LANGCHAIN_TRACING_V2 = 'false'
   process.env.LANGSMITH_TRACING_V2 = 'false'
 }
@@ -103,4 +103,4 @@ for (const file of envFiles) {
   }
 }
 
-disableLangChainBuiltInTracing()
+disableThirdPartyLlmTracing()

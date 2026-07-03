@@ -2,9 +2,9 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
 
+import type { NamedTool } from '@/main/agent/define-tool'
 import type { UserIntent } from '@/main/agent/intent-classifier'
 import { shouldLoadSkill } from '@/main/agent/intent-classifier'
 import {
@@ -70,14 +70,11 @@ type SkillToolContext = {
 }
 
 type SkillBundle = {
-  tools: SkillTool[]
+  tools: NamedTool[]
   hint: string
 }
 
-type SkillTool = {
-  name: string
-  invoke: (input: unknown, config?: { signal?: AbortSignal }) => Promise<unknown>
-}
+type SkillTool = NamedTool
 
 type SkillDefinition = {
   name: string
@@ -109,7 +106,7 @@ type ScanRoot = {
   markdownCollect?: MarkdownCollectOpts
 }
 
-/** Normalize to a valid LangChain tool name; does not add a skill_ prefix unless present in the source. */
+/** Normalize to a valid tool name; does not add a skill_ prefix unless present in the source. */
 export function sanitizeToolName(input: string): string {
   const normalized = input
     .toLowerCase()
@@ -346,8 +343,11 @@ function makeSkillHint(defs: SkillDefinition[]): string {
 }
 
 function toTool(def: SkillDefinition, ctx: SkillToolContext): SkillTool {
-  const built = tool(
-    async (rawArgs) => {
+  return {
+    name: def.name,
+    description: def.description,
+    schema: def.schema,
+    invoke: async (rawArgs: unknown) => {
       const started = makeToolEventStart(def.name, rawArgs, ctx.runCtx)
       ctx.onTool(started)
       const startTime = started.timestampMs || Date.now()
@@ -392,14 +392,8 @@ function toTool(def: SkillDefinition, ctx: SkillToolContext): SkillTool {
         })
         throw error
       }
-    },
-    {
-      name: def.name,
-      description: def.description,
-      schema: def.schema
     }
-  )
-  return built as unknown as SkillTool
+  }
 }
 
 export type BuildSkillBundleOptions = {

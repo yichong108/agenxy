@@ -1,11 +1,10 @@
-import { HumanMessage, SystemMessage } from '@langchain/core/messages'
-import { ChatOpenAI } from '@langchain/openai'
+import { generateObject } from 'ai'
 import { z } from 'zod'
 
 import { agentLog } from '@/main/agent/agent-log'
+import { getAuxChatModel } from '@/main/agent/llm'
 import { SKILLS_WITH_TAGS } from '@/main/agent/skills'
 import type { AppSettings } from '@/shared/ipc'
-import { getActiveProviderProfile } from '@/shared/ipc'
 
 /**
  * 意图分类结果 schema
@@ -53,31 +52,6 @@ export const SKILL_INTENT_TAGS: Record<string, UserIntent[]> = {
   skill_run_terminal: ['coding', 'general']
 }
 
-function ensureOpenAiV1BaseUrl(baseUrl: string, fallback: string): string {
-  const u = baseUrl.trim() || fallback
-  if (!u) return fallback
-  if (/\/v1\/?$/i.test(u)) return u.replace(/\/+$/, '')
-  return `${u.replace(/\/+$/, '')}/v1`
-}
-
-function openAiBaseUrlForProvider(_provider: string, rawBaseUrl: string): string {
-  const deepseekDefault = 'https://api.deepseek.com/v1'
-  return ensureOpenAiV1BaseUrl(rawBaseUrl, deepseekDefault)
-}
-
-function createLanguageModel(settings: AppSettings) {
-  const profile = getActiveProviderProfile(settings)
-  const apiKey = profile.apiKey?.trim() || ''
-  const baseURL = openAiBaseUrlForProvider(settings.provider, profile.baseUrl)
-  return new ChatOpenAI({
-    apiKey,
-    model: profile.model,
-    configuration: { baseURL },
-    streaming: false,
-    temperature: 0
-  })
-}
-
 /**
  * 对用户输入进行意图分类
  * 使用结构化输出确保可靠的 JSON 格式返回
@@ -87,10 +61,14 @@ export async function classifyIntent(
   settings: AppSettings,
   signal?: AbortSignal
 ): Promise<IntentClassification> {
-  const model = createLanguageModel(settings).withStructuredOutput(IntentClassificationSchema, {
-    name: 'classify_user_intent',
-    strict: true
-  })
+  const model = getAuxChatModel(settings)
+  if (!model) {
+    return {
+      intent: 'general',
+      confidence: 0.5,
+      reasoning: '未配置 API Key，回退为通用意图'
+    }
+  }
 
   const systemPrompt = `你是意图分类专家。分析用户输入，判断属于编程相关任务还是通用任务。
 
@@ -108,8 +86,14 @@ export async function classifyIntent(
 - 给出清晰的分类理由`
 
   try {
-    const messages = [new SystemMessage(systemPrompt), new HumanMessage(userText)]
-    const result = await model.invoke(messages, { signal })
+    const { object: result } = await generateObject({
+      model,
+      schema: IntentClassificationSchema,
+      system: systemPrompt,
+      prompt: userText,
+      abortSignal: signal,
+      temperature: 0
+    })
 
     // Additional validation to ensure intent value is valid (handle unexpected enum values from model)
     const intent = validateIntent(result.intent)

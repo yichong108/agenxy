@@ -1,11 +1,11 @@
-﻿import { tool } from '@langchain/core/tools'
-import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+﻿import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import {
   getDefaultEnvironment,
   StdioClientTransport
 } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { z } from 'zod'
 
+import type { NamedTool } from '@/main/agent/define-tool'
 import { logScope } from '@/main/logger'
 import type {
   AppSettings,
@@ -407,14 +407,14 @@ function truncateSchema(schema: unknown, max = 1800): string {
   }
 }
 
-/** 为已启用的 MCP 服务器生成 LangChain 工具（池化 stdio 连接，空闲自动断开）；列举工具与后续 callTool 复用同一条连接（按服务器 id） */
-export async function buildMcpLangChainTools(
+/** 为已启用的 MCP 服务器生成 Agent 工具（池化 stdio 连接，空闲自动断开） */
+export async function buildMcpTools(
   settings: AppSettings,
   runCtx: RunCtx,
   onTool: (e: ToolTimelineEvent) => void
-): Promise<{ tools: ReturnType<typeof tool>[]; contextHints: string }> {
+): Promise<{ tools: NamedTool[]; contextHints: string }> {
   const servers = (settings.mcpServers ?? []).filter((s) => s.enabled && s.command.trim())
-  const out: ReturnType<typeof tool>[] = [] as ReturnType<typeof tool>[]
+  const out: NamedTool[] = []
   const hintBlocks: string[] = []
   for (const srv of servers) {
     try {
@@ -435,11 +435,18 @@ export async function buildMcpLangChainTools(
             schemaHint ? `inputSchema：${schemaHint}` : ''
           ].filter(Boolean)
 
-          const wrapped = tool(
-            async (input: Record<string, unknown>) => {
+          const wrapped: NamedTool = {
+            name: lcName,
+            description: descParts.join('\n'),
+            schema: z.object({}).passthrough(),
+            invoke: async (input: unknown) => {
+              const args = (typeof input === 'object' && input !== null ? input : {}) as Record<
+                string,
+                unknown
+              >
               const id = `mcp-${Date.now()}`
               const startedAt = Date.now()
-              const argStr = JSON.stringify(input).slice(0, 2_000)
+              const argStr = JSON.stringify(args).slice(0, 2_000)
               onTool({
                 kind: 'tool',
                 id,
@@ -454,7 +461,7 @@ export async function buildMcpLangChainTools(
                 const result = await withPooledMcpClient(srv, async (c) => {
                   return await c.callTool({
                     name: mcpToolName,
-                    arguments: input
+                    arguments: args
                   })
                 })
                 const text = formatCallToolResult(result)
@@ -485,14 +492,9 @@ export async function buildMcpLangChainTools(
                 })
                 throw err
               }
-            },
-            {
-              name: lcName,
-              description: descParts.join('\n'),
-              schema: z.object({}).passthrough()
             }
-          )
-          out.push(wrapped as ReturnType<typeof tool>)
+          }
+          out.push(wrapped)
         }
       })
     } catch (e) {
@@ -505,3 +507,6 @@ export async function buildMcpLangChainTools(
     : ''
   return { tools: out, contextHints }
 }
+
+/** @deprecated 使用 buildMcpTools */
+export const buildMcpLangChainTools = buildMcpTools
