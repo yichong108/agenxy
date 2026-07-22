@@ -11,11 +11,25 @@ pnpm install
 # 复制环境变量
 cp services/api/.env.example services/api/.env
 
+# 启动本地 MySQL + Redis（独立于 langfuse-local）
+pnpm --filter @agenxy/api docker:up
+
 # 启动开发服务
 pnpm api:dev
 ```
 
 默认监听 `http://127.0.0.1:3100`。
+
+## 本地依赖（Docker）
+
+`docker-compose.yml` 仅编排 API 所需的 MySQL 与 Redis，容器名为 `agenxy-mysql` / `agenxy-redis`，与 `services/langfuse-local` 互不共用。
+
+| 服务 | 默认端口 | 默认凭证 |
+| --- | --- | --- |
+| MySQL 8.4 | `3306` | root / `password`，库名 `agenxy` |
+| Redis 7 | `6379` | 无密码（可用 `REDIS_PASSWORD` 开启） |
+
+端口与凭证读取本目录 `.env`（与 `.env.example` 对齐）。若与本机其它服务冲突，修改 `.env` 中的 `MYSQL_PORT` / `REDIS_PORT` 后重新 `docker:up`。
 
 ## 健康检查
 
@@ -46,3 +60,7 @@ curl http://127.0.0.1:3100/health
 | `pnpm --filter @agenxy/api build` | 编译到 `dist/` |
 | `pnpm --filter @agenxy/api start` | 运行编译产物 |
 | `pnpm --filter @agenxy/api typecheck` | TypeScript 类型检查 |
+| `pnpm --filter @agenxy/api docker:up` | 启动 MySQL + Redis |
+| `pnpm --filter @agenxy/api docker:down` | 停止并移除容器 |
+| `pnpm --filter @agenxy/api docker:logs` | 跟踪容器日志 |
+| `pnpm --filter @agenxy/api docker:reset` | 停止并删除数据卷 |
