@@ -42,6 +42,10 @@
     "langfuse:status": "pnpm --filter @agenxy/langfuse-local run status",
     "langfuse:logs": "pnpm --filter @agenxy/langfuse-local run logs",
     "langfuse:reset": "pnpm --filter @agenxy/langfuse-local run reset",
+    "api:dev": "pnpm --filter @agenxy/api dev",
+    "api:build": "pnpm --filter @agenxy/api build",
+    "api:start": "pnpm --filter @agenxy/api start",
+    "api:typecheck": "pnpm --filter @agenxy/api typecheck",
     "prepare": "husky"
   },
   "devDependencies": {

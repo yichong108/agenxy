@@ -12,3 +12,7 @@ Agenxy 是一个强大的 AI Agent 桌面应用，旨在提供智能、安全、
 ## 为什么选择 Agenxy？
 
 Agenxy 专为需要与 AI 智能体进行复杂交互的用户设计。无论是代码编写、文档生成还是自动化任务，Agenxy 都能提供强大的支持。
+
+## 其他
+
+- 了解Shunyu Yao的ReAct、Tree of Thoughts
