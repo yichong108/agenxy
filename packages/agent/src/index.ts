@@ -31,6 +31,6 @@ export { HITL_EXEMPT_TOOL_NAMES } from './hitl.js'
 export { shouldLoadSkill, type UserIntent } from './intent-classifier.js'
 export { SKILLS_WITH_TAGS, type SkillTagEntry } from './skill-tags.js'
 
-export { getAuxChatModel } from './llm.js'
+export { getChatModel } from './llm.js'
 
 export { setAgentLogger, type AgentLogger } from './logger.js'

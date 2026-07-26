@@ -100,6 +100,9 @@ export async function runReactLoop(
 ): Promise<AgentMessage[]> {
   const { recursionLimit, timeoutMs } = options
   const model = getChatModel(settings)
+  if (!model) {
+    throw new Error('请先在设置中配置 API Key')
+  }
   const toolsByName = new Map(tools.map((t) => [t.name, t]))
   runCtx.toolsByName = toolsByName
 

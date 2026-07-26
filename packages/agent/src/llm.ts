@@ -1,20 +1,21 @@
 import { createOpenAI } from '@ai-sdk/openai'
-import {
-  type AppSettings,
-  getActiveProviderProfile,
-  type ModelProviderId
-} from '@agenxy/shared'
+import { type AppSettings, getActiveProviderProfile } from '@agenxy/shared'
 import type { LanguageModel } from 'ai'
 
-function ensureOpenAiV1BaseUrl(baseUrl: string, fallback: string): string {
-  const u = baseUrl.trim() || fallback
-  if (!u) return fallback
+/**
+ * 规范化 OpenAI 兼容 baseURL：确保以 `/v1` 结尾。
+ *
+ * @param baseUrl - 用户配置的接口地址
+ * @returns 规范化后的 baseURL
+ * @throws 未配置 baseURL 时抛出
+ */
+function normalizeOpenAiV1BaseUrl(baseUrl: string): string {
+  const u = baseUrl.trim()
+  if (!u) {
+    throw new Error('请先在设置中配置接口地址（Base URL）')
+  }
   if (/\/v1\/?$/i.test(u)) return u.replace(/\/+$/, '')
   return `${u.replace(/\/+$/, '')}/v1`
-}
-
-function openAiBaseUrlForProvider(_provider: ModelProviderId, rawBaseUrl: string): string {
-  return ensureOpenAiV1BaseUrl(rawBaseUrl, 'https://api.deepseek.com/v1')
 }
 
 /**
@@ -22,7 +23,7 @@ function openAiBaseUrlForProvider(_provider: ModelProviderId, rawBaseUrl: string
  *
  * @param settings - 应用设置（含 provider profile）
  * @returns createOpenAI 实例
- * @throws 未配置 API Key 时抛出
+ * @throws 未配置 API Key 或 Base URL 时抛出
  */
 export function createOpenAiProvider(settings: AppSettings) {
   const profile = getActiveProviderProfile(settings)
@@ -30,30 +31,21 @@ export function createOpenAiProvider(settings: AppSettings) {
     throw new Error('请先在设置中配置 API Key')
   }
   const apiKey = profile.apiKey.trim()
-  const baseURL = openAiBaseUrlForProvider(settings.provider, profile.baseUrl)
+  const baseURL = normalizeOpenAiV1BaseUrl(profile.baseUrl)
   return createOpenAI({ apiKey, baseURL })
 }
 
 /**
- * 获取用于 ReAct 主循环的聊天模型。
+ * 获取 OpenAI 兼容聊天模型（对话 + 工具调用）。
+ *
+ * 主循环与辅助 LLM（意图分类、记忆提取、plan-after-tool）共用同一模型。
+ * 未配置 API Key 时返回 null，由调用方决定抛错或降级。
  *
  * @param settings - 应用设置
- * @returns AI SDK LanguageModel
- * @throws 未配置 API Key 时抛出
+ * @returns AI SDK LanguageModel；未配置 API Key 时为 null
+ * @throws 已配置 API Key 但未配置 Base URL 时抛出
  */
-export function getChatModel(settings: AppSettings): LanguageModel {
-  const profile = getActiveProviderProfile(settings)
-  const provider = createOpenAiProvider(settings)
-  return provider.chat(profile.model)
-}
-
-/**
- * 获取用于辅助 LLM 调用的聊天模型（意图分类、记忆提取、plan-after-tool）。
- *
- * @param settings - 应用设置
- * @returns AI SDK LanguageModel；无 API Key 时返回 null
- */
-export function getAuxChatModel(settings: AppSettings): LanguageModel | null {
+export function getChatModel(settings: AppSettings): LanguageModel | null {
   const profile = getActiveProviderProfile(settings)
   if (!profile.apiKey?.trim()) return null
   const provider = createOpenAiProvider(settings)

@@ -1,4 +1,4 @@
-import { getAuxChatModel } from '@agenxy/agent'
+import { getChatModel } from '@agenxy/agent'
 import { generateObject } from 'ai'
 import { z } from 'zod'
 
@@ -54,7 +54,7 @@ export async function extractMemoriesAfterRun(opts: {
     return
   }
 
-  const model = getAuxChatModel(settings)
+  const model = getChatModel(settings)
   if (!model) return
 
   const existing = getUserMemories().items

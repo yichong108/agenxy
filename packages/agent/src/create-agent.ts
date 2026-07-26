@@ -99,6 +99,8 @@ export type Agent = {
  * 创建 agent 实例 — packages/agent 的唯一入口工厂。
  *
  * 封装 ReAct 流水线、流式合并、HITL 与并发队列，宿主仅注入工具与可观测性依赖。
+ * 
+ * 注意：不直接与外部耦合。
  *
  * @param options - 宿主依赖与运行时参数
  * @returns 可 run / runQueued 的 agent 实例
@@ -119,6 +121,11 @@ export function createAgent(options: CreateAgentOptions): Agent {
   const streamFlushMs = options.streamFlushMs ?? 32
   const streamFlushChars = options.streamFlushChars ?? 320
 
+  /**
+   * 直接执行一次 run（不经过并发队列）
+   * @param input - 单次 run 的输入
+   * @returns 单次 run 的结果
+   */
   async function runInternal(input: AgentRunInput): Promise<AgentRunResult> {
     const {
       composerMode,
@@ -220,6 +227,13 @@ export function createAgent(options: CreateAgentOptions): Agent {
         deps
       )
 
+      // 如果流式文本为空，则尝试 fallback 到最后一轮 AI 消息。
+      // 因为流式文本为空，说明用户没有输入，或者输入了但是没有触发流式输出。
+      // 这时候尝试 fallback 到最后一轮 AI 消息，可能能得到一些有价值的内容。
+      // 当然，如果流式文本不为空，则不进行 fallback。
+      // 这里 fallback 到最后一轮 AI 消息，而不是第一轮 AI 消息，是因为第一轮 AI 消息可能是系统提示词，不是用户输入。
+      // 当然，如果最后一轮 AI 消息也没有内容，则不进行 fallback。
+      // fallback是为了什么？避免用户输入了但是没有触发流式输出，导致用户没有收到任何内容。
       if (streamedCharsRef.current === 0) {
         const lastAi = findLastAiMessage(graphResult.messages)
         const fallback = lastAi ? contentToText(lastAi.content) : ''

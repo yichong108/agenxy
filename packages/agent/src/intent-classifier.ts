@@ -3,7 +3,7 @@ import { generateObject } from 'ai'
 import { z } from 'zod'
 
 import { agentLog } from './logger.js'
-import { getAuxChatModel } from './llm.js'
+import { getChatModel } from './llm.js'
 import { SKILLS_WITH_TAGS } from './skill-tags.js'
 
 const IntentClassificationSchema = z.object({
@@ -33,7 +33,7 @@ export async function classifyIntent(
   settings: AppSettings,
   signal?: AbortSignal
 ): Promise<IntentClassification> {
-  const model = getAuxChatModel(settings)
+  const model = getChatModel(settings)
   if (!model) {
     return {
       intent: 'general',

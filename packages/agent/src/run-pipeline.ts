@@ -166,6 +166,13 @@ async function prepareToolingPhase(
   return { tooling: toolingBundle }
 }
 
+/**
+ * 执行 React 阶段。
+ * @param state - 当前状态
+ * @param runContext - 运行上下文
+ * @param deps - 依赖
+ * @returns 执行 React 阶段的结果
+ */
 async function executeReactPhase(
   state: AgenxyGraphStateType,
   runContext: AgenxyGraphRunContext,

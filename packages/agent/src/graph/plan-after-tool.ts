@@ -11,7 +11,7 @@ import { streamText } from 'ai'
 
 import { StreamBatcher } from '../batcher.js'
 import { isRejectedToolResult } from '../hitl.js'
-import { getAuxChatModel } from '../llm.js'
+import { getChatModel } from '../llm.js'
 import { agentLog } from '../logger.js'
 import { isAbortError } from '../run-utils.js'
 
@@ -44,7 +44,7 @@ async function streamPlanAfterTool(
   signal: AbortSignal,
   planBatcher: StreamBatcher
 ): Promise<string> {
-  const model = getAuxChatModel(settings)
+  const model = getChatModel(settings)
   if (!model) return ''
 
   const system =
