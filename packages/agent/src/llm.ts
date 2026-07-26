@@ -1,3 +1,8 @@
+/**
+ * @file LLM调用层
+ * @description 比如提供 OpenAI 兼容聊天模型
+ */
+
 import { createOpenAI } from '@ai-sdk/openai'
 import { type AppSettings, getActiveProviderProfile } from '@agenxy/shared'
 import type { LanguageModel } from 'ai'
