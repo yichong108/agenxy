@@ -21,7 +21,8 @@
   "scripts": {
     "preinstall": "npx only-allow pnpm",
     "build": "turbo run build",
-    "dev": "turbo run dev --parallel",
+    "dev:prepare": "pnpm --filter @agenxy/api docker:up",
+    "dev": "pnpm run dev:prepare && turbo run dev --parallel",
     "lint": "turbo run lint",
     "lint:fix": "turbo run lint:fix",
     "typecheck": "turbo run typecheck",
