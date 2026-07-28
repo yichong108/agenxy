@@ -1,2 +1,2 @@
-export { runAgenxyGraph } from '../run-pipeline.js'
-export type { PipelineDeps } from '../run-pipeline.js'
+export { runAgenxyGraph, runWorkflow } from '../run-workflow.js'
+export type { PipelineDeps, WorkflowDeps } from '../run-workflow.js'

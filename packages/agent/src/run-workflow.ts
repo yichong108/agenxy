@@ -20,7 +20,7 @@ export type InitRunCallbacks = {
   persistMessages: (messages: AgentMessage[]) => void
 }
 
-export type RunAgenxyPipelineInput = {
+export type RunWorkflowInput = {
   composerMode: AgentComposerMode
   runMeta: AgenxyRunMeta
   messages: AgentMessage[]
@@ -29,10 +29,16 @@ export type RunAgenxyPipelineInput = {
   signal?: AbortSignal
 }
 
-export type RunAgenxyPipelineResult = {
+export type RunWorkflowResult = {
   messages: AgentMessage[]
   toolEvents: AgenxyGraphStateType['toolEvents']
 }
+
+/** @deprecated 使用 RunWorkflowInput */
+export type RunAgenxyPipelineInput = RunWorkflowInput
+
+/** @deprecated 使用 RunWorkflowResult */
+export type RunAgenxyPipelineResult = RunWorkflowResult
 
 export type ReactObservationContext = {
   sessionId: string
@@ -44,9 +50,9 @@ export type ReactObservationContext = {
 }
 
 /**
- * 宿主注入的流水线依赖（工具组装、Langfuse、记忆提取等）。
+ * 宿主注入的工作流依赖（工具组装、Langfuse、记忆提取等）。
  */
-export type PipelineDeps = {
+export type WorkflowDeps = {
   prepareTooling: (args: {
     composerMode: AgentComposerMode
     sessionId: string
@@ -69,7 +75,14 @@ export type PipelineDeps = {
   }) => Promise<void>
 }
 
-function initRunPhase(
+/**
+ * 追加本轮用户消息并持久化。
+ *
+ * @param state - 当前流水线状态
+ * @param callbacks - 初始化回调（如消息持久化）
+ * @returns 更新后的 messages 片段
+ */
+function appendUserMessagePhase(
   state: AgenxyGraphStateType,
   callbacks: InitRunCallbacks
 ): Partial<AgenxyGraphStateType> {
@@ -83,6 +96,14 @@ function initRunPhase(
   return { messages }
 }
 
+/**
+ * 分类用户意图，供 Build 模式筛选工具。
+ *
+ * @param state - 当前流水线状态
+ * @param runContext - 运行上下文
+ * @param signal - 可选取消信号
+ * @returns 检测到的意图列表
+ */
 async function classifyIntentPhase(
   state: AgenxyGraphStateType,
   runContext: AgenxyGraphRunContext,
@@ -123,7 +144,14 @@ async function classifyIntentPhase(
   return { detectedIntents }
 }
 
-function initPlanAfterToolPhase(
+/**
+ * 挂载工具结束后的 plan 协调器（afterToolEnd）。
+ *
+ * @param state - 当前流水线状态
+ * @param runContext - 运行上下文（写入 afterToolEnd）
+ * @param signal - 可选取消信号
+ */
+function setupPlanAfterToolPhase(
   state: AgenxyGraphStateType,
   runContext: AgenxyGraphRunContext,
   signal?: AbortSignal
@@ -143,10 +171,18 @@ function initPlanAfterToolPhase(
   runContext.afterToolEnd = coordinator.afterToolEnd
 }
 
+/**
+ * 按模式与意图组装本轮可用工具与 system prompt。
+ *
+ * @param state - 当前流水线状态
+ * @param runContext - 运行上下文
+ * @param deps - 宿主注入依赖
+ * @returns tooling 产物
+ */
 async function prepareToolingPhase(
   state: AgenxyGraphStateType,
   runContext: AgenxyGraphRunContext,
-  deps: PipelineDeps
+  deps: WorkflowDeps
 ): Promise<Partial<AgenxyGraphStateType>> {
   const { composerMode, runMeta, detectedIntents } = state
   const { settings, onTool, afterToolEnd } = runContext
@@ -167,21 +203,22 @@ async function prepareToolingPhase(
 }
 
 /**
- * 执行 React 阶段。
+ * 运行 Agent Loop 阶段（流式生成、工具调用与 HITL）。
+ *
  * @param state - 当前状态
  * @param runContext - 运行上下文
- * @param deps - 依赖
- * @returns 执行 React 阶段的结果
+ * @param deps - 宿主注入依赖
+ * @returns 运行结束后的 messages 与 toolEvents
  */
-async function executeReactPhase(
+async function runAgentLoopPhase(
   state: AgenxyGraphStateType,
   runContext: AgenxyGraphRunContext,
-  deps: PipelineDeps
+  deps: WorkflowDeps
 ): Promise<{ messages: AgentMessage[]; toolEvents: AgenxyGraphStateType['toolEvents'] }> {
   const bridge = runContext.reactBridge
   const prepared = state.tooling
   if (!prepared) {
-    throw new Error('[executeReactPhase] tooling not prepared')
+    throw new Error('[runAgentLoopPhase] tooling not prepared')
   }
 
   const { composerMode, runMeta } = state
@@ -191,7 +228,7 @@ async function executeReactPhase(
     runMeta
 
   agentLog.info(
-    `[executeReactPhase] mode=${composerMode} runPrompt: ${JSON.stringify(runPrompt, null, 2)}`
+    `[runAgentLoopPhase] mode=${composerMode} runPrompt: ${JSON.stringify(runPrompt, null, 2)}`
   )
 
   const hitlEnabled = composerMode === 'build' && settings.toolApprovalInBuild !== false
@@ -201,7 +238,7 @@ async function executeReactPhase(
     bridge.pushStreamToken(token)
   }
 
-  const runReact = async () =>
+  const runAgentLoop = async () =>
     runReactLoop(
       settings,
       runPrompt,
@@ -252,13 +289,13 @@ async function executeReactPhase(
   }
 
   const runMessages = deps.wrapReactRun
-    ? await deps.wrapReactRun(observationCtx, runReact, {
+    ? await deps.wrapReactRun(observationCtx, runAgentLoop, {
         formatOutput: (messages) => {
           const lastAi = findLastAiMessage(messages)
           return lastAi ? contentToText(lastAi.content) : ''
         }
       })
-    : await runReact()
+    : await runAgentLoop()
 
   return {
     messages: runMessages.length > 0 ? runMessages : state.messages,
@@ -266,10 +303,17 @@ async function executeReactPhase(
   }
 }
 
+/**
+ * 从本轮对话中提取记忆（若设置开启）。
+ *
+ * @param state - 当前流水线状态
+ * @param runContext - 运行上下文
+ * @param deps - 宿主注入依赖
+ */
 async function extractMemoryPhase(
   state: AgenxyGraphStateType,
   runContext: AgenxyGraphRunContext,
-  deps: PipelineDeps
+  deps: WorkflowDeps
 ): Promise<void> {
   const { settings } = runContext
   if (!settings.memoryEnabled || !settings.autoExtractMemory || !deps.extractMemory) return
@@ -291,16 +335,16 @@ async function extractMemoryPhase(
 }
 
 /**
- * 执行完整 agent 流水线。
+ * 执行完整 agent 工作流（按阶段编排：消息、意图、工具、Agent Loop、记忆）。
  *
  * @param input - 初始状态与 runContext
  * @param deps - 宿主注入依赖
  * @returns 运行结束后的 messages 与 toolEvents
  */
-export async function runAgenxyPipeline(
-  input: RunAgenxyPipelineInput,
-  deps: PipelineDeps
-): Promise<RunAgenxyPipelineResult> {
+export async function runWorkflow(
+  input: RunWorkflowInput,
+  deps: WorkflowDeps
+): Promise<RunWorkflowResult> {
   const state: AgenxyGraphStateType = {
     messages: input.messages,
     composerMode: input.composerMode,
@@ -312,19 +356,19 @@ export async function runAgenxyPipeline(
 
   const { runContext, initRunCallbacks, signal } = input
 
-  Object.assign(state, initRunPhase(state, initRunCallbacks))
+  Object.assign(state, appendUserMessagePhase(state, initRunCallbacks))
 
   if (state.composerMode === 'build') {
     Object.assign(state, await classifyIntentPhase(state, runContext, signal))
   }
 
-  initPlanAfterToolPhase(state, runContext, signal)
+  setupPlanAfterToolPhase(state, runContext, signal)
 
   Object.assign(state, await prepareToolingPhase(state, runContext, deps))
 
-  const reactResult = await executeReactPhase(state, runContext, deps)
-  state.messages = reactResult.messages
-  state.toolEvents = [...state.toolEvents, ...reactResult.toolEvents]
+  const agentLoopResult = await runAgentLoopPhase(state, runContext, deps)
+  state.messages = agentLoopResult.messages
+  state.toolEvents = [...state.toolEvents, ...agentLoopResult.toolEvents]
 
   if (runContext.settings.memoryEnabled && runContext.settings.autoExtractMemory) {
     await extractMemoryPhase(state, runContext, deps)
@@ -336,7 +380,13 @@ export async function runAgenxyPipeline(
   }
 }
 
-/** @deprecated 使用 runAgenxyPipeline */
-export const runAgenxyGraph = runAgenxyPipeline
+/** @deprecated 使用 runWorkflow */
+export const runAgenxyPipeline = runWorkflow
+
+/** @deprecated 使用 runWorkflow */
+export const runAgenxyGraph = runWorkflow
+
+/** @deprecated 使用 WorkflowDeps */
+export type PipelineDeps = WorkflowDeps
 
 export { AGENXY_USER_DISPLAY_KW }

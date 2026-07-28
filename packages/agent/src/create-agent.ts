@@ -20,15 +20,15 @@ import {
 import { setAgentLogger, type AgentLogger } from './logger.js'
 import { type AgentMessage, contentToText, findLastAiMessage } from './messages.js'
 import { ConcurrencyQueue } from './queue.js'
-import { runAgenxyPipeline, type PipelineDeps } from './run-pipeline.js'
+import { runWorkflow, type WorkflowDeps } from './run-workflow.js'
 
 /**
  * createAgent 配置项：宿主注入工具组装、可观测性与记忆提取等依赖。
  */
 export type CreateAgentOptions = {
-  prepareTooling: PipelineDeps['prepareTooling']
-  wrapReactRun?: PipelineDeps['wrapReactRun']
-  extractMemory?: PipelineDeps['extractMemory']
+  prepareTooling: WorkflowDeps['prepareTooling']
+  wrapReactRun?: WorkflowDeps['wrapReactRun']
+  extractMemory?: WorkflowDeps['extractMemory']
   logger?: AgentLogger
   /** 并发 run 上限，超出则排队；默认 3 */
   maxConcurrentRuns?: number
@@ -106,7 +106,7 @@ export type Agent = {
  * @returns 可 run / runQueued 的 agent 实例
  */
 export function createAgent(options: CreateAgentOptions): Agent {
-  const deps: PipelineDeps = {
+  const deps: WorkflowDeps = {
     prepareTooling: options.prepareTooling,
     wrapReactRun: options.wrapReactRun,
     extractMemory: options.extractMemory
@@ -213,7 +213,7 @@ export function createAgent(options: CreateAgentOptions): Agent {
     }
 
     try {
-      const graphResult = await runAgenxyPipeline(
+      const workflowResult = await runWorkflow(
         {
           composerMode,
           messages,
@@ -235,7 +235,7 @@ export function createAgent(options: CreateAgentOptions): Agent {
       // 当然，如果最后一轮 AI 消息也没有内容，则不进行 fallback。
       // fallback是为了什么？避免用户输入了但是没有触发流式输出，导致用户没有收到任何内容。
       if (streamedCharsRef.current === 0) {
-        const lastAi = findLastAiMessage(graphResult.messages)
+        const lastAi = findLastAiMessage(workflowResult.messages)
         const fallback = lastAi ? contentToText(lastAi.content) : ''
         if (fallback) {
           batcher.push(fallback)
@@ -243,8 +243,8 @@ export function createAgent(options: CreateAgentOptions): Agent {
       }
 
       return {
-        messages: graphResult.messages,
-        toolEvents: graphResult.toolEvents,
+        messages: workflowResult.messages,
+        toolEvents: workflowResult.toolEvents,
         streamedChars: streamedCharsRef.current
       }
     } finally {
