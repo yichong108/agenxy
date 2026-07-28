@@ -39,17 +39,3 @@ Agent 是 Agenxy 的核心组件，负责处理用户请求和执行任务。
   ]
 }
 ```
-
-### 记忆管理
-
-配置 Agent 的记忆能力：
-
-```json
-{
-  "memory": {
-    "type": "vector",
-    "maxEntries": 1000,
-    "retentionDays": 30
-  }
-}
-```

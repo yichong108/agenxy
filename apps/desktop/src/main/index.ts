@@ -23,14 +23,6 @@ import { shutdownLangfuseTracing, startLangfuseTracingIfConfigured } from '@/mai
 import { mainLog } from '@/main/logger'
 import { disposeMcpConnectionPool, probeMcpServer, warmupMcpServers } from '@/main/mcp/mcp-runtime'
 import {
-  addMemory,
-  bindMemorySync,
-  clearMemories,
-  deleteMemory,
-  listMemories,
-  updateMemory
-} from '@/main/memory/memory-service'
-import {
   createSession,
   deleteSession,
   getSessions,
@@ -332,7 +324,6 @@ function createWindow(): void {
     mainLog.error(`[renderer] process gone: reason=${details.reason}, exitCode=${details.exitCode}`)
   })
   bindAgentIpc(mainWindow.webContents)
-  bindMemorySync(mainWindow.webContents)
   mainWindow.webContents.on('did-finish-load', () => {
     mainWindow?.maximize()
     mainWindow?.show()
@@ -498,22 +489,6 @@ function registerIpc(): void {
     }
     return next
   })
-  ipcMain.handle(IPC.MEMORY_LIST, () => listMemories())
-  ipcMain.handle(IPC.MEMORY_ADD, (_e, content: string) => {
-    if (typeof content !== 'string' || !content.trim()) {
-      return listMemories()
-    }
-    return addMemory(content, { source: 'manual' })
-  })
-  ipcMain.handle(IPC.MEMORY_UPDATE, (_e, id: string, content: string) => {
-    if (typeof id !== 'string' || typeof content !== 'string') return listMemories()
-    return updateMemory(id, content)
-  })
-  ipcMain.handle(IPC.MEMORY_DELETE, (_e, id: string) => {
-    if (typeof id !== 'string') return listMemories()
-    return deleteMemory(id)
-  })
-  ipcMain.handle(IPC.MEMORY_CLEAR, () => clearMemories())
   ipcMain.handle(IPC.MCP_WARMUP_GET, () => getMcpWarmupStatus())
   ipcMain.handle(IPC.MCP_WARMUP_RUN, () => startMcpWarmup())
   ipcMain.handle(IPC.UI_STATE_GET, () => getUiState())

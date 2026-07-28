@@ -56,12 +56,7 @@ export const IPC = {
   /** 触发 webContents 编辑命令（撤销、复制等） */
   WEB_EDIT: 'web:edit',
   /** 关于面板：返回版本/构建/引擎等信息（由渲染层展示弹窗） */
-  APP_ABOUT: 'app:about',
-  MEMORY_LIST: 'memory:list',
-  MEMORY_ADD: 'memory:add',
-  MEMORY_UPDATE: 'memory:update',
-  MEMORY_DELETE: 'memory:delete',
-  MEMORY_CLEAR: 'memory:clear'
+  APP_ABOUT: 'app:about'
 } as const
 
 /** 与 IPC.WINDOW_ACTION 对应的动作 */
@@ -117,9 +112,7 @@ export const EVENTS = {
   /** 池化预热完成（启动、保存 MCP 或手动触发后） */
   MCP_WARMUP: 'mcp:warmup',
   /** 右侧栏终端命令的实时 stdout/stderr 片段 */
-  TERMINAL_OUTPUT: 'terminal:output',
-  /** 全局用户记忆列表变更（含可选的自动提取增量） */
-  MEMORY_SYNC: 'memory:sync'
+  TERMINAL_OUTPUT: 'terminal:output'
 } as const
 
 export type TerminalOutputEvent = {
@@ -133,8 +126,6 @@ export type {
   AgentSendOptions,
   AppSettings,
   McpServerEntry,
-  MemoryEntry,
-  MemoryExtractionDelta,
   ModelProviderId,
   ProviderProfile,
   SettingsFormValues,
@@ -160,9 +151,7 @@ export type {
   ToolCallEvent,
   ToolErrorEvent,
   ToolPlanStepEvent,
-  ToolTimelineEvent,
-  UserMemoriesState,
-  UserMemoriesSyncPayload
+  ToolTimelineEvent
 } from '@agenxy/shared'
 export {
   applySettingsForm,
@@ -171,9 +160,6 @@ export {
   getActiveProviderProfile,
   MAX_CONCURRENT_AGENT_STREAMS,
   MAX_MCP_SERVERS,
-  MAX_MEMORY_CONTENT_CHARS,
-  MAX_MEMORY_ENTRIES,
-  MAX_MEMORY_PROMPT_CHARS,
   MAX_TERMINAL_OUTPUT_CHARS,
   mergeFormIntoProviderProfiles,
   normalizeComposerMode,

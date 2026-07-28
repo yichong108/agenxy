@@ -728,21 +728,6 @@ export function useWorkspaceCenterPane({
   }, [activeWorkspaceId, bridge, preloadOk, supportsMultiWorkspaceApi])
   const isEmptyConversation = currentMessages.length === 0
 
-  useEffect(() => {
-    if (!preloadOk) return
-    return bridge.onMemorySync((payload) => {
-      const d = payload.lastExtractionDelta
-      if (!d) return
-      const total = d.added + d.updated + d.deleted
-      if (total <= 0) return
-      const parts: string[] = []
-      if (d.added) parts.push(`新增 ${d.added}`)
-      if (d.updated) parts.push(`更新 ${d.updated}`)
-      if (d.deleted) parts.push(`删除 ${d.deleted}`)
-      msgApi.info(`已更新用户记忆（${parts.join('，')}）`)
-    })
-  }, [bridge, msgApi, preloadOk])
-
   const composerWorkspaceToolbar = (
     <div className="app-composer-toolbar">
       <Dropdown

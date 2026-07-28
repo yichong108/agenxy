@@ -25,10 +25,9 @@ const DEFAULT_FORM_VALUES: SettingsFormValues = settingsToFormValues(DEFAULT_SET
 export type SettingsModalProps = {
   open: boolean
   onClose: () => void
-  onOpenMemoryHub?: () => void
 }
 
-export function SettingsModal({ open, onClose, onOpenMemoryHub }: SettingsModalProps) {
+export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const { message: msgApi } = AntdApp.useApp()
   const bridge = window.bridge
 
@@ -104,22 +103,6 @@ export function SettingsModal({ open, onClose, onOpenMemoryHub }: SettingsModalP
         >
           <Input.Password autoComplete="off" placeholder="留空则不启用联网搜索" />
         </Form.Item>
-        {onOpenMemoryHub ? (
-          <Typography.Paragraph style={{ marginBottom: 0 }}>
-            <Typography.Link
-              onClick={() => {
-                onClose()
-                onOpenMemoryHub()
-              }}
-            >
-              管理用户记忆 →
-            </Typography.Link>
-            <Typography.Text type="secondary">
-              {' '}
-              （跨会话全局偏好，可手动维护或对话后自动提取）
-            </Typography.Text>
-          </Typography.Paragraph>
-        ) : null}
       </Form>
     </Modal>
   )

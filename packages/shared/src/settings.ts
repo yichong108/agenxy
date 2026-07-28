@@ -121,8 +121,6 @@ export type AppSettings = {
   toolApprovalInBuild: boolean
   tavilyApiKey: string
   mcpServers: McpServerEntry[]
-  memoryEnabled: boolean
-  autoExtractMemory: boolean
 }
 
 export const defaultProviderProfiles = (): Record<ModelProviderId, ProviderProfile> => ({
@@ -140,9 +138,7 @@ export const defaultSettings: AppSettings = {
   agentRunTimeoutMs: 120_000,
   toolApprovalInBuild: true,
   tavilyApiKey: '',
-  mcpServers: [],
-  memoryEnabled: true,
-  autoExtractMemory: true
+  mcpServers: []
 }
 
 /** 当前选中提供方的连接配置 */

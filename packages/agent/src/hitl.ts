@@ -110,11 +110,7 @@ export const HITL_EXEMPT_TOOL_NAMES = new Set([
   'search_workspace',
   'web_search',
   'mcp_list_servers',
-  'mcp_inspect_server',
-  'user_memory_list',
-  'user_memory_add',
-  'user_memory_update',
-  'user_memory_delete'
+  'mcp_inspect_server'
 ])
 
 export function requiresHitlApproval(toolName: string): boolean {

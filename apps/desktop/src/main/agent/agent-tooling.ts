@@ -10,17 +10,6 @@ import { z } from 'zod'
 
 import { buildSkillBundle } from '@/main/agent/skills/index'
 import { buildMcpTools } from '@/main/mcp/mcp-runtime'
-import {
-  isReservedMemoryFilePath,
-  MEMORY_FILE_GUARD_MESSAGE
-} from '@/main/memory/memory-path-guard'
-import { buildMemoryPromptBlock } from '@/main/memory/memory-service'
-import {
-  userMemoryAdd,
-  userMemoryDelete,
-  userMemoryList,
-  userMemoryUpdate
-} from '@/main/memory/memory-tools'
 import { userDataPath } from '@/main/store'
 import {
   deleteFileTool,
@@ -63,52 +52,11 @@ type ToolDefinition<T extends z.ZodTypeAny> = {
   truncateTo?: number
 }
 
-function buildUserMemoryToolDefs(
-  sessionId: string,
-  settings: AppSettings,
-  allowWrite: boolean
-): ToolDefinition<z.ZodTypeAny>[] {
-  if (settings.memoryEnabled === false) return []
-  const defs: ToolDefinition<z.ZodTypeAny>[] = [
-    {
-      name: 'user_memory_list',
-      description: '列出应用内保存的全局用户长期记忆（跨工作区），不在工作区文件中。',
-      schema: z.object({}),
-      execute: async () => userMemoryList(),
-      truncateTo: 4_000
-    }
-  ]
-  if (!allowWrite) return defs
-  defs.push(
-    {
-      name: 'user_memory_add',
-      description:
-        '将用户偏好或事实写入应用全局记忆。用户要求记住时使用；不要在工作区写 .claude-memory.json。',
-      schema: z.object({ content: z.string() }),
-      execute: async ({ content }) => userMemoryAdd(content, sessionId)
-    },
-    {
-      name: 'user_memory_update',
-      description: '更新已有全局用户记忆条目（按 id）。',
-      schema: z.object({ id: z.string(), content: z.string() }),
-      execute: async ({ id, content }) => userMemoryUpdate(id, content)
-    },
-    {
-      name: 'user_memory_delete',
-      description: '删除全局用户记忆条目（按 id）。',
-      schema: z.object({ id: z.string() }),
-      execute: async ({ id }) => userMemoryDelete(id)
-    }
-  )
-  return defs
-}
-
 function buildBaseAndWebTools(
   sessionId: string,
   root: string,
   settings: AppSettings,
-  runCtx: ToolExecutorContext,
-  opts?: { memoryWrite?: boolean }
+  runCtx: ToolExecutorContext
 ): { baseTools: NamedTool[]; webSearchTools: NamedTool[] } {
   const termKey = `term:${sessionId}`
 
@@ -124,10 +72,7 @@ function buildBaseAndWebTools(
       name: 'write_file',
       description: '写入或覆盖工作区文件，自动创建父目录',
       schema: z.object({ path: z.string(), content: z.string() }),
-      execute: ({ path, content }) =>
-        isReservedMemoryFilePath(path)
-          ? Promise.resolve(`已拒绝：${MEMORY_FILE_GUARD_MESSAGE}`)
-          : writeFileTool(root, path, content)
+      execute: ({ path, content }) => writeFileTool(root, path, content)
     },
     {
       name: 'delete_file',
@@ -196,8 +141,7 @@ function buildBaseAndWebTools(
     }
   ]
 
-  const memoryToolDefs = buildUserMemoryToolDefs(sessionId, settings, opts?.memoryWrite !== false)
-  const baseTools = [...baseToolDefs, ...memoryToolDefs].map((def) => defineTool(def, runCtx))
+  const baseTools = baseToolDefs.map((def) => defineTool(def, runCtx))
 
   const webSearchTools: NamedTool[] = isTavilyConfigured(settings.tavilyApiKey)
     ? [
@@ -234,13 +178,9 @@ function buildSystemPrompt(root: string, settings: AppSettings): string {
       : (settings.mcpServers?.length ?? 0) > 0
         ? `${mcpMeta}\n- 当前 MCP 条目未启用或 command 为空；用户启用后才会出现 mcp_* 工具。`
         : mcpMeta
-  const memoryTools =
-    settings.memoryEnabled !== false
-      ? '、user_memory_list、user_memory_add、user_memory_update、user_memory_delete'
-      : ''
   const toolLine = web
-    ? `read_file、write_file、delete_file、list_dir、glob、grep、search_workspace、shell、web_search（Tavily 联网搜索）、mcp_list_servers、mcp_inspect_server${memoryTools}`
-    : `read_file、write_file、delete_file、list_dir、glob、grep、search_workspace、shell、mcp_list_servers、mcp_inspect_server（未配置 Tavily API Key 时无 web_search）${memoryTools}`
+    ? 'read_file、write_file、delete_file、list_dir、glob、grep、search_workspace、shell、web_search（Tavily 联网搜索）、mcp_list_servers、mcp_inspect_server'
+    : 'read_file、write_file、delete_file、list_dir、glob、grep、search_workspace、shell、mcp_list_servers、mcp_inspect_server（未配置 Tavily API Key 时无 web_search）'
   const webRule = web
     ? '- 用户询问**天气、气温、降雨、实时新闻、股价、政策**等需要外部信息时，必须先调用 **web_search** 再回答；不要编造天气或声称「搜索失败」。\n- 若用户**拒绝**某次工具调用（结果含已拒绝/未执行），**本轮不得再次调用该工具**；用中文简要说明并给出替代方案（如请用户提供城市/地区，或说明可在设置中调整审批）。'
     : '- 未配置 Tavily，**web_search 不可用**：若用户需要今日天气等实时信息，明确告知在应用设置中填写「Tavily API Key」或配置环境变量 TAVILY_API_KEY；可建议天气网站/App；不要声称「搜索引擎坏了」或「无法联网」。'
@@ -253,18 +193,15 @@ function buildSystemPrompt(root: string, settings: AppSettings): string {
 - 用户明确要求删除工作区中的文件时，使用 delete_file（仅普通文件，不含目录）。
 - 用 glob 按文件名/路径模式搜索（如 **/*.ts）：结果含工作区与「用户数据」目录（技能市场安装等）；read_file/write 仍仅限工作区路径。
 ${webRule}
-- **用户长期记忆**保存在应用内（设置 → 用户记忆），不在工作区文件中。用户分享持久偏好或要求记住/忘记时，使用 **user_memory_add** / **user_memory_update** / **user_memory_delete**（或依赖回合结束后的自动提取）。**禁止**在工作区创建或编辑 \`.claude-memory.json\`、\`.cursor-memory.json\` 等临时记忆 JSON。
 - 回复简洁可执行；改代码前先 read/list。
 - 先理解任务 → 必要时复述目标 → 再选工具。`
 }
 
 function buildAskSystemPrompt(root: string, settings: AppSettings): string {
   const web = isTavilyConfigured(settings.tavilyApiKey)
-  const memoryTools =
-    settings.memoryEnabled !== false ? '、user_memory_list（仅读取全局用户记忆）' : ''
   const toolLine = web
-    ? `read_file、list_dir、glob、grep、search_workspace、web_search（Tavily）${memoryTools}`
-    : `read_file、list_dir、glob、grep、search_workspace（未配置 Tavily 时无 web_search）${memoryTools}`
+    ? 'read_file、list_dir、glob、grep、search_workspace、web_search（Tavily）'
+    : 'read_file、list_dir、glob、grep、search_workspace（未配置 Tavily 时无 web_search）'
   const webRule = web
     ? '- 需要外部信息时调用 **web_search**；不要编造搜索结果。'
     : '- 未配置 Tavily：若用户需要实时信息，如实说明并建议在设置中配置 Tavily。'
@@ -273,7 +210,6 @@ function buildAskSystemPrompt(root: string, settings: AppSettings): string {
 - 仅只读工具：${toolLine}。路径均相对于工作区根目录。
 - 若用户要求「直接改代码 / 跑命令 / 打补丁」，说明问答模式不能自动执行，给出可复制片段或步骤；要自动应用请切换到 **构建模式**。
 ${webRule}
-- 用户偏好保存在应用全局记忆（启用时可用 user_memory_list），不在工作区 JSON。不要建议写入 \`.claude-memory.json\` 等文件。
 - 回复清晰可验证：下结论前先 read/list/search 仓库内容。
 - 先理解意图 → 必要时复述目标
 `
@@ -315,7 +251,7 @@ ${webRule}`
  * 按 composer mode 组装工具、skills 与 MCP。
  *
  * @param mode - ask / plan / build
- * @param sessionId - 会话 ID（terminal key、memory 来源）
+ * @param sessionId - 会话 ID（terminal key）
  * @param root - 工作区根目录
  * @param settings - 应用设置
  * @param runCtx - 工具 timeline 回调
@@ -330,10 +266,7 @@ export async function prepareAgentTooling(
   runCtx: ToolExecutorContext,
   options?: PrepareAgentToolingOptions
 ): Promise<AgentTooling> {
-  const memoryWrite = mode === 'build'
-  const { baseTools, webSearchTools } = buildBaseAndWebTools(sessionId, root, settings, runCtx, {
-    memoryWrite
-  })
+  const { baseTools, webSearchTools } = buildBaseAndWebTools(sessionId, root, settings, runCtx)
 
   if (mode === 'ask' || mode === 'plan') {
     const tools = [...baseTools, ...webSearchTools].filter((t) =>
@@ -374,22 +307,16 @@ export function buildAgentRunPrompt(
   settings: AppSettings,
   tooling: AgentTooling
 ): string {
-  const memoryBlock = buildMemoryPromptBlock(settings)
   if (mode === 'ask') {
-    return [buildAskSystemPrompt(root, settings), memoryBlock, commonPrompt]
-      .filter(Boolean)
-      .join('\n\n')
+    return [buildAskSystemPrompt(root, settings), commonPrompt].filter(Boolean).join('\n\n')
   }
   if (mode === 'plan') {
-    return [buildPlanSystemPrompt(root, settings), memoryBlock, commonPrompt]
-      .filter(Boolean)
-      .join('\n\n')
+    return [buildPlanSystemPrompt(root, settings), commonPrompt].filter(Boolean).join('\n\n')
   }
   return [
     buildSystemPrompt(root, settings),
     tooling.skillHint,
     tooling.mcpContextHints,
-    memoryBlock,
     commonPrompt
   ]
     .filter(Boolean)

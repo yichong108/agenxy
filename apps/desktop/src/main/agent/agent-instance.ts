@@ -1,12 +1,11 @@
 /**
- * Desktop agent 实例 — 注入 Electron 侧工具组装、Langfuse 与记忆提取。
+ * Desktop agent 实例 — 注入 Electron 侧工具组装与 Langfuse。
  */
 import { createAgent, type CreateAgentOptions } from '@agenxy/agent'
 
 import { agentLog } from '@/main/agent/agent-log'
 import { buildAgentRunPrompt, prepareAgentTooling } from '@/main/agent/agent-tooling'
 import { runLangfuseReactObservation } from '@/main/langfuse'
-import { extractMemoriesAfterRun } from '@/main/memory/memory-extractor'
 import { MAX_CONCURRENT_AGENT_STREAMS, STREAM_FLUSH_CHARS, STREAM_FLUSH_MS } from '@/shared/ipc'
 
 const desktopAgentOptions: CreateAgentOptions = {
@@ -28,8 +27,7 @@ const desktopAgentOptions: CreateAgentOptions = {
       runPrompt: buildAgentRunPrompt(composerMode, root, settings, bundle)
     }
   },
-  wrapReactRun: runLangfuseReactObservation as CreateAgentOptions['wrapReactRun'],
-  extractMemory: extractMemoriesAfterRun
+  wrapReactRun: runLangfuseReactObservation as CreateAgentOptions['wrapReactRun']
 }
 
 /**

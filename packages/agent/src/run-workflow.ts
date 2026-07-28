@@ -50,7 +50,7 @@ export type ReactObservationContext = {
 }
 
 /**
- * 宿主注入的工作流依赖（工具组装、Langfuse、记忆提取等）。
+ * 宿主注入的工作流依赖（工具组装、Langfuse 等）。
  */
 export type WorkflowDeps = {
   prepareTooling: (args: {
@@ -67,12 +67,6 @@ export type WorkflowDeps = {
     fn: () => Promise<T>,
     opts?: { formatOutput?: (messages: AgentMessage[]) => string }
   ) => Promise<T>
-
-  extractMemory?: (args: {
-    sessionId: string
-    userText: string
-    assistantText: string
-  }) => Promise<void>
 }
 
 /**
@@ -304,38 +298,7 @@ async function runAgentLoopPhase(
 }
 
 /**
- * 从本轮对话中提取记忆（若设置开启）。
- *
- * @param state - 当前流水线状态
- * @param runContext - 运行上下文
- * @param deps - 宿主注入依赖
- */
-async function extractMemoryPhase(
-  state: AgenxyGraphStateType,
-  runContext: AgenxyGraphRunContext,
-  deps: WorkflowDeps
-): Promise<void> {
-  const { settings } = runContext
-  if (!settings.memoryEnabled || !settings.autoExtractMemory || !deps.extractMemory) return
-
-  const { runMeta, messages } = state
-  const lastAi = findLastAiMessage(messages)
-  const assistantText = lastAi ? contentToText(lastAi.content) : ''
-  const userText = runMeta.userDisplayText || runMeta.agentUserText
-
-  try {
-    await deps.extractMemory({
-      sessionId: runMeta.sessionId,
-      userText,
-      assistantText
-    })
-  } catch (err) {
-    agentLog.warn('[extractMemoryPhase] failed:', err instanceof Error ? err.message : String(err))
-  }
-}
-
-/**
- * 执行完整 agent 工作流（按阶段编排：消息、意图、工具、Agent Loop、记忆）。
+ * 执行完整 agent 工作流（按阶段编排：消息、意图、工具、Agent Loop）。
  *
  * @param input - 初始状态与 runContext
  * @param deps - 宿主注入依赖
@@ -369,10 +332,6 @@ export async function runWorkflow(
   const agentLoopResult = await runAgentLoopPhase(state, runContext, deps)
   state.messages = agentLoopResult.messages
   state.toolEvents = [...state.toolEvents, ...agentLoopResult.toolEvents]
-
-  if (runContext.settings.memoryEnabled && runContext.settings.autoExtractMemory) {
-    await extractMemoryPhase(state, runContext, deps)
-  }
 
   return {
     messages: state.messages,

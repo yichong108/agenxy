@@ -23,12 +23,11 @@ import { ConcurrencyQueue } from './queue.js'
 import { runWorkflow, type WorkflowDeps } from './run-workflow.js'
 
 /**
- * createAgent 配置项：宿主注入工具组装、可观测性与记忆提取等依赖。
+ * createAgent 配置项：宿主注入工具组装与可观测性等依赖。
  */
 export type CreateAgentOptions = {
   prepareTooling: WorkflowDeps['prepareTooling']
   wrapReactRun?: WorkflowDeps['wrapReactRun']
-  extractMemory?: WorkflowDeps['extractMemory']
   logger?: AgentLogger
   /** 并发 run 上限，超出则排队；默认 3 */
   maxConcurrentRuns?: number
@@ -108,8 +107,7 @@ export type Agent = {
 export function createAgent(options: CreateAgentOptions): Agent {
   const deps: WorkflowDeps = {
     prepareTooling: options.prepareTooling,
-    wrapReactRun: options.wrapReactRun,
-    extractMemory: options.extractMemory
+    wrapReactRun: options.wrapReactRun
   }
 
   if (options.logger) {

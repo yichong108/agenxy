@@ -125,8 +125,6 @@ export function useWorkspaceLeftPane() {
 
   const [skillsOpen, setSkillsOpen] = useState(false)
 
-  const [memoryOpen, setMemoryOpen] = useState(false)
-
   useEffect(() => {
     if (!preloadOk) return
     const unSub = [
@@ -194,10 +192,6 @@ export function useWorkspaceLeftPane() {
 
   const openSkillsHub = useCallback(() => {
     setSkillsOpen(true)
-  }, [])
-
-  const openMemoryHub = useCallback(() => {
-    setMemoryOpen(true)
   }, [])
 
   const handleWorkspaceToggle = useCallback(
@@ -516,7 +510,6 @@ export function useWorkspaceLeftPane() {
     handleSidebarCollapseToggle,
     openMcpHub,
     openSkillsHub,
-    openMemoryHub,
     openSettings,
     openBlankConversationForActiveWorkspace,
     handleWorkspaceToggle,
@@ -537,8 +530,6 @@ export function useWorkspaceLeftPane() {
     closeSettings: () => setSettingsOpen(false),
     skillsOpen,
     closeSkillsHub: () => setSkillsOpen(false),
-    memoryOpen,
-    closeMemoryHub: () => setMemoryOpen(false),
     renameModal
   }
 }
