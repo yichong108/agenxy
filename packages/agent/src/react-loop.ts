@@ -1,3 +1,7 @@
+/**
+ * @file react-loop.ts
+ * @description ReAct 循环实现
+ */
 import { type AppSettings } from '@agenxy/shared'
 import { tool, type CoreMessage, type ToolSet } from 'ai'
 import { streamText } from 'ai'
@@ -107,6 +111,40 @@ async function executePendingToolCalls(
   return out
 }
 
+async function handleHitlRound(args: {
+  pending: PendingToolCall[]
+  toolsByName: Map<string, NamedTool>
+  runCtx: ReactAgentRunContext
+  hitlRound: number
+  signal?: AbortSignal
+}): Promise<AgentMessage[]> {
+  const { pending, toolsByName, runCtx, hitlRound, signal } = args
+  const { approvalRequired, autoExecute } = partitionPendingToolCalls(pending)
+
+  if (approvalRequired.length === 0) {
+    agentLog.info(
+      `[runReactLoop] read-only tools only (${autoExecute.map((t) => t.name).join(', ')}), skip HITL`
+    )
+    return executePendingToolCalls(pending, toolsByName, signal)
+  }
+
+  const hitlId = makeHitlId(runCtx.meta.runId, hitlRound)
+  runCtx.hitl.onPending(hitlId, approvalRequired)
+  runCtx.hitl.emitRequired(hitlId, approvalRequired)
+
+  const decision: HitlUserDecision = await waitForHitlDecision(hitlId, signal)
+  agentLog.info(`[runReactLoop] hitl decision=${decision} hitlId=${hitlId}`)
+
+  if (decision === 'reject') {
+    const autoResults =
+      autoExecute.length > 0 ? await executePendingToolCalls(autoExecute, toolsByName, signal) : []
+    runCtx.hitl.onRejected?.(approvalRequired)
+    return [...autoResults, ...buildRejectionStateMessages(approvalRequired)]
+  }
+
+  return executePendingToolCalls(pending, toolsByName, signal)
+}
+
 /**
  * 运行 ReAct 循环：流式生成 + 手动工具执行 + Build 模式 HITL。
  * 
@@ -197,36 +235,14 @@ export async function runReactLoop(
     if (pending.length === 0) break
 
     if (runCtx.hitl.enabled) {
-      const { approvalRequired, autoExecute } = partitionPendingToolCalls(pending)
-
-      if (approvalRequired.length === 0) {
-        agentLog.info(
-          `[runReactLoop] read-only tools only (${autoExecute.map((t) => t.name).join(', ')}), skip HITL`
-        )
-        const results = await executePendingToolCalls(pending, toolsByName, ac.signal)
-        working.push(...results)
-        continue
-      }
-
-      const hitlId = makeHitlId(runCtx.meta.runId, hitlRound++)
-      runCtx.hitl.onPending(hitlId, approvalRequired)
-      runCtx.hitl.emitRequired(hitlId, approvalRequired)
-
-      const decision: HitlUserDecision = await waitForHitlDecision(hitlId, ac.signal)
-      agentLog.info(`[runReactLoop] hitl decision=${decision} hitlId=${hitlId}`)
-
-      if (decision === 'reject') {
-        const autoResults =
-          autoExecute.length > 0
-            ? await executePendingToolCalls(autoExecute, toolsByName, ac.signal)
-            : []
-        working.push(...autoResults, ...buildRejectionStateMessages(approvalRequired))
-        runCtx.hitl.onRejected?.(approvalRequired)
-        continue
-      }
-
-      const results = await executePendingToolCalls(pending, toolsByName, ac.signal)
-      working.push(...results)
+      const hitlMessages = await handleHitlRound({
+        pending,
+        toolsByName,
+        runCtx,
+        hitlRound: hitlRound++,
+        signal: ac.signal
+      })
+      working.push(...hitlMessages)
       continue
     }
 
