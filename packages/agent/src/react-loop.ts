@@ -74,6 +74,8 @@ async function executePendingToolCalls(
 
 /**
  * 运行 ReAct 循环：流式生成 + 手动工具执行 + Build 模式 HITL。
+ * 
+ * 实现ReAct循环核心原理。
  *
  * @param settings - 应用设置
  * @param systemPrompt - system 提示
@@ -134,8 +136,7 @@ export async function runReactLoop(
 
     for await (const chunk of result.fullStream) {
       if (chunk.type === 'text-delta') {
-        const token = 'textDelta' in chunk ? chunk.textDelta : (chunk as { text?: string }).text
-        if (token) onToken(token)
+        if (chunk.textDelta) onToken(chunk.textDelta)
       }
     }
 

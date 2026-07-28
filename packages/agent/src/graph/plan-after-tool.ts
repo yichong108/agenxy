@@ -75,7 +75,7 @@ async function streamPlanAfterTool(
     for await (const chunk of result.fullStream) {
       if (Date.now() > deadline) break
       if (chunk.type !== 'text-delta') continue
-      const piece = 'textDelta' in chunk ? chunk.textDelta : (chunk as { text?: string }).text
+      const piece = chunk.textDelta
       if (!piece) continue
       acc += piece
       planBatcher.push(piece)
