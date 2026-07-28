@@ -1,6 +1,3 @@
-/** 主进程全局 Agent 流并发上限（代码固定，不写入用户设置） */
-export const MAX_CONCURRENT_AGENT_STREAMS = 3
-
 /** 流式 IPC 合并间隔（内置，不暴露设置） */
 export const STREAM_FLUSH_MS = 32
 
@@ -82,11 +79,6 @@ export type StreamDoneEvent = StreamBase &
     type: 'done'
   }
 
-export type StreamQueuedEvent = StreamBase & {
-  type: 'queued'
-  position: number
-}
-
 export type StreamRunStartEvent = StreamBase & {
   type: 'run-start'
   timestampMs?: number
@@ -139,5 +131,4 @@ export type StreamEvent =
   | StreamToolEvent
   | StreamErrorEvent
   | StreamDoneEvent
-  | StreamQueuedEvent
   | StreamRunStartEvent

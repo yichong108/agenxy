@@ -129,7 +129,6 @@ export function useWorkspaceCenterPane({
   const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({})
   const [timeline, setTimeline] = useState<Record<string, ToolTimelineEvent[]>>({})
   const [running, setRunning] = useState<Record<string, boolean>>({})
-  const [queued, setQueued] = useState<Record<string, number | undefined>>({})
   const [runStats, setRunStats] = useState<Record<string, RunStats | undefined>>({})
   /** LangGraph interruptBefore tools：待用户批准的工具批次 */
   const [hitlPending, setHitlPending] = useState<
@@ -138,6 +137,8 @@ export function useWorkspaceCenterPane({
   const streamBuf = useRef<Record<string, string>>({})
   const assistantMsgId = useRef<Record<string, string | null>>({})
   const hydratedMessageSessions = useRef<Set<string>>(new Set())
+  /** 同会话发送 IPC 进行中，防止连点重复发送（不等同于 agent 已 run-start） */
+  const sendInFlightRef = useRef(new Set<string>())
 
   const ensureSessionMessages = useCallback(
     async (sessionId: string, force = false) => {
@@ -252,7 +253,6 @@ export function useWorkspaceCenterPane({
       if (e.type === 'run-start') {
         const startedAt = e.timestampMs ?? Date.now()
         setRunning((r) => ({ ...r, [e.sessionId]: true }))
-        setQueued((q) => ({ ...q, [e.sessionId]: undefined }))
         setRunStats((s) => ({
           ...s,
           [e.sessionId]: {
@@ -283,10 +283,6 @@ export function useWorkspaceCenterPane({
           }
         })
         setTimeline((t) => ({ ...t, [e.sessionId]: [] }))
-        return
-      }
-      if (e.type === 'queued') {
-        setQueued((q) => ({ ...q, [e.sessionId]: e.position }))
         return
       }
       if (e.type === 'plan-step-start') {
@@ -430,7 +426,6 @@ export function useWorkspaceCenterPane({
           return next
         })
         setRunning((r) => ({ ...r, [e.sessionId]: false }))
-        setQueued((q) => ({ ...q, [e.sessionId]: undefined }))
         setRunStats((s) => {
           const cur = s[e.sessionId]
           if (!cur) return s
@@ -597,6 +592,11 @@ export function useWorkspaceCenterPane({
         sessionId = created.id
         setActiveId(sessionId)
       }
+      if (running[sessionId] || sendInFlightRef.current.has(sessionId)) {
+        msgApi.warning('当前会话已有智能体在运行，请等待完成或停止后再发送')
+        return
+      }
+      sendInFlightRef.current.add(sessionId)
       hydratedMessageSessions.current.add(sessionId)
       lastSendComposerModeRef.current = mode
       setMessages((m) => {
@@ -606,19 +606,23 @@ export function useWorkspaceCenterPane({
           [sessionId]: [...cur, { id: randomId(), role: 'user' as const, content: displayContent }]
         }
       })
-      const r = await bridge.sendAgentMessage(sessionId, t, {
-        mode,
-        ...(planContext ? { planContext, userDisplayText: displayContent } : {})
-      })
-      if (!r.ok) {
-        msgApi.error('发送失败: ' + r.error)
-        setMessages((m) => {
-          const cur = m[sessionId] ?? []
-          return {
-            ...m,
-            [sessionId]: appendAssistantText(cur, `发送失败：${r.error}`, true)
-          }
+      try {
+        const r = await bridge.sendAgentMessage(sessionId, t, {
+          mode,
+          ...(planContext ? { planContext, userDisplayText: displayContent } : {})
         })
+        if (!r.ok) {
+          msgApi.error('发送失败: ' + r.error)
+          setMessages((m) => {
+            const cur = m[sessionId] ?? []
+            return {
+              ...m,
+              [sessionId]: appendAssistantText(cur, `发送失败：${r.error}`, true)
+            }
+          })
+        }
+      } finally {
+        sendInFlightRef.current.delete(sessionId)
       }
     },
     [
@@ -627,6 +631,7 @@ export function useWorkspaceCenterPane({
       bridge,
       composerSelectedWorkspaceId,
       msgApi,
+      running,
       setActiveId,
       workspacesWithComposerHomeStub
     ]
@@ -688,7 +693,6 @@ export function useWorkspaceCenterPane({
     [activeId, timeline]
   )
   const isRun = activeId ? running[activeId] : false
-  const isQueued = activeId ? queued[activeId] : undefined
   const currentRunStats = activeId ? runStats[activeId] : undefined
   const activeHitl = activeId ? hitlPending[activeId] : undefined
 
@@ -713,9 +717,9 @@ export function useWorkspaceCenterPane({
   )
   const hasInput = input.trim().length > 0
   const hasPendingPlan = Boolean(activeId && pendingPlanBySession[activeId]?.trim())
-  const canSend = hasInput || hasPendingPlan
-  const showSendButton = !isRun || canSend
-  const showStopButton = Boolean(activeId && isRun && !canSend)
+  const canSend = !isRun && (hasInput || hasPendingPlan)
+  const showSendButton = !isRun
+  const showStopButton = Boolean(activeId && isRun)
   const activeWorkspace = useMemo(
     () => workspacesWithComposerHomeStub.find((w) => w.id === composerSelectedWorkspaceId),
     [composerSelectedWorkspaceId, workspacesWithComposerHomeStub]
@@ -810,7 +814,7 @@ export function useWorkspaceCenterPane({
           onPressEnter={(e) => {
             if (!e.shiftKey) {
               e.preventDefault()
-              void send()
+              if (!isRun) void send()
             }
           }}
         />
@@ -875,7 +879,6 @@ export function useWorkspaceCenterPane({
     workspacesWithComposerHomeStub,
     sessionsByWorkspace,
     activeId,
-    isQueued,
     currentRunStats,
     composerWorkspaceToolbar,
     hitlApprovalBar,

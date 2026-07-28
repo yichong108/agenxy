@@ -231,12 +231,28 @@ export function resumeAgentHitl(
 }
 
 /**
+ * 当前会话是否已有智能体在运行。
+ *
+ * @param sessionId - 会话 ID
+ * @returns 若该会话存在且 controller 非空则为 true
+ */
+export function isSessionRunning(sessionId: string): boolean {
+  return Boolean(sessions.get(sessionId)?.controller)
+}
+
+/**
  * 运行用户消息。
+ *
+ * 同会话同时只允许一次 run：已有运行中的智能体时直接拒绝。
+ * 不同会话各自独立，可并行执行。
+ *
+ * @param sessionId - 会话 ID
+ * @param userText - 用户输入文本
+ * @param options - 发送选项（模式、计划上下文等）
  */
 export async function runUserMessage(
   sessionId: string,
   userText: string,
-  onQueued: (pos: number) => void,
   options?: AgentSendOptions
 ): Promise<void> {
   const composerMode = normalizeComposerMode(options?.mode)
@@ -253,12 +269,16 @@ export async function runUserMessage(
   const settings = getSettings()
   agentLog.info(`settings: ${JSON.stringify(settings, null, 2)}, composerMode: ${composerMode}`)
 
-  const existingSession = sessions.get(sessionId)
-  if (!existingSession) {
+  const session = sessions.get(sessionId)
+  if (!session) {
     emit({ type: 'error', sessionId, message: '会话不存在或已过期' })
     return
   }
-  const workspace = getWorkspaceById(existingSession.workspaceId)
+  if (session.controller) {
+    throw new Error('当前会话已有智能体在运行，请等待完成或停止后再发送')
+  }
+
+  const workspace = getWorkspaceById(session.workspaceId)
   agentLog.info(`[runUserMessage] workspace: ${workspace?.path}`)
 
   const root = workspace?.path?.trim() || ''
@@ -271,110 +291,98 @@ export async function runUserMessage(
     return
   }
 
-  let runId = ''
-  let traceId = ''
-  let runStartedAt = 0
-  let runToolEvents: ToolTimelineEvent[] = []
+  const ac = new AbortController()
+  // 在任意 await 之前占住会话，避免同会话并发进入
+  session.controller = ac
+
+  const runId = makeRunId()
+  const traceId = makeTraceId(sessionId, runId)
+  const runStartedAt = Date.now()
+  const runToolEvents: ToolTimelineEvent[] = []
 
   try {
-    const graphResult = await desktopAgent.runQueued(async () => {
-      const session = sessions.get(sessionId)
-      if (!session) {
-        agentLog.error(`[runUserMessage] session not found for sessionId: ${sessionId}`)
-        emit({ type: 'error', sessionId, message: '会话不存在或已过期' })
-        throw new Error('会话不存在或已过期')
-      }
+    agentLog.info(
+      `[runUserMessage] run-start: ${runId}, traceId: ${traceId}, sessionId: ${sessionId}, timestampMs: ${runStartedAt}`
+    )
+    emit({ type: 'run-start', sessionId, runId, traceId, timestampMs: runStartedAt })
 
-      const ac = new AbortController()
-      runId = makeRunId()
-      traceId = makeTraceId(sessionId, runId)
-      runStartedAt = Date.now()
-      session.controller = ac
-      runToolEvents = []
+    const threadId = `${sessionId}:${runId}`
 
-      agentLog.info(
-        `[runUserMessage] run-start: ${runId}, traceId: ${traceId}, sessionId: ${sessionId}, timestampMs: ${runStartedAt}`
-      )
-      emit({ type: 'run-start', sessionId, runId, traceId, timestampMs: runStartedAt })
+    const emitTool = (e: ToolTimelineEvent) => {
+      emit({
+        type: 'tool',
+        sessionId,
+        runId,
+        traceId,
+        event: {
+          ...e,
+          runId: e.runId ?? runId,
+          traceId: e.traceId ?? traceId,
+          timestampMs: e.timestampMs ?? Date.now()
+        }
+      })
+    }
 
-      const threadId = `${sessionId}:${runId}`
+    const onTool = (e: ToolTimelineEvent) => {
+      runToolEvents.push(e)
+      emitTool(e)
+    }
 
-      const emitTool = (e: ToolTimelineEvent) => {
-        emit({
-          type: 'tool',
-          sessionId,
-          runId,
-          traceId,
-          event: {
-            ...e,
-            runId: e.runId ?? runId,
-            traceId: e.traceId ?? traceId,
-            timestampMs: e.timestampMs ?? Date.now()
-          }
-        })
-      }
-
-      const onTool = (e: ToolTimelineEvent) => {
-        runToolEvents.push(e)
-        emitTool(e)
-      }
-
-      return {
-        composerMode,
-        messages: session.messages,
-        abortController: ac,
-        settings,
-        runMeta: {
-          sessionId,
-          runId,
-          traceId,
-          threadId,
-          workspaceId: session.workspaceId,
-          root,
-          userDisplayText,
-          agentUserText,
-          planContext
+    const graphResult = await desktopAgent.run({
+      composerMode,
+      messages: session.messages,
+      abortController: ac,
+      settings,
+      runMeta: {
+        sessionId,
+        runId,
+        traceId,
+        threadId,
+        workspaceId: session.workspaceId,
+        root,
+        userDisplayText,
+        agentUserText,
+        planContext
+      },
+      recursionLimit: settings.maxAgentLoopSteps,
+      invokeTimeoutMs: settings.agentRunTimeoutMs,
+      callbacks: {
+        onTextDelta: (text) => {
+          emit({ type: 'text-delta', sessionId, text, runId, traceId })
         },
-        recursionLimit: settings.maxAgentLoopSteps,
-        invokeTimeoutMs: settings.agentRunTimeoutMs,
-        callbacks: {
-          onTextDelta: (text) => {
-            emit({ type: 'text-delta', sessionId, text, runId, traceId })
-          },
-          onStreamReset: () => {
-            emit({ type: 'stream-reset', sessionId, runId, traceId })
-          },
-          onHitlRequired: (hitlId, toolCalls) => {
-            emit({
-              type: 'hitl-required',
-              sessionId,
-              runId,
-              traceId,
-              hitlId,
-              toolCalls
-            })
-          },
-          onToolsRejected: () => {},
-          onTool,
-          emit,
-          persistMessages: (messages) => {
-            session.messages = messages
-            persistSessionMessages(session.workspaceId, sessionId, messages)
-          },
-          setPendingHitl: (hitlId, hitlThreadId, toolCalls) => {
-            session.pendingHitl = { hitlId, threadId: hitlThreadId, toolCalls }
-          }
+        onStreamReset: () => {
+          emit({ type: 'stream-reset', sessionId, runId, traceId })
+        },
+        onHitlRequired: (hitlId, toolCalls) => {
+          emit({
+            type: 'hitl-required',
+            sessionId,
+            runId,
+            traceId,
+            hitlId,
+            toolCalls
+          })
+        },
+        onToolsRejected: () => {},
+        onTool,
+        emit,
+        persistMessages: (messages) => {
+          session.messages = messages
+          persistSessionMessages(session.workspaceId, sessionId, messages)
+        },
+        setPendingHitl: (hitlId, hitlThreadId, toolCalls) => {
+          session.pendingHitl = { hitlId, threadId: hitlThreadId, toolCalls }
         }
       }
-    }, onQueued)
+    })
 
-    const session = sessions.get(sessionId)
-    if (!session) return
+    const latest = sessions.get(sessionId)
+    if (!latest) return
 
-    session.messages = graphResult.messages
-    session.pendingHitl = undefined
+    latest.messages = graphResult.messages
+    latest.pendingHitl = undefined
 
-    persistSessionMessages(session.workspaceId, sessionId, session.messages, {
+    persistSessionMessages(latest.workspaceId, sessionId, latest.messages, {
       toolEventsForLastAssistant: graphResult.toolEvents
     })
     emit({
@@ -387,7 +395,6 @@ export async function runUserMessage(
     })
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
-    if (message === '会话不存在或已过期') return
 
     emit({
       type: 'error',
@@ -396,11 +403,11 @@ export async function runUserMessage(
       runId,
       traceId,
       timestampMs: Date.now(),
-      durationMs: runStartedAt > 0 ? Date.now() - runStartedAt : undefined
+      durationMs: Date.now() - runStartedAt
     })
 
-    const session = sessions.get(sessionId)
-    if (session) {
+    const latest = sessions.get(sessionId)
+    if (latest) {
       emit({
         type: 'tool',
         sessionId,
@@ -412,18 +419,18 @@ export async function runUserMessage(
           runId,
           traceId,
           timestampMs: Date.now(),
-          durationMs: runStartedAt > 0 ? Date.now() - runStartedAt : undefined
+          durationMs: Date.now() - runStartedAt
         }
       })
-      persistSessionMessages(session.workspaceId, sessionId, session.messages, {
+      persistSessionMessages(latest.workspaceId, sessionId, latest.messages, {
         toolEventsForLastAssistant: runToolEvents.length > 0 ? runToolEvents : undefined
       })
     }
   } finally {
-    const session = sessions.get(sessionId)
-    if (session) {
-      session.controller = null
-      session.pendingHitl = undefined
+    const latest = sessions.get(sessionId)
+    if (latest) {
+      latest.controller = null
+      latest.pendingHitl = undefined
     }
     void flushLangfuseTracing()
   }

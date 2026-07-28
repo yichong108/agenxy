@@ -60,7 +60,6 @@ export function WorkspaceCenterPane(props: WorkspaceCenterPaneProps) {
                 }
               </Text>
               {p.isRun && <Tag color="processing">执行中</Tag>}
-              {p.isQueued && p.isQueued > 0 && <Tag color="warning">排队 #{p.isQueued}</Tag>}
               {p.currentRunStats && (
                 <Text type="secondary">
                   本轮: {p.currentRunStats.toolCalls} 次调用 / {p.currentRunStats.toolErrors} 次错误

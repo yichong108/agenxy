@@ -10,6 +10,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'elect
 import {
   bindAgentIpc,
   cancelRun,
+  isSessionRunning,
   resumeAgentHitl,
   runUserMessage
 } from '@/main/agent/agent-service'
@@ -539,11 +540,8 @@ function registerIpc(): void {
   /**
    * 发送消息到 Agent
    *
-   * 支持并发发送消息但执行必须是串行的，不能并行执行多个消息。
-   * - 因为终端用户对任务串行执行的理解和可控性比并行的高
-   * - 并发对于一些场景可能会造成资源竞争导致混乱，这往往偏离了用户预期
-   *
-   * TODO: 不支持并发执行消息，但支持并发发送消息，消息在等待队列中等待执行
+   * 同会话同时只允许一次运行：已有智能体在跑时拒绝再发。
+   * 不同会话相互独立，可并行运行各自的智能体。
    *
    * @param sessionId 会话 ID
    * @param text 消息内容
@@ -557,17 +555,14 @@ function registerIpc(): void {
       mainLog.info(`[AGENT_SEND] sessionId: ${sessionId}, mode: ${mode}, hasPlan: ${hasPlan}`)
 
       if (!text.trim() && !hasPlan) return { ok: false as const, error: '空消息' }
-      const onQueued = (pos: number) => {
-        if (pos > 0) {
-          mainLog.info(`[AGENT_SEND] onQueued: ${pos}`)
-          const ev: StreamEvent = { type: 'queued', sessionId, position: pos }
-          mainWindow?.webContents.send(EVENTS.AGENT_STREAM, ev)
-        } else {
-          mainLog.info(`[AGENT_SEND] onQueued: ${pos}`)
+      if (isSessionRunning(sessionId)) {
+        return {
+          ok: false as const,
+          error: '当前会话已有智能体在运行，请等待完成或停止后再发送'
         }
       }
       try {
-        await runUserMessage(sessionId, text.trim(), onQueued, opts ? { ...opts, mode } : { mode })
+        await runUserMessage(sessionId, text.trim(), opts ? { ...opts, mode } : { mode })
         const workspaceId = getSessionWorkspaceId(sessionId)
         if (workspaceId) {
           touchSession(workspaceId, sessionId)

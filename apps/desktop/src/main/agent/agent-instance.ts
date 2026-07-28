@@ -6,11 +6,10 @@ import { createAgent, type CreateAgentOptions } from '@agenxy/agent'
 import { agentLog } from '@/main/agent/agent-log'
 import { buildAgentRunPrompt, prepareAgentTooling } from '@/main/agent/agent-tooling'
 import { runLangfuseReactObservation } from '@/main/langfuse'
-import { MAX_CONCURRENT_AGENT_STREAMS, STREAM_FLUSH_CHARS, STREAM_FLUSH_MS } from '@/shared/ipc'
+import { STREAM_FLUSH_CHARS, STREAM_FLUSH_MS } from '@/shared/ipc'
 
 const desktopAgentOptions: CreateAgentOptions = {
   logger: agentLog,
-  maxConcurrentRuns: MAX_CONCURRENT_AGENT_STREAMS,
   streamFlushMs: STREAM_FLUSH_MS,
   streamFlushChars: STREAM_FLUSH_CHARS,
   prepareTooling: async ({ composerMode, sessionId, root, settings, runCtx, filterIntents }) => {

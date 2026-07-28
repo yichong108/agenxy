@@ -19,7 +19,6 @@ import {
 } from './hitl.js'
 import { setAgentLogger, type AgentLogger } from './logger.js'
 import { type AgentMessage, contentToText, findLastAiMessage } from './messages.js'
-import { ConcurrencyQueue } from './queue.js'
 import { runWorkflow, type WorkflowDeps } from './run-workflow.js'
 
 /**
@@ -29,8 +28,6 @@ export type CreateAgentOptions = {
   prepareTooling: WorkflowDeps['prepareTooling']
   wrapReactRun?: WorkflowDeps['wrapReactRun']
   logger?: AgentLogger
-  /** 并发 run 上限，超出则排队；默认 3 */
-  maxConcurrentRuns?: number
   /** 流式文本合并间隔（毫秒）；默认 32 */
   streamFlushMs?: number
   /** 流式文本合并字符数；默认 320 */
@@ -81,28 +78,22 @@ export type AgentRunResult = {
  * createAgent 返回的 agent 实例。
  */
 export type Agent = {
-  /** 直接执行一次 run（不经过并发队列） */
+  /** 执行一次 run；同会话互斥由宿主保证，不同会话可并行 */
   run: (input: AgentRunInput) => Promise<AgentRunResult>
-  /** 经并发队列执行 run；buildInput 在进入队列后调用；onQueued 在排队时收到等待位置，进入执行后收到 0 */
-  runQueued: (
-    buildInput: () => AgentRunInput | Promise<AgentRunInput>,
-    onQueued: (position: number) => void
-  ) => Promise<AgentRunResult>
   submitHitlDecision: (hitlId: string, decision: HitlUserDecision) => boolean
   cancelAllHitlWaiters: (reason?: string) => void
-  queueWillBlock: () => boolean
-  queueWaiting: () => number
 }
 
 /**
  * 创建 agent 实例 — packages/agent 的唯一入口工厂。
  *
- * 封装 ReAct 流水线、流式合并、HITL 与并发队列，宿主仅注入工具与可观测性依赖。
- * 
- * 注意：不直接与外部耦合。
+ * 封装 ReAct 流水线、流式合并与 HITL，宿主仅注入工具与可观测性依赖。
+ *
+ * 注意：不直接与外部耦合。同会话「运行中不可再发」由宿主按 session 互斥；
+ * 不同会话各自独立 run，互不排队。
  *
  * @param options - 宿主依赖与运行时参数
- * @returns 可 run / runQueued 的 agent 实例
+ * @returns 可 run 的 agent 实例
  */
 export function createAgent(options: CreateAgentOptions): Agent {
   const deps: WorkflowDeps = {
@@ -114,13 +105,12 @@ export function createAgent(options: CreateAgentOptions): Agent {
     setAgentLogger(options.logger)
   }
 
-  const maxConcurrent = Math.max(1, options.maxConcurrentRuns ?? 3)
-  const queue = new ConcurrencyQueue(maxConcurrent)
   const streamFlushMs = options.streamFlushMs ?? 32
   const streamFlushChars = options.streamFlushChars ?? 320
 
   /**
-   * 直接执行一次 run（不经过并发队列）
+   * 执行一次 agent run
+   *
    * @param input - 单次 run 的输入
    * @returns 单次 run 的结果
    */
@@ -252,19 +242,7 @@ export function createAgent(options: CreateAgentOptions): Agent {
 
   return {
     run: runInternal,
-    runQueued: async (buildInput, onQueued) => {
-      if (queue.willBlock()) {
-        onQueued(queue.waiting + 1)
-      }
-      return queue.run(async () => {
-        onQueued(0)
-        const input = await buildInput()
-        return runInternal(input)
-      })
-    },
     submitHitlDecision,
-    cancelAllHitlWaiters,
-    queueWillBlock: () => queue.willBlock(),
-    queueWaiting: () => queue.waiting
+    cancelAllHitlWaiters
   }
 }
