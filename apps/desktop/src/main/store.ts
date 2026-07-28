@@ -5,18 +5,15 @@ import { app } from 'electron'
 import Store from 'electron-store'
 
 import { removeWorkspaceSessions } from '@/main/sessions'
+import { fetchSettingsFromApi, logSettingsApiError, putSettingsToApi } from '@/main/settings-api'
 import {
   type AppSettings,
   type ChatMessage,
-  defaultProviderProfiles,
   defaultRendererUiState,
   defaultSettings,
   defaultWorkspaceUiState,
   HOME_WORKSPACE_ID,
-  type McpServerEntry,
-  type ModelProviderId,
-  parseMcpServersFromUnknown,
-  type ProviderProfile,
+  normalizeSettings,
   type RendererUiState,
   type SessionInfo,
   type WorkspaceInfo,
@@ -243,116 +240,6 @@ export function restoreHomeWorkspaceInList(): void {
   ensureHomeWorkspaceInList()
 }
 
-type LegacyFlatSettings = {
-  apiKey?: string
-  baseUrl?: string
-  model?: string
-}
-
-function normalizeMcpServers(raw: unknown): McpServerEntry[] {
-  return parseMcpServersFromUnknown(raw)
-}
-
-function normalizeSettings(
-  input: Partial<AppSettings> &
-    LegacyFlatSettings & {
-      skillsMarketCatalogUrl?: unknown
-      skillsMarketCatalogRefreshHours?: unknown
-      /** 旧版持久化字段，忽略 */
-      maxConcurrentStreams?: unknown
-      /** 已改为内置常量，忽略旧持久化 */
-      streamFlushMs?: unknown
-      streamFlushChars?: unknown
-      maxTerminalOutputChars?: unknown
-    }
-): AppSettings {
-  const defaults = defaultSettings
-  const baseProfiles = defaultProviderProfiles()
-  const {
-    baseUrl: legacyBaseUrl,
-    model: legacyModel,
-    apiKey: legacyApiKey,
-    skillsMarketCatalogUrl: legacySkillsMarketCatalogUrl,
-    skillsMarketCatalogRefreshHours: legacySkillsMarketCatalogRefreshHours,
-    maxConcurrentStreams: _legacyMaxConcurrentStreams,
-    streamFlushMs: _legacyStreamFlushMs,
-    streamFlushChars: _legacyStreamFlushChars,
-    maxTerminalOutputChars: _legacyMaxTerminalOutputChars,
-    ...inputRest
-  } = input
-  void legacySkillsMarketCatalogUrl
-  void legacySkillsMarketCatalogRefreshHours
-  void _legacyMaxConcurrentStreams
-  void _legacyStreamFlushMs
-  void _legacyStreamFlushChars
-  void _legacyMaxTerminalOutputChars
-  const legacy: LegacyFlatSettings = {
-    baseUrl: legacyBaseUrl,
-    model: legacyModel,
-    apiKey: legacyApiKey
-  }
-  const fromProfiles = inputRest.providerProfiles
-
-  let providerProfiles: Record<ModelProviderId, ProviderProfile> = {
-    deepseek: { ...baseProfiles.deepseek, ...fromProfiles?.deepseek }
-  }
-
-  const hadLegacyTopLevel =
-    typeof legacy.baseUrl === 'string' ||
-    typeof legacy.model === 'string' ||
-    typeof legacy.apiKey === 'string'
-
-  const looksNewProfileShape =
-    fromProfiles != null && typeof fromProfiles === 'object' && fromProfiles.deepseek != null
-
-  if (hadLegacyTopLevel && !looksNewProfileShape) {
-    providerProfiles = {
-      ...providerProfiles,
-      deepseek: {
-        ...providerProfiles.deepseek,
-        baseUrl: legacy.baseUrl?.trim() || providerProfiles.deepseek.baseUrl,
-        model: legacy.model?.trim() || providerProfiles.deepseek.model,
-        apiKey: typeof legacy.apiKey === 'string' ? legacy.apiKey : providerProfiles.deepseek.apiKey
-      }
-    }
-  }
-
-  const finalizeProfile = (p: ProviderProfile): ProviderProfile => ({
-    baseUrl: p.baseUrl ?? '',
-    model: p.model ?? '',
-    apiKey: p.apiKey ?? ''
-  })
-  providerProfiles = {
-    deepseek: finalizeProfile(providerProfiles.deepseek)
-  }
-
-  const provider: ModelProviderId = 'deepseek'
-
-  const merged: AppSettings = {
-    ...defaults,
-    ...inputRest,
-    provider,
-    providerProfiles,
-    maxAgentLoopSteps: inputRest.maxAgentLoopSteps ?? defaults.maxAgentLoopSteps,
-    agentRunTimeoutMs: inputRest.agentRunTimeoutMs ?? defaults.agentRunTimeoutMs,
-    toolApprovalInBuild:
-      typeof inputRest.toolApprovalInBuild === 'boolean'
-        ? inputRest.toolApprovalInBuild
-        : defaults.toolApprovalInBuild,
-    tavilyApiKey:
-      typeof inputRest.tavilyApiKey === 'string' ? inputRest.tavilyApiKey : defaults.tavilyApiKey,
-    mcpServers: normalizeMcpServers(
-      inputRest.mcpServers !== undefined ? inputRest.mcpServers : defaults.mcpServers
-    )
-  }
-
-  return {
-    ...merged,
-    maxAgentLoopSteps: Math.min(64, Math.max(4, Math.floor(merged.maxAgentLoopSteps))),
-    agentRunTimeoutMs: Math.min(600_000, Math.max(5_000, Math.floor(merged.agentRunTimeoutMs)))
-  }
-}
-
 export function getWorkspace(): string {
   return getActiveWorkspace()?.path || ''
 }
@@ -362,14 +249,78 @@ export function setWorkspace(dir: string): void {
   setActiveWorkspace(workspace.id)
 }
 
+/**
+ * 写入本地 settings 缓存（不访问网络）
+ *
+ * @param next - 完整 AppSettings
+ */
+function writeLocalSettingsCache(next: AppSettings): void {
+  store.set('settings', normalizeSettings(next))
+}
+
+/**
+ * 读取本地缓存的 AppSettings（同步）
+ *
+ * Agent 运行路径使用此方法，避免每次工具调用都打 API。
+ * 缓存由 `loadSettingsFromApi` / `setSettings` 与远端对齐。
+ *
+ * @returns 规范化后的 AppSettings
+ */
 export function getSettings(): AppSettings {
   return normalizeSettings(store.get('settings'))
 }
 
-export function setSettings(patch: Partial<AppSettings>): AppSettings {
+/**
+ * 从 API 拉取 settings 并刷新本地缓存；失败时回落本地缓存
+ *
+ * 首次远端为默认空配置且本地已有用户配置时，会把本地配置推到 API（一次性迁移）。
+ *
+ * @returns 最终使用的 AppSettings
+ */
+export async function loadSettingsFromApi(): Promise<AppSettings> {
+  const local = getSettings()
+  try {
+    const remote = await fetchSettingsFromApi()
+    const remoteIsPristine =
+      !remote.tavilyApiKey &&
+      !remote.providerProfiles.deepseek.apiKey &&
+      remote.mcpServers.length === 0
+    const localHasUserData =
+      Boolean(local.tavilyApiKey) ||
+      Boolean(local.providerProfiles.deepseek.apiKey) ||
+      local.mcpServers.length > 0
+
+    if (remoteIsPristine && localHasUserData) {
+      const seeded = await putSettingsToApi(local)
+      writeLocalSettingsCache(seeded)
+      return seeded
+    }
+
+    writeLocalSettingsCache(remote)
+    return remote
+  } catch (error) {
+    logSettingsApiError('loadSettingsFromApi', error)
+    return local
+  }
+}
+
+/**
+ * 合并 patch，优先写入 API，成功后同步本地缓存；API 失败时仍写本地并返回本地结果
+ *
+ * @param patch - 要合并的 settings 字段
+ * @returns 保存后的完整 AppSettings
+ */
+export async function setSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   const next = normalizeSettings({ ...getSettings(), ...patch })
-  store.set('settings', next)
-  return next
+  try {
+    const saved = await putSettingsToApi(next)
+    writeLocalSettingsCache(saved)
+    return saved
+  } catch (error) {
+    logSettingsApiError('setSettings', error)
+    writeLocalSettingsCache(next)
+    return next
+  }
 }
 
 function normalizeUiState(input: Partial<RendererUiState>): RendererUiState {

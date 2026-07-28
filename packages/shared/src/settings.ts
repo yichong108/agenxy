@@ -196,3 +196,119 @@ export function applySettingsForm(
     tavilyApiKey: (form.tavilyApiKey ?? '').trim()
   }
 }
+
+/** 旧版扁平 settings 字段（仅用于迁移） */
+type LegacyFlatSettings = {
+  apiKey?: string
+  baseUrl?: string
+  model?: string
+}
+
+/**
+ * 将任意持久化/API 输入规范为完整 AppSettings
+ *
+ * 合并默认值、迁移旧版顶层 apiKey/baseUrl/model，
+ * 并钳制循环步数与超时范围；忽略已废弃字段。
+ *
+ * @param input - 部分 settings、旧扁平字段或未知 JSON
+ * @returns 规范化后的完整 AppSettings
+ */
+export function normalizeSettings(
+  input: Partial<AppSettings> &
+    LegacyFlatSettings & {
+      skillsMarketCatalogUrl?: unknown
+      skillsMarketCatalogRefreshHours?: unknown
+      /** 旧版持久化字段，忽略 */
+      maxConcurrentStreams?: unknown
+      /** 已改为内置常量，忽略旧持久化 */
+      streamFlushMs?: unknown
+      streamFlushChars?: unknown
+      maxTerminalOutputChars?: unknown
+    } = {}
+): AppSettings {
+  const defaults = defaultSettings
+  const baseProfiles = defaultProviderProfiles()
+  const {
+    baseUrl: legacyBaseUrl,
+    model: legacyModel,
+    apiKey: legacyApiKey,
+    skillsMarketCatalogUrl: legacySkillsMarketCatalogUrl,
+    skillsMarketCatalogRefreshHours: legacySkillsMarketCatalogRefreshHours,
+    maxConcurrentStreams: _legacyMaxConcurrentStreams,
+    streamFlushMs: _legacyStreamFlushMs,
+    streamFlushChars: _legacyStreamFlushChars,
+    maxTerminalOutputChars: _legacyMaxTerminalOutputChars,
+    ...inputRest
+  } = input
+  void legacySkillsMarketCatalogUrl
+  void legacySkillsMarketCatalogRefreshHours
+  void _legacyMaxConcurrentStreams
+  void _legacyStreamFlushMs
+  void _legacyStreamFlushChars
+  void _legacyMaxTerminalOutputChars
+  const legacy: LegacyFlatSettings = {
+    baseUrl: legacyBaseUrl,
+    model: legacyModel,
+    apiKey: legacyApiKey
+  }
+  const fromProfiles = inputRest.providerProfiles
+
+  let providerProfiles: Record<ModelProviderId, ProviderProfile> = {
+    deepseek: { ...baseProfiles.deepseek, ...fromProfiles?.deepseek }
+  }
+
+  const hadLegacyTopLevel =
+    typeof legacy.baseUrl === 'string' ||
+    typeof legacy.model === 'string' ||
+    typeof legacy.apiKey === 'string'
+
+  const looksNewProfileShape =
+    fromProfiles != null && typeof fromProfiles === 'object' && fromProfiles.deepseek != null
+
+  if (hadLegacyTopLevel && !looksNewProfileShape) {
+    providerProfiles = {
+      ...providerProfiles,
+      deepseek: {
+        ...providerProfiles.deepseek,
+        baseUrl: legacy.baseUrl?.trim() || providerProfiles.deepseek.baseUrl,
+        model: legacy.model?.trim() || providerProfiles.deepseek.model,
+        apiKey: typeof legacy.apiKey === 'string' ? legacy.apiKey : providerProfiles.deepseek.apiKey
+      }
+    }
+  }
+
+  const finalizeProfile = (p: ProviderProfile): ProviderProfile => ({
+    baseUrl: p.baseUrl ?? '',
+    model: p.model ?? '',
+    apiKey: p.apiKey ?? ''
+  })
+  providerProfiles = {
+    deepseek: finalizeProfile(providerProfiles.deepseek)
+  }
+
+  const provider: ModelProviderId = 'deepseek'
+
+  const merged: AppSettings = {
+    ...defaults,
+    ...inputRest,
+    provider,
+    providerProfiles,
+    maxAgentLoopSteps: inputRest.maxAgentLoopSteps ?? defaults.maxAgentLoopSteps,
+    agentRunTimeoutMs: inputRest.agentRunTimeoutMs ?? defaults.agentRunTimeoutMs,
+    toolApprovalInBuild:
+      typeof inputRest.toolApprovalInBuild === 'boolean'
+        ? inputRest.toolApprovalInBuild
+        : defaults.toolApprovalInBuild,
+    tavilyApiKey:
+      typeof inputRest.tavilyApiKey === 'string' ? inputRest.tavilyApiKey : defaults.tavilyApiKey,
+    mcpServers: parseMcpServersFromUnknown(
+      inputRest.mcpServers !== undefined ? inputRest.mcpServers : defaults.mcpServers
+    )
+  }
+
+  return {
+    ...merged,
+    maxAgentLoopSteps: Math.min(64, Math.max(4, Math.floor(merged.maxAgentLoopSteps))),
+    agentRunTimeoutMs: Math.min(600_000, Math.max(5_000, Math.floor(merged.agentRunTimeoutMs)))
+  }
+}

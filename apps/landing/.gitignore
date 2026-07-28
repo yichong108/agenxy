@@ -1,0 +1,37 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+out
+release
+dist
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE
+.DS_Store
+.idea/
+.vscode/settings.json
+
+# Env files (secrets)
+.env
+.env.*
+!.env.example
+
+# Misc
+.deps-staging
+workspace_demo
+
+# Turbo
+.turbo
+
+# Next.js
+.next
+.vercel
+
+# Testing
+coverage

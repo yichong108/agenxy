@@ -52,6 +52,28 @@ curl http://127.0.0.1:3100/health
 
 当 MySQL 或 Redis 不可用时返回 HTTP `503`，`status` 为 `degraded`。
 
+## Settings API
+
+全局应用配置（与桌面端 `@agenxy/shared` 的 `AppSettings` 同构）。当前无用户鉴权，读写同一条 `default` 记录，落库于 MySQL `app_settings`，并用 Redis 短缓存。
+
+### `GET /settings`
+
+返回：
+
+```json
+{ "data": { "provider": "deepseek", "providerProfiles": { "...": "..." }, "...": "..." } }
+```
+
+### `PUT /settings`
+
+请求体为 `Partial<AppSettings>`（JSON 对象），服务端与现有记录合并后规范化并保存。
+
+```bash
+curl -X PUT http://127.0.0.1:3100/settings \
+  -H "Content-Type: application/json" \
+  -d '{"tavilyApiKey":"tvly-xxx","maxAgentLoopSteps":32}'
+```
+
 ## 脚本
 
 | 命令 | 说明 |

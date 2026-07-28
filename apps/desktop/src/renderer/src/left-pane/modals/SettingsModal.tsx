@@ -65,7 +65,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     profilesDraftRef.current = cloneProviderProfiles(saved.providerProfiles)
     setSettings(saved)
     onClose()
-    msgApi.success('已保存（Secret 仅保存在本机主进程）')
+    msgApi.success('已保存到 API 服务')
   }, [bridge, form, msgApi, onClose, settings])
 
   return (
@@ -80,7 +80,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     >
       <Form form={form} layout="vertical" initialValues={DEFAULT_FORM_VALUES}>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 16, marginTop: 0 }}>
-          仅支持接入兼容 OpenAI API 标准格式的模型服务。
+          仅支持接入兼容 OpenAI API 标准格式的模型服务。配置由 API 服务持久化。
         </Typography.Paragraph>
         <Form.Item name="baseUrl" label="接口地址" rules={[{ required: true }]}>
           <Input placeholder="https://api.deepseek.com" />
@@ -94,7 +94,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
           rules={[{ required: true, message: '请先填写 API Key' }]}
           hasFeedback
         >
-          <Input.Password autoComplete="off" placeholder="仅保存在本机" />
+          <Input.Password autoComplete="off" placeholder="保存到 API 服务" />
         </Form.Item>
         <Form.Item
           name="tavilyApiKey"

@@ -161,6 +161,7 @@ export {
   MAX_TERMINAL_OUTPUT_CHARS,
   mergeFormIntoProviderProfiles,
   normalizeComposerMode,
+  normalizeSettings,
   parseMcpServersFromUnknown,
   settingsToFormValues,
   STREAM_FLUSH_CHARS,

@@ -44,6 +44,7 @@ import {
   getWorkspace,
   getWorkspaceById,
   listWorkspaces,
+  loadSettingsFromApi,
   removeWorkspace,
   renameWorkspace,
   reorderWorkspaces,
@@ -476,14 +477,14 @@ function registerIpc(): void {
     }
     return { ok }
   })
-  ipcMain.handle(IPC.SETTINGS_GET, () => getSettings())
-  ipcMain.handle(IPC.SETTINGS_SET, (_e, patch: Partial<AppSettings>) => {
+  ipcMain.handle(IPC.SETTINGS_GET, async () => loadSettingsFromApi())
+  ipcMain.handle(IPC.SETTINGS_SET, async (_e, patch: Partial<AppSettings>) => {
     if (patch.mcpServers !== undefined) {
       mcpWarmupGen++
       mcpWarmupPromise = null
       void disposeMcpConnectionPool()
     }
-    const next = setSettings(patch)
+    const next = await setSettings(patch)
     mainWindow?.webContents.send(EVENTS.SETTINGS_SYNC, next)
     if (patch.mcpServers !== undefined) {
       void startMcpWarmup()
@@ -722,6 +723,7 @@ app.whenReady().then(() => {
   void (async () => {
     await loadDevtoolsExtension()
     await ensureUserSkillsLayout()
+    await loadSettingsFromApi()
     loadSessionList()
     registerIpc()
     createWindow()
