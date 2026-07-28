@@ -2,14 +2,14 @@ import { McpHubModal, SettingsModal, SkillsHubModal } from './modals'
 import { useWorkspaceLeftPane } from './useWorkspaceLeftPane'
 import {
   ApiOutlined,
+  AppstoreOutlined,
   FolderOpenOutlined,
   InboxOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   PlusOutlined,
   RightOutlined,
-  SettingOutlined,
-  ShopOutlined
+  SettingOutlined
 } from '@ant-design/icons'
 import { Button, Dropdown, Input, Modal, Space, Typography } from 'antd'
 import type { DragEvent } from 'react'
@@ -67,10 +67,10 @@ export function WorkspaceLeftPane({ leftTogglePortalHost }: WorkspaceLeftPanePro
                   />
                   <Button
                     type="text"
-                    icon={<ShopOutlined />}
+                    icon={<AppstoreOutlined />}
                     onClick={p.openSkillsHub}
                     className="app-settings-btn"
-                    title="技能与市场"
+                    title="技能"
                   />
                   <Button
                     type="text"

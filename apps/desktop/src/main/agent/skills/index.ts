@@ -407,49 +407,6 @@ export async function buildSkillBundle(
   }
 }
 
-export async function validateSkillPackageLayout(
-  absDir: string
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const mdFiles = await collectSkillMarkdownFiles(absDir)
-  for (const f of mdFiles) {
-    try {
-      const st = await fs.stat(f)
-      if (st.size > MAX_SKILL_MD_SIZE_BYTES) continue
-      const rawMd = await fs.readFile(f, 'utf8')
-      if (parseSkillFrontmatter(rawMd)) return { ok: true }
-    } catch {
-      continue
-    }
-  }
-  let entries: Dirent[] = []
-  try {
-    entries = await fs.readdir(absDir, { withFileTypes: true })
-  } catch {
-    return { ok: false, error: '无法读取技能包目录' }
-  }
-  const hasJson = entries.some((e) => e.isFile() && e.name.toLowerCase().endsWith('.json'))
-  if (hasJson) return { ok: true }
-  return {
-    ok: false,
-    error:
-      'No valid skill.md (with YAML frontmatter) or root directory JSON skill files found in package'
-  }
-}
-
-async function extractToolNamesFromScanRoot(scan: ScanRoot): Promise<string[]> {
-  const names: string[] = []
-  const defs: SkillDefinition[] = []
-  await appendSkillDefsFromScanRoot(scan, defs)
-  for (const d of defs) names.push(d.name)
-  return names
-}
-
-/** Preview skill tool names that will be registered from directory (pre-install conflict detection) */
-export async function previewPackageSkillToolNames(packageAbsDir: string): Promise<string[]> {
-  const scan: ScanRoot = { absRoot: packageAbsDir, sourcePrefix: 'preview' }
-  return extractToolNamesFromScanRoot(scan)
-}
-
 async function mdEntriesForUi(scan: ScanRoot): Promise<SkillUiEntry[]> {
   const out: SkillUiEntry[] = []
   const mdFiles = await collectSkillMarkdownFiles(scan.absRoot, scan.markdownCollect)
@@ -581,7 +538,7 @@ export async function uninstallMarketSkillFolder(
   }
   try {
     await fs.rm(resolved, { recursive: true, force: true })
-    mainLog.info('[skills-market] Uninstalled market skill:', id)
+    mainLog.info('[skills] Uninstalled market skill:', id)
     return { ok: true }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)

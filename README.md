@@ -12,7 +12,7 @@
 
 - Workspace-oriented layout: file tree, editor, and chat
 - **MCP (Model Context Protocol)** server management and runtime integration
-- Skills hub and skills marketplace
+- Skills hub for installed skills
 - Main-process capabilities such as terminal and filesystem tools
 - Installers: **Windows (NSIS)**, **macOS (DMG)**, **Linux (AppImage)** — output under `apps/desktop/release/`
 

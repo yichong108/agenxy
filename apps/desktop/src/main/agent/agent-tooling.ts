@@ -191,7 +191,7 @@ function buildSystemPrompt(root: string, settings: AppSettings): string {
 - shell 在工作区根目录沙箱中执行命令并等待结束，返回 stdout/stderr；Windows 使用 cmd 风格。
 - 用户要「查看/读取工作区文件」或「列目录」时，优先 read_file/list_dir 再回答。
 - 用户明确要求删除工作区中的文件时，使用 delete_file（仅普通文件，不含目录）。
-- 用 glob 按文件名/路径模式搜索（如 **/*.ts）：结果含工作区与「用户数据」目录（技能市场安装等）；read_file/write 仍仅限工作区路径。
+- 用 glob 按文件名/路径模式搜索（如 **/*.ts）：结果含工作区与「用户数据」目录（用户技能包等）；read_file/write 仍仅限工作区路径。
 ${webRule}
 - 回复简洁可执行；改代码前先 read/list。
 - 先理解任务 → 必要时复述目标 → 再选工具。`

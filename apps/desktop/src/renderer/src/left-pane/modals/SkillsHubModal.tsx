@@ -1,9 +1,14 @@
-import { App as AntdApp, Button, Modal, Table, Tabs, Tag, Tooltip } from 'antd'
+import { App as AntdApp, Button, Modal, Table, Tag, Tooltip } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { SkillsMarketPanel } from '@/renderer/src/skills-market/SkillsMarketPanel'
-import type { SkillsMarketCatalogItem, SkillsRuntimeState, SkillUiEntry } from '@/shared/ipc'
+import type { SkillsRuntimeState, SkillUiEntry } from '@/shared/ipc'
 
+/**
+ * 将技能安装类型映射为中文标签
+ *
+ * @param kind - 技能条目的安装来源类型
+ * @returns 用于表格 Tag 展示的中文文案
+ */
 function skillKindLabel(kind: SkillUiEntry['kind']): string {
   switch (kind) {
     case 'builtin_code':
@@ -24,13 +29,20 @@ export type SkillsHubModalProps = {
   onClose: () => void
 }
 
+/**
+ * 技能中心弹窗：展示已安装技能并支持卸载市场/兼容目录技能
+ *
+ * 聚合内置、历史市场安装与兼容目录技能；不再提供在线技能市场浏览与安装。
+ *
+ * @param open - 是否打开弹窗
+ * @param onClose - 关闭弹窗回调
+ */
 export function SkillsHubModal({ open, onClose }: SkillsHubModalProps) {
   const { message: msgApi, modal: modalApi } = AntdApp.useApp()
   const bridge = window.bridge
 
   const [skillsState, setSkillsState] = useState<SkillsRuntimeState | null>(null)
   const [skillsStateLoading, setSkillsStateLoading] = useState(false)
-  const [skillsMarketInstallingId, setSkillsMarketInstallingId] = useState<string | null>(null)
 
   const installedSkillRows = useMemo(() => {
     if (!skillsState) return []
@@ -40,15 +52,6 @@ export function SkillsHubModal({ open, onClose }: SkillsHubModalProps) {
       ...skillsState.installedMarket,
       ...skillsState.legacyUser
     ]
-  }, [skillsState])
-
-  const installedMarketFolderIds = useMemo(() => {
-    const ids = new Set<string>()
-    if (!skillsState) return ids
-    for (const row of skillsState.installedMarket) {
-      if (row.marketFolderId) ids.add(row.marketFolderId)
-    }
-    return ids
   }, [skillsState])
 
   const reloadSkillsState = useCallback(async () => {
@@ -65,24 +68,6 @@ export function SkillsHubModal({ open, onClose }: SkillsHubModalProps) {
     if (!open) return
     void reloadSkillsState()
   }, [open, reloadSkillsState])
-
-  const installMarketSkill = useCallback(
-    async (item: SkillsMarketCatalogItem) => {
-      setSkillsMarketInstallingId(item.id)
-      try {
-        const r = await bridge.installSkillFromMarket(item)
-        if (r.ok) {
-          msgApi.success(`已安装「${item.name}」`)
-          await reloadSkillsState()
-        } else {
-          msgApi.error(r.error)
-        }
-      } finally {
-        setSkillsMarketInstallingId(null)
-      }
-    },
-    [bridge, msgApi, reloadSkillsState]
-  )
 
   const uninstallSkillRow = useCallback(
     async (row: SkillUiEntry) => {
@@ -134,7 +119,7 @@ export function SkillsHubModal({ open, onClose }: SkillsHubModalProps) {
 
   return (
     <Modal
-      title="技能与市场"
+      title="技能"
       open={open}
       onCancel={onClose}
       width={920}
@@ -149,117 +134,92 @@ export function SkillsHubModal({ open, onClose }: SkillsHubModalProps) {
           loading={skillsStateLoading}
           onClick={() => void reloadSkillsState()}
         >
-          刷新已安装
+          刷新
         </Button>
       ]}
     >
-      <Tabs
-        items={[
+      <Table<SkillUiEntry>
+        size="small"
+        rowKey="key"
+        loading={skillsStateLoading}
+        pagination={false}
+        dataSource={installedSkillRows}
+        locale={{ emptyText: '暂无技能数据，请点击「刷新」' }}
+        scroll={{ x: 820 }}
+        columns={[
           {
-            key: 'installed',
-            label: '已安装',
-            children: (
-              <div>
-                <Table<SkillUiEntry>
-                  size="small"
-                  rowKey="key"
-                  loading={skillsStateLoading}
-                  pagination={false}
-                  dataSource={installedSkillRows}
-                  locale={{ emptyText: '暂无技能数据，请点击「刷新已安装」' }}
-                  scroll={{ x: 820 }}
-                  columns={[
-                    {
-                      title: '类型',
-                      dataIndex: 'kind',
-                      width: 120,
-                      render: (kind: SkillUiEntry['kind']) => {
-                        const color =
-                          kind === 'builtin_code'
-                            ? 'purple'
-                            : kind === 'builtin_packaged'
-                              ? 'blue'
-                              : kind === 'market'
-                                ? 'geekblue'
-                                : 'orange'
-                        return <Tag color={color}>{skillKindLabel(kind)}</Tag>
-                      }
-                    },
-                    { title: '工具名', dataIndex: 'toolName', width: 200, ellipsis: true },
-                    { title: '标题', dataIndex: 'title', width: 160, ellipsis: true },
-                    {
-                      title: '描述',
-                      dataIndex: 'description',
-                      ellipsis: true,
-                      render: (description: string) => (
-                        <Tooltip title={description}>
-                          <span>{description}</span>
-                        </Tooltip>
-                      )
-                    },
-                    {
-                      title: '来源',
-                      dataIndex: 'sourceLabel',
-                      width: 220,
-                      ellipsis: true
-                    },
-                    {
-                      title: '操作',
-                      key: 'actions',
-                      width: 120,
-                      render: (_, row) => {
-                        if (row.kind === 'builtin_code' || row.kind === 'builtin_packaged') {
-                          return (
-                            <Tooltip title="内置技能不可卸载">
-                              <Button size="small" disabled>
-                                卸载
-                              </Button>
-                            </Tooltip>
-                          )
-                        }
-                        if (row.kind === 'market') {
-                          return (
-                            <Button size="small" danger onClick={() => void uninstallSkillRow(row)}>
-                              卸载
-                            </Button>
-                          )
-                        }
-                        const canLegacy = Boolean(row.legacyFolderRelative)
-                        return (
-                          <Tooltip
-                            title={
-                              canLegacy
-                                ? '删除整个兼容技能目录'
-                                : '该条目位于 skills 根目录，无法安全卸载'
-                            }
-                          >
-                            <Button
-                              size="small"
-                              danger
-                              disabled={!canLegacy}
-                              onClick={() => void uninstallSkillRow(row)}
-                            >
-                              卸载
-                            </Button>
-                          </Tooltip>
-                        )
-                      }
-                    }
-                  ]}
-                />
-              </div>
+            title: '类型',
+            dataIndex: 'kind',
+            width: 120,
+            render: (kind: SkillUiEntry['kind']) => {
+              const color =
+                kind === 'builtin_code'
+                  ? 'purple'
+                  : kind === 'builtin_packaged'
+                    ? 'blue'
+                    : kind === 'market'
+                      ? 'geekblue'
+                      : 'orange'
+              return <Tag color={color}>{skillKindLabel(kind)}</Tag>
+            }
+          },
+          { title: '工具名', dataIndex: 'toolName', width: 200, ellipsis: true },
+          { title: '标题', dataIndex: 'title', width: 160, ellipsis: true },
+          {
+            title: '描述',
+            dataIndex: 'description',
+            ellipsis: true,
+            render: (description: string) => (
+              <Tooltip title={description}>
+                <span>{description}</span>
+              </Tooltip>
             )
           },
           {
-            key: 'market',
-            label: '技能市场',
-            children: (
-              <SkillsMarketPanel
-                installedMarketFolderIds={installedMarketFolderIds}
-                installingId={skillsMarketInstallingId}
-                onInstall={(item) => void installMarketSkill(item)}
-              />
-            )
+            title: '来源',
+            dataIndex: 'sourceLabel',
+            width: 220,
+            ellipsis: true
+          },
+          {
+            title: '操作',
+            key: 'actions',
+            width: 120,
+            render: (_, row) => {
+              if (row.kind === 'builtin_code' || row.kind === 'builtin_packaged') {
+                return (
+                  <Tooltip title="内置技能不可卸载">
+                    <Button size="small" disabled>
+                      卸载
+                    </Button>
+                  </Tooltip>
+                )
+              }
+              if (row.kind === 'market') {
+                return (
+                  <Button size="small" danger onClick={() => void uninstallSkillRow(row)}>
+                    卸载
+                  </Button>
+                )
+              }
+              const canLegacy = Boolean(row.legacyFolderRelative)
+              return (
+                <Tooltip
+                  title={
+                    canLegacy ? '删除整个兼容技能目录' : '该条目位于 skills 根目录，无法安全卸载'
+                  }
+                >
+                  <Button
+                    size="small"
+                    danger
+                    disabled={!canLegacy}
+                    onClick={() => void uninstallSkillRow(row)}
+                  >
+                    卸载
+                  </Button>
+                </Tooltip>
+              )
+            }
           }
         ]}
       />

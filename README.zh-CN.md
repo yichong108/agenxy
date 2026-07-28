@@ -12,7 +12,7 @@
 
 - 面向工作区的布局（文件树、编辑器、对话区）
 - MCP 服务的管理与运行时接入
-- Skills 中心与技能市场目录
+- Skills 中心（已安装技能管理）
 - 主进程提供的终端、文件系统等工具能力
 - 打包安装包：Windows（NSIS）、macOS（DMG）、Linux（AppImage）
 

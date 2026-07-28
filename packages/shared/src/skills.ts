@@ -18,8 +18,6 @@ export type SkillsRuntimeState = {
   legacyUser: SkillUiEntry[]
 }
 
-export type SkillsInstallResult = { ok: true } | { ok: false; error: string }
-
 export type SkillsUninstallResult = { ok: true } | { ok: false; error: string }
 
 export type SkillsUninstallPayload =

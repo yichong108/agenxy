@@ -41,8 +41,6 @@ export const IPC = {
   MCP_WARMUP_RUN: 'mcp:warmup:run',
   /** 聚合当前技能清单（内置 / 市场 / 兼容） */
   SKILLS_STATE: 'skills:state',
-  /** 从市场 zip 安装技能包 */
-  SKILLS_INSTALL: 'skills:install',
   /** 卸载市场或兼容目录技能包 */
   SKILLS_UNINSTALL: 'skills:uninstall',
   /** Windows 自定义标题栏：窗口行为（最小化 / 最大化 / 关闭 / 重载 / 退出） */
@@ -130,7 +128,6 @@ export type {
   ProviderProfile,
   SettingsFormValues,
   SkillInstallKind,
-  SkillsInstallResult,
   SkillsRuntimeState,
   SkillsUninstallPayload,
   SkillsUninstallResult,
@@ -196,20 +193,6 @@ export type McpWarmupReport = {
 export type McpWarmupStatus = {
   report: McpWarmupReport | null
   inFlight: boolean
-}
-
-/** 市场 catalog 单项（列表来自 ClawHub，安装包 URL 为官方 download 接口） */
-export type SkillsMarketCatalogItem = {
-  id: string
-  name: string
-  description: string
-  version: string
-  packageUrl: string
-  sha256?: string
-}
-
-export type SkillsMarketCatalog = {
-  items: SkillsMarketCatalogItem[]
 }
 
 export type RendererUiState = {

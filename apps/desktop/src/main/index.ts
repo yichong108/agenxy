@@ -33,7 +33,6 @@ import {
   renameSession,
   touchSession
 } from '@/main/sessions'
-import { installSkillFromMarketItem } from '@/main/skills-market/install'
 import {
   ensureHomeWorkspaceInList,
   getActiveWorkspace,
@@ -69,7 +68,6 @@ import {
   type McpWarmupStatus,
   normalizeComposerMode,
   type RendererUiState,
-  type SkillsMarketCatalogItem,
   type SkillsUninstallPayload,
   type StreamEvent,
   type TerminalOutputEvent,
@@ -633,12 +631,6 @@ function registerIpc(): void {
     return await probeMcpServer(entry)
   })
   ipcMain.handle(IPC.SKILLS_STATE, async () => gatherSkillsRuntimeState())
-  ipcMain.handle(IPC.SKILLS_INSTALL, async (_e, item: SkillsMarketCatalogItem) => {
-    if (!item || typeof item !== 'object') {
-      return { ok: false as const, error: '无效技能条目' }
-    }
-    return await installSkillFromMarketItem(item)
-  })
   ipcMain.handle(IPC.SKILLS_UNINSTALL, async (_e, payload: SkillsUninstallPayload) => {
     if (!payload || typeof payload !== 'object') {
       return { ok: false as const, error: '无效参数' }

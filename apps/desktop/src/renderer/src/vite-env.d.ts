@@ -11,8 +11,6 @@ import type {
   McpWarmupStatus,
   RendererUiState,
   SessionInfo,
-  SkillsInstallResult,
-  SkillsMarketCatalogItem,
   SkillsRuntimeState,
   SkillsUninstallPayload,
   SkillsUninstallResult,
@@ -85,7 +83,6 @@ type Api = {
   onWorkspacesSync: (cb: (p: WorkspacesPayload) => void) => () => void
   onSettingsSync: (cb: (s: AppSettings) => void) => () => void
   getSkillsState: () => Promise<SkillsRuntimeState>
-  installSkillFromMarket: (item: SkillsMarketCatalogItem) => Promise<SkillsInstallResult>
   uninstallSkill: (payload: SkillsUninstallPayload) => Promise<SkillsUninstallResult>
 }
 
