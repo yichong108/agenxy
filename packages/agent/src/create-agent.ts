@@ -1,3 +1,8 @@
+/**
+ * createAgent 是 agent 的唯一入口工厂。
+ * 它负责创建 agent 实例，并提供 send 方法，用于发起一次 agent run。
+ */
+
 import {
   type AgentComposerMode,
   type AppSettings,
@@ -78,8 +83,8 @@ export type AgentRunResult = {
  * createAgent 返回的 agent 实例。
  */
 export type Agent = {
-  /** 执行一次 run；同会话互斥由宿主保证，不同会话可并行 */
-  run: (input: AgentRunInput) => Promise<AgentRunResult>
+  /** 发起一次 run；同会话互斥由宿主保证，不同会话可并行 */
+  send: (input: AgentRunInput) => Promise<AgentRunResult>
   submitHitlDecision: (hitlId: string, decision: HitlUserDecision) => boolean
   cancelAllHitlWaiters: (reason?: string) => void
 }
@@ -90,10 +95,10 @@ export type Agent = {
  * 封装 ReAct 流水线、流式合并与 HITL，宿主仅注入工具与可观测性依赖。
  *
  * 注意：不直接与外部耦合。同会话「运行中不可再发」由宿主按 session 互斥；
- * 不同会话各自独立 run，互不排队。
+ * 不同会话各自独立 send，互不排队。
  *
  * @param options - 宿主依赖与运行时参数
- * @returns 可 run 的 agent 实例
+ * @returns 可 send 的 agent 实例
  */
 export function createAgent(options: CreateAgentOptions): Agent {
   const deps: WorkflowDeps = {
@@ -109,12 +114,12 @@ export function createAgent(options: CreateAgentOptions): Agent {
   const streamFlushChars = options.streamFlushChars ?? 320
 
   /**
-   * 执行一次 agent run
+   * 发起一次 agent run
    *
    * @param input - 单次 run 的输入
    * @returns 单次 run 的结果
    */
-  async function runInternal(input: AgentRunInput): Promise<AgentRunResult> {
+  async function send(input: AgentRunInput): Promise<AgentRunResult> {
     const {
       composerMode,
       messages,
@@ -241,7 +246,7 @@ export function createAgent(options: CreateAgentOptions): Agent {
   }
 
   return {
-    run: runInternal,
+    send,
     submitHitlDecision,
     cancelAllHitlWaiters
   }

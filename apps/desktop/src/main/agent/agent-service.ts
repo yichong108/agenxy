@@ -328,7 +328,7 @@ export async function runUserMessage(
       emitTool(e)
     }
 
-    const graphResult = await desktopAgent.run({
+    const graphResult = await desktopAgent.send({
       composerMode,
       messages: session.messages,
       abortController: ac,
