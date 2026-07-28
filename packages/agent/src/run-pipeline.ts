@@ -214,22 +214,25 @@ async function executeReactPhase(
         timeoutMs: bridge.invokeTimeoutMs
       },
       {
-        sessionId,
-        runId,
-        traceId,
-        threadId,
-        hitlEnabled,
-        toolsByName: new Map(),
-        onPendingHitl: (hitlId, toolCalls) => {
-          bridge.setPendingHitl(hitlId, threadId, toolCalls)
+        meta: {
+          sessionId,
+          runId,
+          traceId,
+          threadId
         },
-        emitHitlRequired: (hitlId, toolCalls) => {
-          bridge.resetStream()
-          bridge.emitHitlRequired(hitlId, toolCalls)
-        },
-        onToolsRejected: (toolCalls) => {
-          bridge.resetStream()
-          bridge.emitToolsRejected(toolCalls)
+        hitl: {
+          enabled: hitlEnabled,
+          onPending: (hitlId, toolCalls) => {
+            bridge.setPendingHitl(hitlId, threadId, toolCalls)
+          },
+          emitRequired: (hitlId, toolCalls) => {
+            bridge.resetStream()
+            bridge.emitHitlRequired(hitlId, toolCalls)
+          },
+          onRejected: (toolCalls) => {
+            bridge.resetStream()
+            bridge.emitToolsRejected(toolCalls)
+          }
         }
       }
     )

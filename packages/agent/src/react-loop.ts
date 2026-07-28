@@ -16,16 +16,51 @@ import { getChatModel } from './llm.js'
 import { agentLog } from './logger.js'
 import { type AgentMessage, aiMessage, toModelMessages, toolMessage } from './messages.js'
 
-export type ReactAgentRunContext = {
+/**
+ * ReAct 运行元信息。
+ *
+ * 将本次运行的标识信息集中管理，避免与 HITL 桥接能力混在同一层级。
+ *
+ * @property sessionId - 当前会话 ID
+ * @property runId - 当前运行 ID
+ * @property traceId - 当前链路追踪 ID
+ * @property threadId - 当前线程 ID
+ */
+export type ReactRunMeta = {
   sessionId: string
   runId: string
   traceId: string
   threadId: string
-  hitlEnabled: boolean
-  toolsByName: Map<string, NamedTool>
-  onPendingHitl: (hitlId: string, toolCalls: PendingToolCall[]) => void
-  emitHitlRequired: (hitlId: string, toolCalls: PendingToolCall[]) => void
-  onToolsRejected?: (toolCalls: PendingToolCall[]) => void
+}
+
+/**
+ * ReAct 与宿主之间的 HITL 桥接能力。
+ *
+ * 将审批开关与相关事件回调聚合到单独对象，减少运行上下文的职责混杂。
+ *
+ * @property enabled - 是否启用 HITL
+ * @property onPending - 记录待审批工具调用
+ * @property emitRequired - 向宿主发出需要审批的事件
+ * @property onRejected - 审批被拒绝后的宿主回调
+ */
+export type ReactHitlBridge = {
+  enabled: boolean
+  onPending: (hitlId: string, toolCalls: PendingToolCall[]) => void
+  emitRequired: (hitlId: string, toolCalls: PendingToolCall[]) => void
+  onRejected?: (toolCalls: PendingToolCall[]) => void
+}
+
+/**
+ * ReAct 循环运行上下文。
+ *
+ * 将纯元信息与 HITL 桥接能力分层组织，避免把运行期内部状态塞入上下文对象。
+ *
+ * @property meta - 本次运行的标识信息
+ * @property hitl - 人工审批桥接配置
+ */
+export type ReactAgentRunContext = {
+  meta: ReactRunMeta
+  hitl: ReactHitlBridge
 }
 
 /**
@@ -84,7 +119,7 @@ async function executePendingToolCalls(
  * @param ac - 取消控制器
  * @param onToken - 流式 token 回调
  * @param options - recursionLimit、timeout
- * @param runCtx - HITL 与 thread 上下文
+ * @param runCtx - ReAct 运行上下文
  * @returns 运行结束后的 messages
  */
 export async function runReactLoop(
@@ -106,7 +141,6 @@ export async function runReactLoop(
     throw new Error('请先在设置中配置 API Key')
   }
   const toolsByName = new Map(tools.map((t) => [t.name, t]))
-  runCtx.toolsByName = toolsByName
 
   const toolSet = buildToolDeclarations(tools)
   const working = [...messages]
@@ -116,7 +150,7 @@ export async function runReactLoop(
   const deadline = Date.now() + timeoutMs
 
   agentLog.info(
-    `[runReactLoop] thread=${runCtx.threadId} hitl=${runCtx.hitlEnabled} recursionLimit=${recursionLimit}`
+    `[runReactLoop] thread=${runCtx.meta.threadId} hitl=${runCtx.hitl.enabled} recursionLimit=${recursionLimit}`
   )
 
   while (steps < recursionLimit) {
@@ -158,10 +192,11 @@ export async function runReactLoop(
     if (!toolCalls?.length) break
     steps += 1
 
+    // 提取待执行的工具调用
     const pending = extractPendingToolCalls(working)
     if (pending.length === 0) break
 
-    if (runCtx.hitlEnabled) {
+    if (runCtx.hitl.enabled) {
       const { approvalRequired, autoExecute } = partitionPendingToolCalls(pending)
 
       if (approvalRequired.length === 0) {
@@ -173,9 +208,9 @@ export async function runReactLoop(
         continue
       }
 
-      const hitlId = makeHitlId(runCtx.runId, hitlRound++)
-      runCtx.onPendingHitl(hitlId, approvalRequired)
-      runCtx.emitHitlRequired(hitlId, approvalRequired)
+      const hitlId = makeHitlId(runCtx.meta.runId, hitlRound++)
+      runCtx.hitl.onPending(hitlId, approvalRequired)
+      runCtx.hitl.emitRequired(hitlId, approvalRequired)
 
       const decision: HitlUserDecision = await waitForHitlDecision(hitlId, ac.signal)
       agentLog.info(`[runReactLoop] hitl decision=${decision} hitlId=${hitlId}`)
@@ -186,7 +221,7 @@ export async function runReactLoop(
             ? await executePendingToolCalls(autoExecute, toolsByName, ac.signal)
             : []
         working.push(...autoResults, ...buildRejectionStateMessages(approvalRequired))
-        runCtx.onToolsRejected?.(approvalRequired)
+        runCtx.hitl.onRejected?.(approvalRequired)
         continue
       }
 
