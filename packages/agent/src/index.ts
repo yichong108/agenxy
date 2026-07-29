@@ -8,6 +8,7 @@ export {
   type AgentRunCallbacks,
   type AgentRunInput,
   type AgentRunResult,
+  type CreateAgentLocalOptions,
   type CreateAgentOptions
 } from './create-agent.js'
 
@@ -31,6 +32,6 @@ export { HITL_EXEMPT_TOOL_NAMES } from './hitl.js'
 export { shouldLoadSkill, type UserIntent } from './intent-classifier.js'
 export { SKILLS_WITH_TAGS, type SkillTagEntry } from './skill-tags.js'
 
-export { getChatModel } from './llm.js'
+export { getChatModel, resolveChatModel } from './llm.js'
 
 export { agentLog, type AgentLogger } from './logger.js'

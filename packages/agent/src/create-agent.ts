@@ -9,10 +9,11 @@ import {
   type StreamEvent,
   type ToolTimelineEvent
 } from '@agenxy/shared'
+import type { LanguageModel } from 'ai'
 
 import type { ReactRunBridge } from './graph/react-run-bridge.js'
 import type { AgenxyGraphRunContext } from './graph/run-context.js'
-import type { AgenxyRunMeta } from './graph/state.js'
+import type { AgenxyRunMeta, PreparedTooling } from './graph/state.js'
 import {
   TOOL_REJECTED_RESULT,
   cancelAllHitlWaiters,
@@ -24,11 +25,38 @@ import {
 import { type AgentMessage, contentToText, findLastAiMessage } from './messages.js'
 import { runWorkflow, type WorkflowDeps } from './run-workflow.js'
 
+/** 未注入 prepareTooling 时的默认 system prompt */
+const DEFAULT_RUN_PROMPT = 'You are a helpful coding assistant.'
+
 /**
- * createAgent 配置项：宿主注入工具组装等依赖。
+ * createAgent 本地运行环境配置。
+ */
+export type CreateAgentLocalOptions = {
+  /** 工作区根目录；send 时若未指定 runMeta.root 则使用此值 */
+  cwd?: string
+}
+
+/**
+ * createAgent 配置项。
+ *
+ * 最简用法只需 provider 与 local.cwd；其余未传时使用内置默认。
+ *
+ * @example
+ * ```ts
+ * const agent = await createAgent({
+ *   provider: model,
+ *   local: { cwd: process.cwd() }
+ * })
+ * ```
  */
 export type CreateAgentOptions = {
-  prepareTooling: WorkflowDeps['prepareTooling']
+  /** AI SDK LanguageModel；未传则在 send 时从 settings 解析 */
+  provider?: LanguageModel
+  /** 本地运行环境 */
+  local?: CreateAgentLocalOptions
+  /** 工具与 prompt 组装；未传则使用空工具 + 默认 prompt */
+  prepareTooling?: WorkflowDeps['prepareTooling']
+  /** 可观测性包装（如 Langfuse）；未传则直接执行 */
   wrapReactRun?: WorkflowDeps['wrapReactRun']
 }
 
@@ -83,20 +111,37 @@ export type Agent = {
 }
 
 /**
+ * 默认工具组装：无工具，仅基础 system prompt。
+ *
+ * Desktop 等宿主应注入完整 prepareTooling（文件系统、MCP、skills 等）。
+ *
+ * @param _args - 与宿主 prepareTooling 相同的参数（默认实现忽略）
+ * @returns 空工具集与默认 prompt
+ */
+async function defaultPrepareTooling(
+  _args: Parameters<NonNullable<CreateAgentOptions['prepareTooling']>>[0]
+): Promise<PreparedTooling> {
+  return { tools: [], runPrompt: DEFAULT_RUN_PROMPT }
+}
+
+/**
  * 创建 agent 实例 — packages/agent 的唯一入口工厂。
  *
- * 封装 ReAct 流水线与 HITL，宿主仅注入工具组装等依赖。
+ * 最简入参为 provider + local.cwd；prepareTooling / wrapReactRun 等未传时使用默认。
+ * 可 `await createAgent(...)`（函数本身同步，await 无害）。
  *
  * 注意：不直接与外部耦合。同会话「运行中不可再发」由宿主按 session 互斥；
  * 不同会话各自独立 send，互不排队。
  *
- * @param options - 宿主依赖与运行时参数
+ * @param options - 创建配置；均可选，空对象即使用全部默认
  * @returns 可 send 的 agent 实例
  */
-export function createAgent(options: CreateAgentOptions): Agent {
+export function createAgent(options: CreateAgentOptions = {}): Agent {
+  const defaultCwd = options.local?.cwd?.trim() || undefined
   const deps: WorkflowDeps = {
-    prepareTooling: options.prepareTooling,
-    wrapReactRun: options.wrapReactRun
+    prepareTooling: options.prepareTooling ?? defaultPrepareTooling,
+    wrapReactRun: options.wrapReactRun,
+    provider: options.provider
   }
 
   /**
@@ -111,11 +156,13 @@ export function createAgent(options: CreateAgentOptions): Agent {
       messages,
       abortController,
       settings,
-      runMeta,
       callbacks,
       recursionLimit,
       invokeTimeoutMs
     } = input
+
+    const root = input.runMeta.root?.trim() || defaultCwd || process.cwd()
+    const runMeta: AgenxyRunMeta = { ...input.runMeta, root }
 
     const runToolEvents: ToolTimelineEvent[] = []
     const streamedCharsRef = { current: 0 }
@@ -184,7 +231,8 @@ export function createAgent(options: CreateAgentOptions): Agent {
       },
       emit: callbacks.emit,
       runToolEvents,
-      reactBridge
+      reactBridge,
+      provider: options.provider
     }
 
     const workflowResult = await runWorkflow(

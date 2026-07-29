@@ -5,10 +5,10 @@ import {
   type ToolCallEvent,
   type ToolTimelineEvent
 } from '@agenxy/shared'
-import { streamText } from 'ai'
+import { streamText, type LanguageModel } from 'ai'
 
 import { isRejectedToolResult } from '../hitl.js'
-import { getChatModel } from '../llm.js'
+import { resolveChatModel } from '../llm.js'
 import { agentLog } from '../logger.js'
 import { isAbortError } from '../run-utils.js'
 
@@ -28,6 +28,8 @@ export type PlanAfterToolCoordinatorOptions = {
   signal: AbortSignal
   emit: (event: StreamEvent) => void
   runToolEvents: ToolTimelineEvent[]
+  /** createAgent 可选注入的模型；未传则从 settings 解析 */
+  provider?: LanguageModel | null
 }
 
 export type PlanAfterToolCoordinator = {
@@ -42,6 +44,7 @@ export type PlanAfterToolCoordinator = {
  * @param ctx - 刚结束的工具名称、参数与结果
  * @param signal - 中止信号
  * @param onDelta - 每个文本片段的回调
+ * @param provider - createAgent 可选注入的模型
  * @returns 累计生成的计划文本（已 trim）
  */
 async function streamPlanAfterTool(
@@ -49,9 +52,10 @@ async function streamPlanAfterTool(
   userText: string,
   ctx: { toolName: string; args?: string; result?: string },
   signal: AbortSignal,
-  onDelta: (text: string) => void
+  onDelta: (text: string) => void,
+  provider?: LanguageModel | null
 ): Promise<string> {
-  const model = getChatModel(settings)
+  const model = resolveChatModel(settings, provider)
   if (!model) return ''
 
   const system =
@@ -158,7 +162,8 @@ export function createPlanAfterToolCoordinator(
         userText,
         { toolName: ended.name, args: ended.args, result: ended.result },
         opts.signal,
-        onPlanDelta
+        onPlanDelta,
+        opts.provider
       )
     } catch (e) {
       if (isAbortError(e)) throw e

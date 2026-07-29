@@ -1,5 +1,8 @@
 /**
  * Desktop agent 实例 — 注入 Electron 侧工具组装与 Langfuse。
+ *
+ * 模型仍从每次 send 的 settings 解析（不在此固定 provider），
+ * 工作区 root 由 session 注入 runMeta。
  */
 import { createAgent, type CreateAgentOptions } from '@agenxy/agent'
 

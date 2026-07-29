@@ -56,3 +56,19 @@ export function getChatModel(settings: AppSettings): LanguageModel | null {
   const provider = createOpenAiProvider(settings)
   return provider.chat(profile.model)
 }
+
+/**
+ * 解析本轮应使用的聊天模型。
+ *
+ * 优先使用 createAgent 注入的 provider；未注入时回退到从 settings 创建。
+ *
+ * @param settings - 应用设置（provider 未注入时使用）
+ * @param provider - createAgent 可选注入的 LanguageModel
+ * @returns 可用模型；均不可用时为 null
+ */
+export function resolveChatModel(
+  settings: AppSettings,
+  provider?: LanguageModel | null
+): LanguageModel | null {
+  return provider ?? getChatModel(settings)
+}

@@ -3,8 +3,7 @@
  * @description ReAct 循环实现
  */
 import { type AppSettings } from '@agenxy/shared'
-import { tool, type CoreMessage, type ToolSet } from 'ai'
-import { streamText } from 'ai'
+import { streamText, tool, type CoreMessage, type LanguageModel, type ToolSet } from 'ai'
 
 import type { NamedTool } from './define-tool.js'
 import {
@@ -16,7 +15,7 @@ import {
   type PendingToolCall,
   waitForHitlDecision
 } from './hitl.js'
-import { getChatModel } from './llm.js'
+import { resolveChatModel } from './llm.js'
 import { agentLog } from './logger.js'
 import { type AgentMessage, aiMessage, toModelMessages, toolMessage } from './messages.js'
 
@@ -156,6 +155,7 @@ async function handleHitlRound(args: {
  * @param onToken - 流式 token 回调
  * @param options - recursionLimit、timeout
  * @param runCtx - ReAct 运行上下文
+ * @param provider - createAgent 可选注入的模型；未传则从 settings 解析
  * @returns 运行结束后的 messages
  */
 export async function runReactLoop(
@@ -169,12 +169,13 @@ export async function runReactLoop(
     recursionLimit: number
     timeoutMs: number
   },
-  runCtx: ReactAgentRunContext
+  runCtx: ReactAgentRunContext,
+  provider?: LanguageModel | null
 ): Promise<AgentMessage[]> {
   const { recursionLimit, timeoutMs } = options
-  const model = getChatModel(settings)
+  const model = resolveChatModel(settings, provider)
   if (!model) {
-    throw new Error('请先在设置中配置 API Key')
+    throw new Error('请先在设置中配置 API Key，或向 createAgent 传入 provider')
   }
   const toolsByName = new Map(tools.map((t) => [t.name, t]))
 

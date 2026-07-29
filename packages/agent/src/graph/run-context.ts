@@ -1,4 +1,5 @@
 import type { AppSettings, StreamEvent, ToolTimelineEvent } from '@agenxy/shared'
+import type { LanguageModel } from 'ai'
 
 import type { ToolEndedCall } from './plan-after-tool.js'
 import type { ReactRunBridge } from './react-run-bridge.js'
@@ -16,4 +17,6 @@ export type AgenxyGraphRunContext = {
   runToolEvents: ToolTimelineEvent[]
   afterToolEnd?: (ended: ToolEndedCall) => Promise<void>
   reactBridge: ReactRunBridge
+  /** createAgent 注入的模型；未设则各阶段从 settings 解析 */
+  provider?: LanguageModel
 }

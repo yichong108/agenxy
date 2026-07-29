@@ -1,9 +1,9 @@
 import { type AppSettings } from '@agenxy/shared'
-import { generateObject } from 'ai'
+import { generateObject, type LanguageModel } from 'ai'
 import { z } from 'zod'
 
 import { agentLog } from './logger.js'
-import { getChatModel } from './llm.js'
+import { resolveChatModel } from './llm.js'
 import { SKILLS_WITH_TAGS } from './skill-tags.js'
 
 const IntentClassificationSchema = z.object({
@@ -26,14 +26,16 @@ export type IntentClassification = {
  * @param userText - 用户消息
  * @param settings - 应用设置
  * @param signal - 可选取消信号
+ * @param provider - createAgent 可选注入的模型；未传则从 settings 解析
  * @returns 意图分类结果
  */
 export async function classifyIntent(
   userText: string,
   settings: AppSettings,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  provider?: LanguageModel | null
 ): Promise<IntentClassification> {
-  const model = getChatModel(settings)
+  const model = resolveChatModel(settings, provider)
   if (!model) {
     return {
       intent: 'general',

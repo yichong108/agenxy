@@ -1,4 +1,5 @@
 import { type AgentComposerMode, type AppSettings } from '@agenxy/shared'
+import type { LanguageModel } from 'ai'
 
 import { AGENXY_USER_DISPLAY_KW } from './constants.js'
 import type { NamedTool, ToolExecutorContext } from './define-tool.js'
@@ -67,6 +68,9 @@ export type WorkflowDeps = {
     fn: () => Promise<T>,
     opts?: { formatOutput?: (messages: AgentMessage[]) => string }
   ) => Promise<T>
+
+  /** createAgent 注入的模型；未设则各阶段从 settings 解析 */
+  provider?: LanguageModel
 }
 
 /**
@@ -111,7 +115,8 @@ async function classifyIntentPhase(
     const classification = await classifyIntent(
       runMeta.userDisplayText || runMeta.agentUserText,
       settings,
-      signal
+      signal,
+      runContext.provider
     )
     if (classification.intent !== 'general' && classification.confidence > 0.6) {
       detectedIntents = [classification.intent]
@@ -160,7 +165,8 @@ function setupPlanAfterToolPhase(
     settings: runContext.settings,
     signal: signal ?? runContext.signal,
     emit: runContext.emit,
-    runToolEvents: runContext.runToolEvents
+    runToolEvents: runContext.runToolEvents,
+    provider: runContext.provider
   })
   runContext.afterToolEnd = coordinator.afterToolEnd
 }
@@ -263,7 +269,8 @@ async function runAgentLoopPhase(
             bridge.emitToolsRejected(toolCalls)
           }
         }
-      }
+      },
+      deps.provider ?? runContext.provider
     )
 
   const observationCtx: ReactObservationContext = {
