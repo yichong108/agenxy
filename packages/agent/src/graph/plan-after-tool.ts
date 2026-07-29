@@ -1,15 +1,12 @@
 import {
   type AgentComposerMode,
   type AppSettings,
-  STREAM_FLUSH_CHARS,
-  STREAM_FLUSH_MS,
   type StreamEvent,
   type ToolCallEvent,
   type ToolTimelineEvent
 } from '@agenxy/shared'
 import { streamText } from 'ai'
 
-import { StreamBatcher } from '../batcher.js'
 import { isRejectedToolResult } from '../hitl.js'
 import { getChatModel } from '../llm.js'
 import { agentLog } from '../logger.js'
@@ -37,12 +34,22 @@ export type PlanAfterToolCoordinator = {
   afterToolEnd: (ended: ToolEndedCall) => Promise<void>
 }
 
+/**
+ * 流式生成工具结束后的下一步计划文本，并逐 token 回调 onDelta。
+ *
+ * @param settings - 应用设置（用于选择聊天模型）
+ * @param userText - 用户原始任务文本
+ * @param ctx - 刚结束的工具名称、参数与结果
+ * @param signal - 中止信号
+ * @param onDelta - 每个文本片段的回调
+ * @returns 累计生成的计划文本（已 trim）
+ */
 async function streamPlanAfterTool(
   settings: AppSettings,
   userText: string,
   ctx: { toolName: string; args?: string; result?: string },
   signal: AbortSignal,
-  planBatcher: StreamBatcher
+  onDelta: (text: string) => void
 ): Promise<string> {
   const model = getChatModel(settings)
   if (!model) return ''
@@ -78,7 +85,7 @@ async function streamPlanAfterTool(
       const piece = chunk.textDelta
       if (!piece) continue
       acc += piece
-      planBatcher.push(piece)
+      onDelta(piece)
       if (acc.length >= PLAN_STEP_MAX_CHARS) break
     }
   } catch (e) {
@@ -133,7 +140,7 @@ export function createPlanAfterToolCoordinator(
     }
     runToolEvents.push(planRecord)
 
-    const planBatcher = new StreamBatcher(STREAM_FLUSH_MS, STREAM_FLUSH_CHARS, (t) => {
+    const onPlanDelta = (t: string): void => {
       emit({ type: 'plan-delta', sessionId, stepId, text: t, runId, traceId })
       const idx = runToolEvents.findIndex((x) => x.kind === 'plan' && x.id === stepId)
       if (idx >= 0) {
@@ -142,7 +149,7 @@ export function createPlanAfterToolCoordinator(
           runToolEvents[idx] = { ...row, text: row.text + t }
         }
       }
-    })
+    }
 
     let text = ''
     try {
@@ -151,14 +158,12 @@ export function createPlanAfterToolCoordinator(
         userText,
         { toolName: ended.name, args: ended.args, result: ended.result },
         opts.signal,
-        planBatcher
+        onPlanDelta
       )
     } catch (e) {
-      planBatcher.flush()
       if (isAbortError(e)) throw e
       throw e
     }
-    planBatcher.flush()
 
     const idx = runToolEvents.findIndex((x) => x.kind === 'plan' && x.id === stepId)
     if (idx >= 0) {

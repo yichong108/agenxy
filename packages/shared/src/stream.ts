@@ -1,9 +1,3 @@
-/** 流式 IPC 合并间隔（内置，不暴露设置） */
-export const STREAM_FLUSH_MS = 32
-
-/** 流式 IPC 合并字符数（内置） */
-export const STREAM_FLUSH_CHARS = 320
-
 /** 终端/命令单条输出最大字符（内置） */
 export const MAX_TERMINAL_OUTPUT_CHARS = 10000
 

@@ -10,7 +10,6 @@ import {
   type ToolTimelineEvent
 } from '@agenxy/shared'
 
-import { StreamBatcher } from './batcher.js'
 import type { ReactRunBridge } from './graph/react-run-bridge.js'
 import type { AgenxyGraphRunContext } from './graph/run-context.js'
 import type { AgenxyRunMeta } from './graph/state.js'
@@ -33,10 +32,6 @@ export type CreateAgentOptions = {
   prepareTooling: WorkflowDeps['prepareTooling']
   wrapReactRun?: WorkflowDeps['wrapReactRun']
   logger?: AgentLogger
-  /** 流式文本合并间隔（毫秒）；默认 32 */
-  streamFlushMs?: number
-  /** 流式文本合并字符数；默认 320 */
-  streamFlushChars?: number
 }
 
 /**
@@ -92,7 +87,7 @@ export type Agent = {
 /**
  * 创建 agent 实例 — packages/agent 的唯一入口工厂。
  *
- * 封装 ReAct 流水线、流式合并与 HITL，宿主仅注入工具与可观测性依赖。
+ * 封装 ReAct 流水线与 HITL，宿主仅注入工具与可观测性依赖。
  *
  * 注意：不直接与外部耦合。同会话「运行中不可再发」由宿主按 session 互斥；
  * 不同会话各自独立 send，互不排队。
@@ -109,9 +104,6 @@ export function createAgent(options: CreateAgentOptions): Agent {
   if (options.logger) {
     setAgentLogger(options.logger)
   }
-
-  const streamFlushMs = options.streamFlushMs ?? 32
-  const streamFlushChars = options.streamFlushChars ?? 320
 
   /**
    * 发起一次 agent run
@@ -134,16 +126,12 @@ export function createAgent(options: CreateAgentOptions): Agent {
     const runToolEvents: ToolTimelineEvent[] = []
     const streamedCharsRef = { current: 0 }
 
-    const batcher = new StreamBatcher(streamFlushMs, streamFlushChars, (t) => {
-      callbacks.onTextDelta(t)
-    })
-
     const reactBridge: ReactRunBridge = {
       abortController,
       recursionLimit,
       invokeTimeoutMs,
       streamedCharsRef,
-      pushStreamToken: (token) => batcher.push(token),
+      pushStreamToken: (token) => callbacks.onTextDelta(token),
       resetStream: () => {
         streamedCharsRef.current = 0
         callbacks.onStreamReset()
@@ -205,43 +193,39 @@ export function createAgent(options: CreateAgentOptions): Agent {
       reactBridge
     }
 
-    try {
-      const workflowResult = await runWorkflow(
-        {
-          composerMode,
-          messages,
-          runMeta,
-          runContext,
-          initRunCallbacks: {
-            persistMessages: callbacks.persistMessages
-          },
-          signal: abortController.signal
+    const workflowResult = await runWorkflow(
+      {
+        composerMode,
+        messages,
+        runMeta,
+        runContext,
+        initRunCallbacks: {
+          persistMessages: callbacks.persistMessages
         },
-        deps
-      )
+        signal: abortController.signal
+      },
+      deps
+    )
 
-      // 如果流式文本为空，则尝试 fallback 到最后一轮 AI 消息。
-      // 因为流式文本为空，说明用户没有输入，或者输入了但是没有触发流式输出。
-      // 这时候尝试 fallback 到最后一轮 AI 消息，可能能得到一些有价值的内容。
-      // 当然，如果流式文本不为空，则不进行 fallback。
-      // 这里 fallback 到最后一轮 AI 消息，而不是第一轮 AI 消息，是因为第一轮 AI 消息可能是系统提示词，不是用户输入。
-      // 当然，如果最后一轮 AI 消息也没有内容，则不进行 fallback。
-      // fallback是为了什么？避免用户输入了但是没有触发流式输出，导致用户没有收到任何内容。
-      if (streamedCharsRef.current === 0) {
-        const lastAi = findLastAiMessage(workflowResult.messages)
-        const fallback = lastAi ? contentToText(lastAi.content) : ''
-        if (fallback) {
-          batcher.push(fallback)
-        }
+    // 如果流式文本为空，则尝试 fallback 到最后一轮 AI 消息。
+    // 因为流式文本为空，说明用户没有输入，或者输入了但是没有触发流式输出。
+    // 这时候尝试 fallback 到最后一轮 AI 消息，可能能得到一些有价值的内容。
+    // 当然，如果流式文本不为空，则不进行 fallback。
+    // 这里 fallback 到最后一轮 AI 消息，而不是第一轮 AI 消息，是因为第一轮 AI 消息可能是系统提示词，不是用户输入。
+    // 当然，如果最后一轮 AI 消息也没有内容，则不进行 fallback。
+    // fallback是为了什么？避免用户输入了但是没有触发流式输出，导致用户没有收到任何内容。
+    if (streamedCharsRef.current === 0) {
+      const lastAi = findLastAiMessage(workflowResult.messages)
+      const fallback = lastAi ? contentToText(lastAi.content) : ''
+      if (fallback) {
+        callbacks.onTextDelta(fallback)
       }
+    }
 
-      return {
-        messages: workflowResult.messages,
-        toolEvents: workflowResult.toolEvents,
-        streamedChars: streamedCharsRef.current
-      }
-    } finally {
-      batcher.flush()
+    return {
+      messages: workflowResult.messages,
+      toolEvents: workflowResult.toolEvents,
+      streamedChars: streamedCharsRef.current
     }
   }
 
