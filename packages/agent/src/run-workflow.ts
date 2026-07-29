@@ -2,7 +2,7 @@ import { type AgentComposerMode, type AppSettings } from '@agenxy/shared'
 import type { LanguageModel } from 'ai'
 
 import { AGENXY_USER_DISPLAY_KW } from './constants.js'
-import type { NamedTool, ToolExecutorContext } from './define-tool.js'
+import type { ToolExecutorContext } from './define-tool.js'
 import { classifyIntent, type UserIntent } from './intent-classifier.js'
 import { agentLog } from './logger.js'
 import {
@@ -13,7 +13,6 @@ import {
 } from './messages.js'
 import { runReactLoop } from './react-loop.js'
 import { isAbortError } from './run-utils.js'
-import { createPlanAfterToolCoordinator } from './graph/plan-after-tool.js'
 import type { AgenxyGraphRunContext } from './graph/run-context.js'
 import type { AgenxyGraphStateType, AgenxyRunMeta, PreparedTooling } from './graph/state.js'
 
@@ -85,10 +84,11 @@ function appendUserMessagePhase(
   callbacks: InitRunCallbacks
 ): Partial<AgenxyGraphStateType> {
   const { runMeta } = state
-  const msg = humanMessage(
-    runMeta.agentUserText,
-    runMeta.planContext ? runMeta.userDisplayText : undefined
-  )
+  const displayText =
+    runMeta.userDisplayText && runMeta.userDisplayText !== runMeta.agentUserText
+      ? runMeta.userDisplayText
+      : undefined
+  const msg = humanMessage(runMeta.agentUserText, displayText)
   const messages = [...state.messages, msg]
   callbacks.persistMessages(messages)
   return { messages }
@@ -144,34 +144,6 @@ async function classifyIntentPhase(
 }
 
 /**
- * 挂载工具结束后的 plan 协调器（afterToolEnd）。
- *
- * @param state - 当前流水线状态
- * @param runContext - 运行上下文（写入 afterToolEnd）
- * @param signal - 可选取消信号
- */
-function setupPlanAfterToolPhase(
-  state: AgenxyGraphStateType,
-  runContext: AgenxyGraphRunContext,
-  signal?: AbortSignal
-): void {
-  const { runMeta, composerMode } = state
-  const coordinator = createPlanAfterToolCoordinator({
-    composerMode,
-    sessionId: runMeta.sessionId,
-    runId: runMeta.runId,
-    traceId: runMeta.traceId,
-    userText: runMeta.userDisplayText || runMeta.agentUserText,
-    settings: runContext.settings,
-    signal: signal ?? runContext.signal,
-    emit: runContext.emit,
-    runToolEvents: runContext.runToolEvents,
-    provider: runContext.provider
-  })
-  runContext.afterToolEnd = coordinator.afterToolEnd
-}
-
-/**
  * 按模式与意图组装本轮可用工具与 system prompt。
  *
  * @param state - 当前流水线状态
@@ -185,7 +157,7 @@ async function prepareToolingPhase(
   deps: WorkflowDeps
 ): Promise<Partial<AgenxyGraphStateType>> {
   const { composerMode, runMeta, detectedIntents } = state
-  const { settings, onTool, afterToolEnd } = runContext
+  const { settings, onTool } = runContext
   const { sessionId, root, runId, traceId } = runMeta
 
   const toolingBundle = await deps.prepareTooling({
@@ -193,7 +165,7 @@ async function prepareToolingPhase(
     sessionId,
     root,
     settings,
-    runCtx: { runId, traceId, onTool, afterToolEnd },
+    runCtx: { runId, traceId, onTool },
     filterIntents: composerMode === 'build' ? detectedIntents : undefined
   })
 
@@ -329,8 +301,6 @@ export async function runWorkflow(
   if (state.composerMode === 'build') {
     Object.assign(state, await classifyIntentPhase(state, runContext, signal))
   }
-
-  setupPlanAfterToolPhase(state, runContext, signal)
 
   Object.assign(state, await prepareToolingPhase(state, runContext, deps))
 

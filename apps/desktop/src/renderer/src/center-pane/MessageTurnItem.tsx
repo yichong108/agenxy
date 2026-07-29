@@ -5,14 +5,12 @@ import {
   remarkLinkifyBareUrls
 } from './center-pane-utils'
 import { RightOutlined } from '@ant-design/icons'
-import { Button, Card, Typography } from 'antd'
+import { Card, Typography } from 'antd'
 import React from 'react'
 import ReactMarkdown from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
 import remarkGfm from 'remark-gfm'
 
-import { parseAgentPlan } from '@/renderer/src/plan/parse-plan'
-import { PlanChecklistPanel } from '@/renderer/src/plan/PlanChecklistPanel'
 import type { ChatMessage, ToolTimelineEvent } from '@/shared/ipc'
 
 const { Text } = Typography
@@ -35,10 +33,6 @@ export type MessageTurnItemProps = {
   setTimelineOpenOverride: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   /** 当前运行耗时（毫秒），用于时间线标题展示 */
   timelineWallMs: number
-  /** Plan 模式生成的 assistant 消息 id 集合 */
-  planAssistantIds: Set<string>
-  /** 将计划正文挂到会话并切换到 Build 模式 */
-  onPreparePlanExecution: (planContent: string) => void
   /** Markdown 区域点击外链时的确认处理 */
   onMarkdownClick: (event: React.MouseEvent<HTMLDivElement>) => void
 }
@@ -52,8 +46,6 @@ type MessageCardContext = Pick<
   | 'timelineOpenOverride'
   | 'setTimelineOpenOverride'
   | 'timelineWallMs'
-  | 'planAssistantIds'
-  | 'onPreparePlanExecution'
   | 'onMarkdownClick'
 >
 
@@ -64,9 +56,7 @@ type MessageCardView = {
   displayTimeline: ToolTimelineEvent[]
   timelineExpanded: boolean
   showTimelineAccordion: boolean
-  isPlanMessage: boolean
   contentPlaceholder: string
-  showPlanExecuteFallback: boolean
 }
 
 /**
@@ -85,7 +75,7 @@ function buildMessageCardView(msg: ChatMessage, ctx: MessageCardContext): Messag
     isStreaming,
     ctx.currentTimeline
   )
-  // 有工具/计划事件，或当前 run 中的最新 assistant：均显示耗时手风琴（不依赖已移除的意图思考）
+  // 有工具事件，或当前 run 中的最新 assistant：均显示耗时手风琴（不依赖已移除的意图思考）
   const showTimelineAccordion =
     displayTimeline.length > 0 || (isLatestAssistant && Boolean(ctx.isRun))
   const timelineExpanded =
@@ -99,9 +89,7 @@ function buildMessageCardView(msg: ChatMessage, ctx: MessageCardContext): Messag
     displayTimeline,
     timelineExpanded,
     showTimelineAccordion,
-    isPlanMessage: ctx.planAssistantIds.has(msg.id),
-    contentPlaceholder: isStreaming ? '…' : '',
-    showPlanExecuteFallback: Boolean(msg.content.trim() && !isStreaming)
+    contentPlaceholder: isStreaming ? '…' : ''
   }
 }
 
@@ -155,20 +143,6 @@ function TimelineEventItem({ event }: TimelineEventItemProps) {
     return <Text type="danger">{event.message}</Text>
   }
 
-  if (event.kind === 'plan') {
-    return (
-      <>
-        <Text type="secondary" className="app-timeline-plan-label">
-          下一步
-          {event.toolName ? <Text type="secondary"> · 在 {event.toolName} 之后</Text> : null}
-        </Text>
-        <div className="app-timeline-plan">
-          {event.text || (event.status === 'streaming' ? '…' : '')}
-        </div>
-      </>
-    )
-  }
-
   return (
     <>
       <Text code>
@@ -189,7 +163,7 @@ type TimelineAccordionProps = {
   onToggle: () => void
 }
 
-/** 工具时间线手风琴：工具/计划事件列表 */
+/** 工具时间线手风琴：工具事件列表 */
 function TimelineAccordion({ expanded, wallMs, events, onToggle }: TimelineAccordionProps) {
   return (
     <div className="app-timeline-accordion">
@@ -205,10 +179,7 @@ function TimelineAccordion({ expanded, wallMs, events, onToggle }: TimelineAccor
       {expanded ? (
         <div className="app-timeline-wrap">
           {events.map((event, index) => (
-            <div
-              key={timelineEventKey(event, index)}
-              className={`app-timeline-item${event.kind === 'plan' ? ' is-plan' : ''}`}
-            >
+            <div key={timelineEventKey(event, index)} className="app-timeline-item">
               <TimelineEventItem event={event} />
             </div>
           ))}
@@ -218,62 +189,13 @@ function TimelineAccordion({ expanded, wallMs, events, onToggle }: TimelineAccor
   )
 }
 
-type PlanMessageBodyProps = {
-  msg: ChatMessage
-  view: MessageCardView
-  ctx: MessageCardContext
-}
-
-/** Plan 模式 assistant 消息：清单面板 + 完整说明或执行入口 */
-function PlanMessageBody({ msg, view, ctx }: PlanMessageBodyProps) {
-  const hasStructuredPlan = Boolean(parseAgentPlan(msg.content))
-  const markdownContent = msg.content || view.contentPlaceholder
-
-  return (
-    <>
-      <PlanChecklistPanel
-        content={msg.content}
-        streaming={view.isStreaming}
-        onExecutePlan={() => ctx.onPreparePlanExecution(msg.content)}
-        executeDisabled={Boolean(ctx.isRun)}
-      />
-      {hasStructuredPlan ? (
-        <details className="app-plan-full-details">
-          <summary>查看完整说明</summary>
-          <MessageMarkdown
-            content={msg.content}
-            className="app-message-markdown app-message-markdown--plan-extra"
-            onMarkdownClick={ctx.onMarkdownClick}
-          />
-        </details>
-      ) : (
-        <>
-          <MessageMarkdown content={markdownContent} onMarkdownClick={ctx.onMarkdownClick} />
-          {view.showPlanExecuteFallback ? (
-            <div className="app-plan-execute-fallback">
-              <Button
-                type="primary"
-                size="small"
-                disabled={Boolean(ctx.isRun)}
-                onClick={() => ctx.onPreparePlanExecution(msg.content)}
-              >
-                执行计划
-              </Button>
-            </div>
-          ) : null}
-        </>
-      )}
-    </>
-  )
-}
-
 type AssistantMessageBodyProps = {
   msg: ChatMessage
   view: MessageCardView
   ctx: MessageCardContext
 }
 
-/** assistant 消息正文：时间线手风琴 + Plan 或普通 Markdown */
+/** assistant 消息正文：时间线手风琴 + Markdown */
 function AssistantMessageBody({ msg, view, ctx }: AssistantMessageBodyProps) {
   return (
     <>
@@ -290,14 +212,10 @@ function AssistantMessageBody({ msg, view, ctx }: AssistantMessageBodyProps) {
           }
         />
       ) : null}
-      {view.isPlanMessage ? (
-        <PlanMessageBody msg={msg} view={view} ctx={ctx} />
-      ) : (
-        <MessageMarkdown
-          content={msg.content || view.contentPlaceholder}
-          onMarkdownClick={ctx.onMarkdownClick}
-        />
-      )}
+      <MessageMarkdown
+        content={msg.content || view.contentPlaceholder}
+        onMarkdownClick={ctx.onMarkdownClick}
+      />
     </>
   )
 }
@@ -331,7 +249,7 @@ function MessageCard({ msg, ctx }: MessageCardProps) {
 }
 
 /**
- * 渲染单个消息回合：包含该回合内所有消息卡片（用户 / assistant、时间线、计划清单等）。
+ * 渲染单个消息回合：包含该回合内所有消息卡片（用户 / assistant、时间线等）。
  *
  * 从 `WorkspaceMessagesInner` 抽离，便于独立维护单回合 UI 与后续 memo 优化。
  *

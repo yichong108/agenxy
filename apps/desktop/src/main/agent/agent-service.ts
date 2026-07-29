@@ -145,21 +145,6 @@ function persistSessionMessages(
   setSessionMessages(workspaceId, sessionId, list)
 }
 
-function buildAgentMessageWithPlan(userText: string, planContext: string): string {
-  const userPart = userText.trim() || '（用户未附加说明，请严格按计划步骤实施。）'
-  return [
-    '用户已确认以下 **计划模式** 中的计划，并切换到 **构建模式** 实施。',
-    '除非用户消息明确修订、缩小或重排范围，否则按计划执行。',
-    '',
-    '--- 计划 ---',
-    planContext.trim(),
-    '--- 计划结束 ---',
-    '',
-    '用户消息：',
-    userPart
-  ].join('\n')
-}
-
 export function bindAgentIpc(wc: WebContents): void {
   webContents = wc
 }
@@ -245,7 +230,7 @@ export function isSessionRunning(sessionId: string): boolean {
  *
  * @param sessionId - 会话 ID
  * @param userText - 用户输入文本
- * @param options - 发送选项（模式、计划上下文等）
+ * @param options - 发送选项（模式等）
  */
 export async function runUserMessage(
   sessionId: string,
@@ -253,12 +238,8 @@ export async function runUserMessage(
   options?: AgentSendOptions
 ): Promise<void> {
   const composerMode = normalizeComposerMode(options?.mode)
-  const planContext = options?.planContext?.trim()
-  const userDisplayText =
-    options?.userDisplayText?.trim() || userText.trim() || (planContext ? '执行计划' : '')
-  const agentUserText = planContext
-    ? buildAgentMessageWithPlan(userText, planContext)
-    : userText.trim()
+  const agentUserText = userText.trim()
+  const userDisplayText = options?.userDisplayText?.trim() || agentUserText
   if (!agentUserText) {
     emit({ type: 'error', sessionId, message: '消息为空' })
     return
@@ -335,8 +316,7 @@ export async function runUserMessage(
         workspaceId: session.workspaceId,
         root,
         userDisplayText,
-        agentUserText,
-        planContext
+        agentUserText
       },
       recursionLimit: settings.maxAgentLoopSteps,
       invokeTimeoutMs: settings.agentRunTimeoutMs,

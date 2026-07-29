@@ -28,16 +28,7 @@ export type ToolErrorEvent = {
   errorCode?: string
 } & RunMeta
 
-export type ToolPlanStepEvent = {
-  kind: 'plan'
-  id: string
-  afterToolId: string
-  toolName: string
-  status: 'streaming' | 'end'
-  text: string
-} & RunMeta
-
-export type ToolTimelineEvent = ToolCallEvent | ToolErrorEvent | ToolPlanStepEvent
+export type ToolTimelineEvent = ToolCallEvent | ToolErrorEvent
 
 type StreamBase = {
   sessionId: string
@@ -78,24 +69,6 @@ export type StreamRunStartEvent = StreamBase & {
   timestampMs?: number
 }
 
-export type StreamPlanStepStartEvent = StreamBase & {
-  type: 'plan-step-start'
-  stepId: string
-  afterToolId: string
-  toolName: string
-}
-
-export type StreamPlanDeltaEvent = StreamBase & {
-  type: 'plan-delta'
-  stepId: string
-  text: string
-}
-
-export type StreamPlanStepEndEvent = StreamBase & {
-  type: 'plan-step-end'
-  stepId: string
-}
-
 export type HitlToolCallPayload = {
   id: string
   name: string
@@ -117,9 +90,6 @@ export type HitlResumeDecision = 'accept' | 'reject'
 export type StreamEvent =
   | StreamTextDeltaEvent
   | StreamIntentClassifiedEvent
-  | StreamPlanStepStartEvent
-  | StreamPlanDeltaEvent
-  | StreamPlanStepEndEvent
   | StreamHitlRequiredEvent
   | StreamStreamResetEvent
   | StreamToolEvent

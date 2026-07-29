@@ -18,10 +18,6 @@ export type WorkspaceMessagesInnerProps = {
   isRun: boolean
   /** 当前会话的运行统计，用于时间线耗时展示 */
   currentRunStats: RunStats | undefined
-  /** Plan 模式生成的 assistant 消息 id 集合 */
-  planAssistantIds: Set<string>
-  /** 将计划正文挂到会话并切换到 Build 模式 */
-  onPreparePlanExecution: (planContent: string) => void
 }
 
 /**
@@ -35,9 +31,7 @@ function useWorkspaceMessagesInner({
   currentMessages,
   currentTimeline,
   isRun,
-  currentRunStats,
-  planAssistantIds,
-  onPreparePlanExecution
+  currentRunStats
 }: WorkspaceMessagesInnerProps) {
   const { message: msgApi, modal: modalApi } = AntdApp.useApp()
   const bridge = window.bridge
@@ -172,8 +166,6 @@ function useWorkspaceMessagesInner({
     autoScrollRef,
     isNearBottom,
     onMarkdownClick,
-    onPreparePlanExecution,
-    planAssistantIds,
     isRun,
     currentTimeline
   }
@@ -182,10 +174,10 @@ function useWorkspaceMessagesInner({
 /**
  * 工作区消息列表区：包含滚动容器与消息回合渲染。
  *
- * 将原 `app-messages-inner` 及其关联逻辑（时间线手风琴、计划清单、自动滚动）封装为独立组件，
+ * 将原 `app-messages-inner` 及其关联逻辑（时间线手风琴、自动滚动）封装为独立组件，
  * 便于与顶部栏、输入区解耦维护。
  *
- * @param props - 当前会话消息数据与计划执行回调
+ * @param props - 当前会话消息数据
  */
 export function WorkspaceMessagesInner(props: WorkspaceMessagesInnerProps) {
   const m = useWorkspaceMessagesInner(props)
@@ -214,8 +206,6 @@ export function WorkspaceMessagesInner(props: WorkspaceMessagesInnerProps) {
               timelineOpenOverride={m.timelineOpenOverride}
               setTimelineOpenOverride={m.setTimelineOpenOverride}
               timelineWallMs={m.timelineWallMs}
-              planAssistantIds={m.planAssistantIds}
-              onPreparePlanExecution={m.onPreparePlanExecution}
               onMarkdownClick={m.onMarkdownClick}
             />
           ))}

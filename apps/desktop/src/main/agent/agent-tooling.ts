@@ -215,42 +215,10 @@ ${webRule}
 `
 }
 
-function buildPlanSystemPrompt(root: string, settings: AppSettings): string {
-  const web = isTavilyConfigured(settings.tavilyApiKey)
-  const toolLine = web
-    ? 'read_file、list_dir、glob、grep、search_workspace、web_search（Tavily）'
-    : 'read_file、list_dir、glob、grep、search_workspace（未配置 Tavily 时无 web_search）'
-  const webRule = web
-    ? '- 需要外部文档或 API 时调用 **web_search**；不要编造搜索结果。'
-    : '- 未配置 Tavily：在需要实时网页数据时注明。'
-  return `你是本工作区（${root}）的 **计划模式** 架构师。只读探索并输出供 UI 展示的 **清单式计划** —— 尚未执行任何修改。
-- **禁止**改文件、删文件、跑 shell、调用 skill_* / mcp_*；仅只读工具：${toolLine}。
-- **禁止**声称已改代码或已执行命令；不要让用户点击「执行」或自动运行。
-- 充分探索（read/list/search），使步骤基于真实路径与符号。
-
-**最终 Markdown 必须采用以下 ## 标题**：
-
-## 目标
-用一小段话复述用户需求。
-
-## 计划
-- [ ] 第一条可执行步骤 —— 已知时写明文件路径
-- [ ] 第二条步骤
-（每个实施步骤一行 \`- [ ]\`；本区块渲染为清单）
-
-## 风险与待确认
-- 风险或待确认项（若无则省略整节）
-
-规则：
-- ## 计划 下每条实施步骤必须是 \`- [ ]\`（不用编号列表，不要纯段落）。
-- 步骤标题简短；补充说明写在同行破折号后。
-${webRule}`
-}
-
 /**
  * 按 composer mode 组装工具、skills 与 MCP。
  *
- * @param mode - ask / plan / build
+ * @param mode - ask / build
  * @param sessionId - 会话 ID（terminal key）
  * @param root - 工作区根目录
  * @param settings - 应用设置
@@ -268,7 +236,7 @@ export async function prepareAgentTooling(
 ): Promise<AgentTooling> {
   const { baseTools, webSearchTools } = buildBaseAndWebTools(sessionId, root, settings, runCtx)
 
-  if (mode === 'ask' || mode === 'plan') {
+  if (mode === 'ask') {
     const tools = [...baseTools, ...webSearchTools].filter((t) =>
       HITL_EXEMPT_TOOL_NAMES.has(t.name)
     )
@@ -309,9 +277,6 @@ export function buildAgentRunPrompt(
 ): string {
   if (mode === 'ask') {
     return [buildAskSystemPrompt(root, settings), commonPrompt].filter(Boolean).join('\n\n')
-  }
-  if (mode === 'plan') {
-    return [buildPlanSystemPrompt(root, settings), commonPrompt].filter(Boolean).join('\n\n')
   }
   return [
     buildSystemPrompt(root, settings),

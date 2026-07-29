@@ -137,16 +137,12 @@ export type {
   StreamEvent,
   StreamHitlRequiredEvent,
   StreamIntentClassifiedEvent,
-  StreamPlanDeltaEvent,
-  StreamPlanStepEndEvent,
-  StreamPlanStepStartEvent,
   StreamRunStartEvent,
   StreamStreamResetEvent,
   StreamTextDeltaEvent,
   StreamToolEvent,
   ToolCallEvent,
   ToolErrorEvent,
-  ToolPlanStepEvent,
   ToolTimelineEvent
 } from '@agenxy/shared'
 export {

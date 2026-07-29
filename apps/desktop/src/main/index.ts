@@ -550,10 +550,9 @@ function registerIpc(): void {
     IPC.AGENT_SEND,
     async (_e, sessionId: string, text: string, opts?: AgentSendOptions) => {
       const mode = normalizeComposerMode(opts?.mode)
-      const hasPlan = Boolean(opts?.planContext?.trim())
-      mainLog.info(`[AGENT_SEND] sessionId: ${sessionId}, mode: ${mode}, hasPlan: ${hasPlan}`)
+      mainLog.info(`[AGENT_SEND] sessionId: ${sessionId}, mode: ${mode}`)
 
-      if (!text.trim() && !hasPlan) return { ok: false as const, error: '空消息' }
+      if (!text.trim()) return { ok: false as const, error: '空消息' }
       if (isSessionRunning(sessionId)) {
         return {
           ok: false as const,

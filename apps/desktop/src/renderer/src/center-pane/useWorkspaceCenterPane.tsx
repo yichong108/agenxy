@@ -97,13 +97,8 @@ export function useWorkspaceCenterPane({
     composerInputRef.current?.focus({ preventScroll: true })
   }, [composerFocusNonce])
 
-  /** Composer 模式：Build / Ask / Plan（对齐 Cursor） */
+  /** Composer 模式：Build / Ask */
   const [composerMode, setComposerMode] = useState<AgentComposerMode>('build')
-  /** 由 Plan 模式生成的 assistant 消息 id，用于展示计划清单 */
-  const [planAssistantIds, setPlanAssistantIds] = useState<Set<string>>(() => new Set())
-  /** 点击「执行计划」后挂到会话上的计划正文（不写入输入框） */
-  const [pendingPlanBySession, setPendingPlanBySession] = useState<Record<string, string>>({})
-  const lastSendComposerModeRef = useRef<AgentComposerMode>('build')
 
   /** 顶栏工作区下拉始终含 Home；侧栏移除 Home 后主进程同步列表可能不含该项 */
   const workspacesWithComposerHomeStub = useMemo(() => {
@@ -268,13 +263,6 @@ export function useWorkspaceCenterPane({
         streamBuf.current[e.sessionId] = ''
         const aid = randomId()
         assistantMsgId.current[e.sessionId] = aid
-        if (lastSendComposerModeRef.current === 'plan') {
-          setPlanAssistantIds((prev) => {
-            const next = new Set(prev)
-            next.add(aid)
-            return next
-          })
-        }
         setMessages((m) => {
           const cur = m[e.sessionId] ?? []
           return {
@@ -283,50 +271,6 @@ export function useWorkspaceCenterPane({
           }
         })
         setTimeline((t) => ({ ...t, [e.sessionId]: [] }))
-        return
-      }
-      if (e.type === 'plan-step-start') {
-        setTimeline((t) => {
-          const list = [...(t[e.sessionId] ?? [])]
-          list.push({
-            kind: 'plan',
-            id: e.stepId,
-            afterToolId: e.afterToolId,
-            toolName: e.toolName,
-            status: 'streaming',
-            text: '',
-            runId: e.runId,
-            traceId: e.traceId,
-            timestampMs: Date.now()
-          })
-          return { ...t, [e.sessionId]: list }
-        })
-        return
-      }
-      if (e.type === 'plan-delta') {
-        setTimeline((t) => {
-          const list = [...(t[e.sessionId] ?? [])]
-          const idx = list.findIndex((x) => x.kind === 'plan' && x.id === e.stepId)
-          if (idx < 0) return t
-          const row = list[idx]
-          if (row?.kind !== 'plan') return t
-          const next = [...list]
-          next[idx] = { ...row, text: row.text + e.text }
-          return { ...t, [e.sessionId]: next }
-        })
-        return
-      }
-      if (e.type === 'plan-step-end') {
-        setTimeline((t) => {
-          const list = [...(t[e.sessionId] ?? [])]
-          const idx = list.findIndex((x) => x.kind === 'plan' && x.id === e.stepId)
-          if (idx < 0) return t
-          const row = list[idx]
-          if (row?.kind !== 'plan') return t
-          const next = [...list]
-          next[idx] = { ...row, status: 'end' }
-          return { ...t, [e.sessionId]: next }
-        })
         return
       }
       if (e.type === 'stream-reset') {
@@ -523,18 +467,18 @@ export function useWorkspaceCenterPane({
   )
 
   const handleComposerPlusMenuClick = useCallback<NonNullable<MenuProps['onClick']>>(({ key }) => {
-    if (key === 'build' || key === 'ask' || key === 'plan') {
+    if (key === 'build' || key === 'ask') {
       setComposerMode(key)
     }
   }, [])
 
   const composerPlusMenuItems = useMemo<MenuProps['items']>(
     () =>
-      (['build', 'ask', 'plan'] as const).map((mode) => ({
+      (['build', 'ask'] as const).map((mode) => ({
         key: mode,
         label: (
           <span className="app-composer-plus-menu-title">
-            <span>{mode === 'build' ? '构建' : mode === 'ask' ? '问答' : '计划'}</span>
+            <span>{mode === 'build' ? '构建' : '问答'}</span>
             {composerMode === mode ? (
               <CheckOutlined className="app-composer-plus-menu-check" aria-hidden />
             ) : null}
@@ -569,10 +513,8 @@ export function useWorkspaceCenterPane({
   const sendAgentText = useCallback(
     async (text: string, mode: AgentComposerMode, sendOpts?: AgentSendOptions) => {
       const t = text.trim()
-      const planContext = sendOpts?.planContext?.trim()
-      if (!t && !planContext) return
-      const displayContent =
-        sendOpts?.userDisplayText?.trim() || t || (planContext ? '执行计划' : '')
+      if (!t) return
+      const displayContent = sendOpts?.userDisplayText?.trim() || t
       const activeWorkspace = workspacesWithComposerHomeStub.find(
         (x) => x.id === composerSelectedWorkspaceId
       )
@@ -598,7 +540,6 @@ export function useWorkspaceCenterPane({
       }
       sendInFlightRef.current.add(sessionId)
       hydratedMessageSessions.current.add(sessionId)
-      lastSendComposerModeRef.current = mode
       setMessages((m) => {
         const cur = m[sessionId] ?? []
         return {
@@ -609,7 +550,7 @@ export function useWorkspaceCenterPane({
       try {
         const r = await bridge.sendAgentMessage(sessionId, t, {
           mode,
-          ...(planContext ? { planContext, userDisplayText: displayContent } : {})
+          ...(sendOpts?.userDisplayText ? { userDisplayText: displayContent } : {})
         })
         if (!r.ok) {
           msgApi.error('发送失败: ' + r.error)
@@ -639,50 +580,10 @@ export function useWorkspaceCenterPane({
 
   const send = async () => {
     const t = input.trim()
-    const planContext = activeId ? pendingPlanBySession[activeId]?.trim() : undefined
-    if (!t && !planContext) return
+    if (!t) return
     setInput('')
-    if (activeId && planContext) {
-      // TODO: 这个干嘛
-      setPendingPlanBySession((prev) => {
-        const next = { ...prev }
-        delete next[activeId]
-        return next
-      })
-    }
-    // TODO: 需要另外个入口去切换成build模式
-    const mode = planContext ? 'build' : composerMode
-    await sendAgentText(t, mode, planContext ? { planContext } : undefined)
+    await sendAgentText(t, composerMode)
   }
-
-  /** 关联计划到当前会话并切 Build；不写入输入框、不自动发送 */
-  const preparePlanExecution = useCallback(
-    (planContent: string) => {
-      const body = planContent.trim()
-      if (!body) return
-      if (!activeId) {
-        msgApi.warning('请先选择会话')
-        return
-      }
-      setPendingPlanBySession((prev) => ({ ...prev, [activeId]: body }))
-      setComposerMode('build')
-      useUiStore.getState().requestComposerFocus()
-      msgApi.info(
-        '已切换到构建模式。可在输入框补充对计划的修改，发送后开始实施（留空发送则按计划执行）'
-      )
-    },
-    [activeId, msgApi]
-  )
-
-  const clearPendingPlan = useCallback(() => {
-    if (!activeId) return
-    setPendingPlanBySession((prev) => {
-      if (!prev[activeId]) return prev
-      const next = { ...prev }
-      delete next[activeId]
-      return next
-    })
-  }, [activeId])
 
   const currentMessages = useMemo(
     () => (activeId ? (messages[activeId] ?? []) : []),
@@ -716,8 +617,7 @@ export function useWorkspaceCenterPane({
     [activeHitl, activeId, bridge, clearAssistantStreamDraft, msgApi]
   )
   const hasInput = input.trim().length > 0
-  const hasPendingPlan = Boolean(activeId && pendingPlanBySession[activeId]?.trim())
-  const canSend = !isRun && (hasInput || hasPendingPlan)
+  const canSend = !isRun && hasInput
   const showSendButton = !isRun
   const showStopButton = Boolean(activeId && isRun)
   const activeWorkspace = useMemo(
@@ -780,22 +680,6 @@ export function useWorkspaceCenterPane({
       />
     ) : null
 
-  const planReadyBar =
-    hasPendingPlan && activeId ? (
-      <Alert
-        type="info"
-        showIcon
-        className="app-plan-ready-bar"
-        message="计划已就绪"
-        description="可在下方输入对计划的修改说明；留空直接发送将按计划实施。"
-        action={
-          <Button size="small" onClick={clearPendingPlan}>
-            取消
-          </Button>
-        }
-      />
-    ) : null
-
   const composerInput = (
     <div className="app-composer">
       <div className="app-composer-inner">
@@ -805,11 +689,7 @@ export function useWorkspaceCenterPane({
           onChange={(e) => setInput(e.target.value)}
           autoSize={isEmptyConversation ? { minRows: 4, maxRows: 16 } : { minRows: 1, maxRows: 12 }}
           variant="borderless"
-          placeholder={
-            hasPendingPlan
-              ? '补充对计划的修改说明（可选），Enter 发送'
-              : 'Enter发送，Shift+Enter换行'
-          }
+          placeholder="Enter发送，Shift+Enter换行"
           className="app-composer-input"
           onPressEnter={(e) => {
             if (!e.shiftKey) {
@@ -832,13 +712,7 @@ export function useWorkspaceCenterPane({
                 aria-label="对话模式"
               />
             </Dropdown>
-            {composerMode !== 'build' ? (
-              <span
-                className={`app-composer-mode-hint${composerMode === 'plan' ? ' is-plan' : ''}`}
-              >
-                {composerMode === 'ask' ? '问答' : '计划'}
-              </span>
-            ) : null}
+            {composerMode !== 'build' ? <span className="app-composer-mode-hint">问答</span> : null}
           </div>
           <div className="app-composer-actions">
             {showSendButton && (
@@ -882,13 +756,10 @@ export function useWorkspaceCenterPane({
     currentRunStats,
     composerWorkspaceToolbar,
     hitlApprovalBar,
-    planReadyBar,
     composerInput,
     isEmptyConversation,
     currentMessages,
     isRun,
-    currentTimeline,
-    planAssistantIds,
-    preparePlanExecution
+    currentTimeline
   }
 }

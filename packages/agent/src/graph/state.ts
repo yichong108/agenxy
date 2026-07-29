@@ -23,7 +23,6 @@ export type AgenxyRunMeta = {
   root: string
   userDisplayText: string
   agentUserText: string
-  planContext?: string
 }
 
 /**

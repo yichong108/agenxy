@@ -102,7 +102,6 @@ export function WorkspaceCenterPane(props: WorkspaceCenterPaneProps) {
             <div className="app-composer-hero-inner">
               {p.composerWorkspaceToolbar}
               {p.hitlApprovalBar}
-              {p.planReadyBar}
               {p.composerInput}
             </div>
           </div>
@@ -114,12 +113,9 @@ export function WorkspaceCenterPane(props: WorkspaceCenterPaneProps) {
               currentTimeline={p.currentTimeline}
               isRun={Boolean(p.isRun)}
               currentRunStats={p.currentRunStats}
-              planAssistantIds={p.planAssistantIds}
-              onPreparePlanExecution={p.preparePlanExecution}
             />
             <div className="app-composer-stack">
               {p.hitlApprovalBar}
-              {p.planReadyBar}
               {p.composerInput}
             </div>
           </>
