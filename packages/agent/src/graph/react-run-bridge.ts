@@ -12,7 +12,7 @@ export type ReactRunBridge = {
   streamedCharsRef: { current: number }
   pushStreamToken: (token: string) => void
   resetStream: () => void
-  setPendingHitl: (hitlId: string, threadId: string, toolCalls: PendingToolCall[]) => void
+  setPendingHitl: (hitlId: string, toolCalls: PendingToolCall[]) => void
   emitHitlRequired: (hitlId: string, toolCalls: PendingToolCall[]) => void
   emitToolsRejected: (toolCalls: PendingToolCall[]) => void
 }

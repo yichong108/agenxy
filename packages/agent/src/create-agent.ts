@@ -48,7 +48,7 @@ export type AgentRunCallbacks = {
   onTool: (event: ToolTimelineEvent) => void
   emit: (event: StreamEvent) => void
   persistMessages: (messages: AgentMessage[]) => void
-  setPendingHitl?: (hitlId: string, threadId: string, toolCalls: PendingToolCall[]) => void
+  setPendingHitl?: (hitlId: string, toolCalls: PendingToolCall[]) => void
 }
 
 /**
@@ -136,8 +136,8 @@ export function createAgent(options: CreateAgentOptions): Agent {
         streamedCharsRef.current = 0
         callbacks.onStreamReset()
       },
-      setPendingHitl: (hitlId, threadId, toolCalls) => {
-        callbacks.setPendingHitl?.(hitlId, threadId, toolCalls)
+      setPendingHitl: (hitlId, toolCalls) => {
+        callbacks.setPendingHitl?.(hitlId, toolCalls)
       },
       emitHitlRequired: (hitlId, toolCalls) => {
         reactBridge.resetStream()

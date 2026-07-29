@@ -19,7 +19,6 @@ export type AgenxyRunMeta = {
   sessionId: string
   runId: string
   traceId: string
-  threadId: string
   workspaceId: string
   root: string
   userDisplayText: string

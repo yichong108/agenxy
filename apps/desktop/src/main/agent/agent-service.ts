@@ -34,7 +34,6 @@ type SessionRuntime = {
   terminalKey: string
   pendingHitl?: {
     hitlId: string
-    threadId: string
     toolCalls: PendingToolCall[]
   }
 }
@@ -224,9 +223,7 @@ export function resumeAgentHitl(
   if (!submitted) {
     return { ok: false, error: '审批请求已过期或已处理' }
   }
-  agentLog.info(
-    `[resumeAgentHitl] hitlId=${hitlId} decision=${decision} thread=${pending.threadId}`
-  )
+  agentLog.info(`[resumeAgentHitl] hitlId=${hitlId} decision=${decision}`)
   return { ok: true }
 }
 
@@ -306,8 +303,6 @@ export async function runUserMessage(
     )
     emit({ type: 'run-start', sessionId, runId, traceId, timestampMs: runStartedAt })
 
-    const threadId = `${sessionId}:${runId}`
-
     const emitTool = (e: ToolTimelineEvent) => {
       emit({
         type: 'tool',
@@ -337,7 +332,6 @@ export async function runUserMessage(
         sessionId,
         runId,
         traceId,
-        threadId,
         workspaceId: session.workspaceId,
         root,
         userDisplayText,
@@ -370,8 +364,8 @@ export async function runUserMessage(
           session.messages = messages
           persistSessionMessages(session.workspaceId, sessionId, messages)
         },
-        setPendingHitl: (hitlId, hitlThreadId, toolCalls) => {
-          session.pendingHitl = { hitlId, threadId: hitlThreadId, toolCalls }
+        setPendingHitl: (hitlId, toolCalls) => {
+          session.pendingHitl = { hitlId, toolCalls }
         }
       }
     })

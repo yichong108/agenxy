@@ -218,8 +218,7 @@ async function runAgentLoopPhase(
   const { composerMode, runMeta } = state
   const { settings, runToolEvents } = runContext
   const { tools, runPrompt } = prepared
-  const { sessionId, runId, traceId, threadId, workspaceId, userDisplayText, agentUserText } =
-    runMeta
+  const { sessionId, runId, traceId, workspaceId, userDisplayText, agentUserText } = runMeta
 
   agentLog.info(
     `[runAgentLoopPhase] mode=${composerMode} runPrompt: ${JSON.stringify(runPrompt, null, 2)}`
@@ -248,13 +247,12 @@ async function runAgentLoopPhase(
         meta: {
           sessionId,
           runId,
-          traceId,
-          threadId
+          traceId
         },
         hitl: {
           enabled: hitlEnabled,
           onPending: (hitlId, toolCalls) => {
-            bridge.setPendingHitl(hitlId, threadId, toolCalls)
+            bridge.setPendingHitl(hitlId, toolCalls)
           },
           emitRequired: (hitlId, toolCalls) => {
             bridge.resetStream()

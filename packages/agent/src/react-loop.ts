@@ -28,13 +28,11 @@ import { type AgentMessage, aiMessage, toModelMessages, toolMessage } from './me
  * @property sessionId - 当前会话 ID
  * @property runId - 当前运行 ID
  * @property traceId - 当前链路追踪 ID
- * @property threadId - 当前线程 ID
  */
 export type ReactRunMeta = {
   sessionId: string
   runId: string
   traceId: string
-  threadId: string
 }
 
 /**
@@ -188,7 +186,7 @@ export async function runReactLoop(
   const deadline = Date.now() + timeoutMs
 
   agentLog.info(
-    `[runReactLoop] thread=${runCtx.meta.threadId} hitl=${runCtx.hitl.enabled} recursionLimit=${recursionLimit}`
+    `[runReactLoop] runId=${runCtx.meta.runId} hitl=${runCtx.hitl.enabled} recursionLimit=${recursionLimit}`
   )
 
   while (steps < recursionLimit) {
