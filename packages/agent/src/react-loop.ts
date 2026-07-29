@@ -3,7 +3,7 @@
  * @description ReAct 循环实现
  */
 import { type AppSettings } from '@agenxy/shared'
-import { streamText, tool, type CoreMessage, type LanguageModel, type ToolSet } from 'ai'
+import { streamText, tool, type LanguageModel, type ToolSet } from 'ai'
 
 import type { NamedTool } from './define-tool.js'
 import {
@@ -200,7 +200,7 @@ export async function runReactLoop(
     const result = streamText({
       model,
       system: systemPrompt,
-      messages: toModelMessages(working) as CoreMessage[],
+      messages: toModelMessages(working),
       tools: toolSet,
       abortSignal: ac.signal
     })

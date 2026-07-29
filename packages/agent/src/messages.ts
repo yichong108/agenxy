@@ -1,3 +1,5 @@
+import type { CoreMessage, ToolCallPart } from 'ai'
+
 import { AGENXY_INTERNAL_KW, AGENXY_USER_DISPLAY_KW } from './constants.js'
 
 /**
@@ -128,25 +130,17 @@ export function toolMessage(
 }
 
 /**
- * 将 AgentMessage 列表转为 AI SDK ModelMessage 格式。
+ * 将 AgentMessage 列表转为 AI SDK CoreMessage 格式。
+ *
+ * assistant 的 toolCalls 必须写入 content 数组（type: 'tool-call'），
+ * tool 结果必须是 content 数组（type: 'tool-result'）。
+ * 顶层 `toolCalls` / 字符串 content 的 tool 消息无法通过 AI SDK 校验。
  *
  * @param messages - 会话消息
- * @returns AI SDK 可用的 model messages
+ * @returns AI SDK CoreMessage 列表，可直接传给 streamText / generateText
  */
-export function toModelMessages(messages: AgentMessage[]): Array<{
-  role: 'user' | 'assistant' | 'system' | 'tool'
-  content: string
-  toolCalls?: Array<{ toolCallId: string; toolName: string; args: Record<string, unknown> }>
-  toolCallId?: string
-  toolName?: string
-}> {
-  const out: Array<{
-    role: 'user' | 'assistant' | 'system' | 'tool'
-    content: string
-    toolCalls?: Array<{ toolCallId: string; toolName: string; args: Record<string, unknown> }>
-    toolCallId?: string
-    toolName?: string
-  }> = []
+export function toModelMessages(messages: AgentMessage[]): CoreMessage[] {
+  const out: CoreMessage[] = []
 
   for (const msg of messages) {
     if (msg.type === 'human') {
@@ -158,23 +152,37 @@ export function toModelMessages(messages: AgentMessage[]): Array<{
       continue
     }
     if (msg.type === 'ai') {
-      const row: (typeof out)[number] = { role: 'assistant', content: msg.content }
       if (msg.toolCalls?.length) {
-        row.toolCalls = msg.toolCalls.map((tc) => ({
-          toolCallId: tc.id,
-          toolName: tc.name,
-          args: tc.args
-        }))
+        const content: Array<{ type: 'text'; text: string } | ToolCallPart> = []
+        if (msg.content) {
+          content.push({ type: 'text', text: msg.content })
+        }
+        for (const tc of msg.toolCalls) {
+          content.push({
+            type: 'tool-call',
+            toolCallId: tc.id,
+            toolName: tc.name,
+            args: tc.args
+          })
+        }
+        out.push({ role: 'assistant', content })
+      } else {
+        out.push({ role: 'assistant', content: msg.content })
       }
-      out.push(row)
       continue
     }
     if (msg.type === 'tool') {
       out.push({
         role: 'tool',
-        content: msg.content,
-        toolCallId: msg.toolCallId,
-        toolName: msg.name
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: msg.toolCallId,
+            toolName: msg.name,
+            result: msg.content,
+            ...(msg.status === 'error' ? { isError: true } : {})
+          }
+        ]
       })
     }
   }
