@@ -1,8 +1,8 @@
-import { AGENXY_INTERNAL_KW } from './constants.js'
+import { AGENWORK_INTERNAL_KW } from './constants.js'
 import type { AgentMessage, AgentToolCall } from './messages.js'
 import { systemMessage, toolMessage } from './messages.js'
 
-export { AGENXY_INTERNAL_KW }
+export { AGENWORK_INTERNAL_KW }
 
 export const TOOL_REJECTED_RESULT = '用户已拒绝执行（未运行）'
 

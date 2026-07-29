@@ -8,12 +8,12 @@ import {
   type AppSettings,
   type StreamEvent,
   type ToolTimelineEvent
-} from '@agenxy/shared'
+} from '@agenwork/shared'
 import type { LanguageModel } from 'ai'
 
 import type { ReactRunBridge } from './graph/react-run-bridge.js'
-import type { AgenxyGraphRunContext } from './graph/run-context.js'
-import type { AgenxyRunMeta, PreparedTooling } from './graph/state.js'
+import type { AgenworkGraphRunContext } from './graph/run-context.js'
+import type { AgenworkRunMeta, PreparedTooling } from './graph/state.js'
 import {
   TOOL_REJECTED_RESULT,
   cancelAllHitlWaiters,
@@ -85,7 +85,7 @@ export type AgentRunInput = {
   messages: AgentMessage[]
   abortController: AbortController
   settings: AppSettings
-  runMeta: AgenxyRunMeta
+  runMeta: AgenworkRunMeta
   callbacks: AgentRunCallbacks
   recursionLimit: number
   invokeTimeoutMs: number
@@ -162,7 +162,7 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
     } = input
 
     const root = input.runMeta.root?.trim() || defaultCwd || process.cwd()
-    const runMeta: AgenxyRunMeta = { ...input.runMeta, root }
+    const runMeta: AgenworkRunMeta = { ...input.runMeta, root }
 
     const runToolEvents: ToolTimelineEvent[] = []
     const streamedCharsRef = { current: 0 }
@@ -222,7 +222,7 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
       }
     }
 
-    const runContext: AgenxyGraphRunContext = {
+    const runContext: AgenworkGraphRunContext = {
       settings,
       signal: abortController.signal,
       onTool: (e) => {

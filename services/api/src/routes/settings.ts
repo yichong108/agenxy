@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { AppSettings } from '@agenxy/shared';
+import type { AppSettings } from '@agenwork/shared';
 
 import { getAppSettings, patchAppSettings } from '../services/settings-service.js';
 

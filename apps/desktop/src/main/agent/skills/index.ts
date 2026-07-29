@@ -1,8 +1,8 @@
-﻿import type { Dirent } from 'node:fs'
+import type { Dirent } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-import { type NamedTool, shouldLoadSkill, type UserIntent } from '@agenxy/agent'
+import { type NamedTool, shouldLoadSkill, type UserIntent } from '@agenwork/agent'
 import { z } from 'zod'
 
 import {
@@ -32,8 +32,8 @@ const MAX_LOADED_SKILLS = 96
 
 export const MAX_SKILL_MD_SIZE_BYTES = 10 * 1024 * 1024
 
-export type { SkillTagEntry } from '@agenxy/agent'
-export { SKILLS_WITH_TAGS } from '@agenxy/agent'
+export type { SkillTagEntry } from '@agenwork/agent'
+export { SKILLS_WITH_TAGS } from '@agenwork/agent'
 
 type MarkdownCollectOpts = {
   /** Only skip these top-level subdirectories when `current === rootAbs` */

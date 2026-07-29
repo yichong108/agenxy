@@ -1,7 +1,7 @@
 {
-  "name": "@agenxy/api",
+  "name": "@agenwork/api",
   "version": "0.0.0",
-  "description": "Agenxy backend API — Express + MySQL + Redis",
+  "description": "Agenwork backend API — Express + MySQL + Redis",
   "type": "module",
   "private": true,
   "scripts": {
@@ -19,7 +19,7 @@
     "docker:reset": "docker compose down -v"
   },
   "dependencies": {
-    "@agenxy/shared": "workspace:*",
+    "@agenwork/shared": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",

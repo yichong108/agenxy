@@ -1,4 +1,4 @@
-﻿import type { NamedTool } from '@agenxy/agent'
+import type { NamedTool } from '@agenwork/agent'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import {
   getDefaultEnvironment,
@@ -72,7 +72,7 @@ async function withMcpClient<T>(
     env: { ...getDefaultEnvironment(), ...flattenMcpEnvForSpawn(entry.env) },
     stderr: 'pipe'
   })
-  const client = new Client({ name: 'agenxy', version: '0.1.0' })
+  const client = new Client({ name: 'agenwork', version: '0.1.0' })
   await client.connect(transport)
   try {
     return await fn(client)
@@ -169,7 +169,7 @@ async function ensurePooledSlot(entry: McpServerEntry): Promise<PooledSlot> {
       env: { ...getDefaultEnvironment(), ...flattenMcpEnvForSpawn(entry.env) },
       stderr: 'pipe'
     })
-    const client = new Client({ name: 'agenxy', version: '0.1.0' })
+    const client = new Client({ name: 'agenwork', version: '0.1.0' })
     await client.connect(transport)
     const slot: PooledSlot = {
       launchKey,

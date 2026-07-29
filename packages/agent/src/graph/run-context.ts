@@ -1,4 +1,4 @@
-import type { AppSettings, StreamEvent, ToolTimelineEvent } from '@agenxy/shared'
+import type { AppSettings, StreamEvent, ToolTimelineEvent } from '@agenwork/shared'
 import type { LanguageModel } from 'ai'
 
 import type { ReactRunBridge } from './react-run-bridge.js'
@@ -8,7 +8,7 @@ import type { ReactRunBridge } from './react-run-bridge.js'
  *
  * 贯穿 intent 分类、工具准备与 ReAct 各阶段。
  */
-export type AgenxyGraphRunContext = {
+export type AgenworkGraphRunContext = {
   settings: AppSettings
   signal: AbortSignal
   onTool: (e: ToolTimelineEvent) => void

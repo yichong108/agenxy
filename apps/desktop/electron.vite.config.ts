@@ -30,19 +30,19 @@ const monacoGithubLightThemeJson = resolve(
 export default defineConfig({
   main: {
     define: {
-      __AGENXY_GIT_COMMIT__: JSON.stringify(readGitShortHash(rootDir)),
-      __AGENXY_BUILD_ISO__: JSON.stringify(new Date().toISOString())
+      __AGENWORK_GIT_COMMIT__: JSON.stringify(readGitShortHash(rootDir)),
+      __AGENWORK_BUILD_ISO__: JSON.stringify(new Date().toISOString())
     },
     resolve: {
       alias: {
         '@': aliasSrc,
-        '@agenxy/agent': aliasAgent,
-        '@agenxy/shared': aliasShared
+        '@agenwork/agent': aliasAgent,
+        '@agenwork/shared': aliasShared
       }
     },
     plugins: [
       externalizeDepsPlugin({
-        exclude: ['@agenxy/agent', '@agenxy/shared']
+        exclude: ['@agenwork/agent', '@agenwork/shared']
       })
     ],
     build: {
@@ -57,13 +57,13 @@ export default defineConfig({
     resolve: {
       alias: {
         '@': aliasSrc,
-        '@agenxy/agent': aliasAgent,
-        '@agenxy/shared': aliasShared
+        '@agenwork/agent': aliasAgent,
+        '@agenwork/shared': aliasShared
       }
     },
     plugins: [
       externalizeDepsPlugin({
-        exclude: ['@agenxy/agent', '@agenxy/shared']
+        exclude: ['@agenwork/agent', '@agenwork/shared']
       })
     ],
     build: {
@@ -83,14 +83,22 @@ export default defineConfig({
   renderer: {
     root: 'src/renderer',
     resolve: {
+      /**
+       * 强制渲染进程只使用同一份 React，避免 antd App.useApp 与 Provider
+       * 落到不同 React 实例上出现 useContext(null)。
+       */
+      dedupe: ['react', 'react-dom'],
       alias: {
         '@': aliasSrc,
-        '@monaco-themes/github-light': monacoGithubLightThemeJson
+        '@monaco-themes/github-light': monacoGithubLightThemeJson,
+        react: resolve(rootDir, 'node_modules/react'),
+        'react-dom': resolve(rootDir, 'node_modules/react-dom')
       }
     },
     /** monaco-editor 的 language workers 与 dep optimizer 不兼容，预构建会生成缺失的 html.worker 等路径 */
     optimizeDeps: {
-      exclude: ['monaco-editor']
+      exclude: ['monaco-editor'],
+      include: ['react', 'react-dom', 'antd']
     },
     build: {
       rollupOptions: {

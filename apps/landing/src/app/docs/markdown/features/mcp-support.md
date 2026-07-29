@@ -1,6 +1,6 @@
 # MCP 协议支持
 
-Agenxy 完全支持 Model Context Protocol (MCP)，这是一个开放的标准，允许 AI Agent 与外部工具和服务进行交互。
+Agenwork 完全支持 Model Context Protocol (MCP)，这是一个开放的标准，允许 AI Agent 与外部工具和服务进行交互。
 
 ## 什么是 MCP？
 
@@ -30,4 +30,4 @@ MCP (Model Context Protocol) 是一个标准化的协议，定义了 AI Agent �
 
 ## 开发自定义 MCP 服务器
 
-您可以开发自己的 MCP 服务器来扩展 Agenxy 的功能。详细文档请参考 [MCP 官方文档](https://modelcontextprotocol.io)。
+您可以开发自己的 MCP 服务器来扩展 Agenwork 的功能。详细文档请参考 [MCP 官方文档](https://modelcontextprotocol.io)。

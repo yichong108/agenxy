@@ -17,7 +17,7 @@ export const env = {
     port: Number(process.env.MYSQL_PORT ?? 3306),
     user: process.env.MYSQL_USER ?? 'root',
     password: process.env.MYSQL_PASSWORD ?? '',
-    database: process.env.MYSQL_DATABASE ?? 'agenxy'
+    database: process.env.MYSQL_DATABASE ?? 'agenwork'
   },
 
   redis: {

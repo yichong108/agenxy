@@ -1,7 +1,7 @@
-import { type AgentComposerMode, type AppSettings } from '@agenxy/shared'
+import { type AgentComposerMode, type AppSettings } from '@agenwork/shared'
 import type { LanguageModel } from 'ai'
 
-import { AGENXY_USER_DISPLAY_KW } from './constants.js'
+import { AGENWORK_USER_DISPLAY_KW } from './constants.js'
 import type { ToolExecutorContext } from './define-tool.js'
 import { classifyIntent, type UserIntent } from './intent-classifier.js'
 import { agentLog } from './logger.js'
@@ -13,8 +13,8 @@ import {
 } from './messages.js'
 import { runReactLoop } from './react-loop.js'
 import { isAbortError } from './run-utils.js'
-import type { AgenxyGraphRunContext } from './graph/run-context.js'
-import type { AgenxyGraphStateType, AgenxyRunMeta, PreparedTooling } from './graph/state.js'
+import type { AgenworkGraphRunContext } from './graph/run-context.js'
+import type { AgenworkGraphStateType, AgenworkRunMeta, PreparedTooling } from './graph/state.js'
 
 export type InitRunCallbacks = {
   persistMessages: (messages: AgentMessage[]) => void
@@ -22,23 +22,23 @@ export type InitRunCallbacks = {
 
 export type RunWorkflowInput = {
   composerMode: AgentComposerMode
-  runMeta: AgenxyRunMeta
+  runMeta: AgenworkRunMeta
   messages: AgentMessage[]
-  runContext: AgenxyGraphRunContext
+  runContext: AgenworkGraphRunContext
   initRunCallbacks: InitRunCallbacks
   signal?: AbortSignal
 }
 
 export type RunWorkflowResult = {
   messages: AgentMessage[]
-  toolEvents: AgenxyGraphStateType['toolEvents']
+  toolEvents: AgenworkGraphStateType['toolEvents']
 }
 
 /** @deprecated 使用 RunWorkflowInput */
-export type RunAgenxyPipelineInput = RunWorkflowInput
+export type RunAgenworkPipelineInput = RunWorkflowInput
 
 /** @deprecated 使用 RunWorkflowResult */
-export type RunAgenxyPipelineResult = RunWorkflowResult
+export type RunAgenworkPipelineResult = RunWorkflowResult
 
 export type ReactObservationContext = {
   sessionId: string
@@ -80,9 +80,9 @@ export type WorkflowDeps = {
  * @returns 更新后的 messages 片段
  */
 function appendUserMessagePhase(
-  state: AgenxyGraphStateType,
+  state: AgenworkGraphStateType,
   callbacks: InitRunCallbacks
-): Partial<AgenxyGraphStateType> {
+): Partial<AgenworkGraphStateType> {
   const { runMeta } = state
   const displayText =
     runMeta.userDisplayText && runMeta.userDisplayText !== runMeta.agentUserText
@@ -103,13 +103,13 @@ function appendUserMessagePhase(
  * @returns 检测到的意图列表
  */
 async function classifyIntentPhase(
-  state: AgenxyGraphStateType,
-  runContext: AgenxyGraphRunContext,
+  state: AgenworkGraphStateType,
+  runContext: AgenworkGraphRunContext,
   signal?: AbortSignal
-): Promise<Partial<AgenxyGraphStateType>> {
+): Promise<Partial<AgenworkGraphStateType>> {
   const { runMeta } = state
   const { settings, emit } = runContext
-  let detectedIntents: AgenxyGraphStateType['detectedIntents'] = []
+  let detectedIntents: AgenworkGraphStateType['detectedIntents'] = []
 
   try {
     const classification = await classifyIntent(
@@ -152,10 +152,10 @@ async function classifyIntentPhase(
  * @returns tooling 产物
  */
 async function prepareToolingPhase(
-  state: AgenxyGraphStateType,
-  runContext: AgenxyGraphRunContext,
+  state: AgenworkGraphStateType,
+  runContext: AgenworkGraphRunContext,
   deps: WorkflowDeps
-): Promise<Partial<AgenxyGraphStateType>> {
+): Promise<Partial<AgenworkGraphStateType>> {
   const { composerMode, runMeta, detectedIntents } = state
   const { settings, onTool } = runContext
   const { sessionId, root, runId, traceId } = runMeta
@@ -183,10 +183,10 @@ async function prepareToolingPhase(
  * @returns 运行结束后的 messages 与 toolEvents
  */
 async function runAgentLoopPhase(
-  state: AgenxyGraphStateType,
-  runContext: AgenxyGraphRunContext,
+  state: AgenworkGraphStateType,
+  runContext: AgenworkGraphRunContext,
   deps: WorkflowDeps
-): Promise<{ messages: AgentMessage[]; toolEvents: AgenxyGraphStateType['toolEvents'] }> {
+): Promise<{ messages: AgentMessage[]; toolEvents: AgenworkGraphStateType['toolEvents'] }> {
   const bridge = runContext.reactBridge
   const prepared = state.tooling
   if (!prepared) {
@@ -247,7 +247,7 @@ async function runAgentLoopPhase(
 
   const observationCtx: ReactObservationContext = {
     sessionId,
-    tags: ['agenxy', 'pipeline', 'react', composerMode],
+    tags: ['agenwork', 'pipeline', 'react', composerMode],
     traceMetadata: {
       run_id: runId,
       trace_id: traceId,
@@ -255,7 +255,7 @@ async function runAgentLoopPhase(
       step: 'react'
     },
     traceId,
-    traceName: 'agenxy-graph',
+    traceName: 'agenwork-graph',
     input: userDisplayText || agentUserText
   }
 
@@ -285,7 +285,7 @@ export async function runWorkflow(
   input: RunWorkflowInput,
   deps: WorkflowDeps
 ): Promise<RunWorkflowResult> {
-  const state: AgenxyGraphStateType = {
+  const state: AgenworkGraphStateType = {
     messages: input.messages,
     composerMode: input.composerMode,
     runMeta: input.runMeta,
@@ -315,12 +315,12 @@ export async function runWorkflow(
 }
 
 /** @deprecated 使用 runWorkflow */
-export const runAgenxyPipeline = runWorkflow
+export const runAgenworkPipeline = runWorkflow
 
 /** @deprecated 使用 runWorkflow */
-export const runAgenxyGraph = runWorkflow
+export const runAgenworkGraph = runWorkflow
 
 /** @deprecated 使用 WorkflowDeps */
 export type PipelineDeps = WorkflowDeps
 
-export { AGENXY_USER_DISPLAY_KW }
+export { AGENWORK_USER_DISPLAY_KW }

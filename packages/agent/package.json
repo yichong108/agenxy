@@ -1,7 +1,7 @@
 {
-  "name": "@agenxy/agent",
+  "name": "@agenwork/agent",
   "version": "0.0.0",
-  "description": "Agenxy agent core — ReAct loop, messages, HITL, pipeline",
+  "description": "Agenwork agent core — ReAct loop, messages, HITL, pipeline",
   "type": "module",
   "private": true,
   "exports": {
@@ -13,7 +13,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@agenxy/shared": "workspace:*",
+    "@agenwork/shared": "workspace:*",
     "@ai-sdk/openai": "^1.3.22",
     "ai": "^4.3.16",
     "zod": "^3.24.2"

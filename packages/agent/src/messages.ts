@@ -1,6 +1,6 @@
 import type { CoreMessage, ToolCallPart } from 'ai'
 
-import { AGENXY_INTERNAL_KW, AGENXY_USER_DISPLAY_KW } from './constants.js'
+import { AGENWORK_INTERNAL_KW, AGENWORK_USER_DISPLAY_KW } from './constants.js'
 
 /**
  * 模型发起的工具调用（ReAct 循环中的 assistant tool_calls）。
@@ -192,4 +192,4 @@ export function toModelMessages(messages: AgentMessage[]): CoreMessage[] {
 /** @deprecated 使用 getAgentMessageType */
 export const getBaseMessageType = getAgentMessageType
 
-export { AGENXY_INTERNAL_KW, AGENXY_USER_DISPLAY_KW }
+export { AGENWORK_INTERNAL_KW, AGENWORK_USER_DISPLAY_KW }

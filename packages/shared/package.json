@@ -1,7 +1,7 @@
 {
-  "name": "@agenxy/shared",
+  "name": "@agenwork/shared",
   "version": "0.0.0",
-  "description": "Agenxy shared types and constants for agent runtime",
+  "description": "Agenwork shared types and constants for agent runtime",
   "type": "module",
   "private": true,
   "exports": {

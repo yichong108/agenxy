@@ -1,4 +1,4 @@
-﻿import { existsSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -83,8 +83,8 @@ function collectAboutAppInfo(): AboutAppInfo {
   return {
     productName: app.getName(),
     version: app.getVersion(),
-    gitCommit: __AGENXY_GIT_COMMIT__,
-    buildIso: __AGENXY_BUILD_ISO__,
+    gitCommit: __AGENWORK_GIT_COMMIT__,
+    buildIso: __AGENWORK_BUILD_ISO__,
     electron: process.versions.electron ?? '',
     chrome: process.versions.chrome ?? '',
     node: process.versions.node ?? '',

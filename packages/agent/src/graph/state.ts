@@ -1,4 +1,4 @@
-import type { AgentComposerMode, ToolTimelineEvent } from '@agenxy/shared'
+import type { AgentComposerMode, ToolTimelineEvent } from '@agenwork/shared'
 
 import type { NamedTool } from '../define-tool.js'
 import type { UserIntent } from '../intent-classifier.js'
@@ -15,7 +15,7 @@ export type PreparedTooling = {
 /**
  * 单次 run 的元数据，由宿主注入。
  */
-export type AgenxyRunMeta = {
+export type AgenworkRunMeta = {
   sessionId: string
   runId: string
   traceId: string
@@ -28,20 +28,20 @@ export type AgenxyRunMeta = {
 /**
  * Agent 流水线图状态（顺序阶段间传递）。
  */
-export type AgenxyGraphStateType = {
+export type AgenworkGraphStateType = {
   messages: AgentMessage[]
   composerMode: AgentComposerMode
-  runMeta: AgenxyRunMeta
+  runMeta: AgenworkRunMeta
   detectedIntents: UserIntent[]
   tooling: PreparedTooling | null
   toolEvents: ToolTimelineEvent[]
 }
 
-/** @deprecated 使用 AgenxyGraphStateType */
-export type AgenxyGraphState = AgenxyGraphStateType
+/** @deprecated 使用 AgenworkGraphStateType */
+export type AgenworkGraphState = AgenworkGraphStateType
 
 /** @deprecated 流水线不再使用 LangGraph phase result */
-export type AgenxyReactPhaseResult = {
+export type AgenworkReactPhaseResult = {
   messages: AgentMessage[]
   toolEvents: ToolTimelineEvent[]
 }

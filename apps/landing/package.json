@@ -1,7 +1,7 @@
 {
-  "name": "@agenxy/landing",
+  "name": "@agenwork/landing",
   "version": "1.0.0",
-  "description": "Agenxy 落地页 — Next.js + Tailwind CSS",
+  "description": "Agenwork 落地页 — Next.js + Tailwind CSS",
   "type": "module",
   "scripts": {
     "preinstall": "npx only-allow pnpm",

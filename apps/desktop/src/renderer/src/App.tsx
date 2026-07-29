@@ -10,8 +10,8 @@ import {
   useState
 } from 'react'
 
-import { AboutAgenxyModal } from '@/renderer/src/AboutAgenxyModal'
-import agenxyLogoUrl from '@/renderer/src/assets/agenxy-logo.png'
+import { AboutAgenworkModal } from '@/renderer/src/AboutAgenworkModal'
+import agenworkLogoUrl from '@/renderer/src/assets/agenwork-logo.png'
 import { WorkspaceCenterPane } from '@/renderer/src/center-pane'
 import { WorkspaceLeftPane } from '@/renderer/src/left-pane'
 import { renderLog } from '@/renderer/src/logger'
@@ -80,7 +80,7 @@ export function App() {
   const [aboutOpen, setAboutOpen] = useState(false)
   const [aboutInfo, setAboutInfo] = useState<AboutAppInfo | null>(null)
 
-  const openAboutAgenxy = useCallback(async () => {
+  const openAboutAgenwork = useCallback(async () => {
     setAboutOpen(true)
     setAboutInfo(null)
     try {
@@ -132,13 +132,13 @@ export function App() {
         children: [
           {
             key: 'about',
-            label: '关于 Agenxy',
-            onClick: () => void openAboutAgenxy()
+            label: '关于 Agenwork',
+            onClick: () => void openAboutAgenwork()
           }
         ]
       }
     ]
-  }, [bridge, isWinCustomChrome, openAboutAgenxy])
+  }, [bridge, isWinCustomChrome, openAboutAgenwork])
 
   const [rightPaneWidth, setRightPaneWidth] = useState(RIGHT_PANE_DEFAULT_WIDTH)
   const [isRightPaneCollapsed, setIsRightPaneCollapsed] = useState(true)
@@ -232,7 +232,7 @@ export function App() {
         <div className="app-win-titlebar">
           <span className="app-brand-logo-visual app-brand-logo-visual--titlebar">
             <img
-              src={agenxyLogoUrl}
+              src={agenworkLogoUrl}
               alt=""
               width={15}
               height={15}
@@ -282,7 +282,7 @@ export function App() {
         />
       </div>
 
-      <AboutAgenxyModal
+      <AboutAgenworkModal
         open={aboutOpen}
         info={aboutInfo}
         onClose={() => {

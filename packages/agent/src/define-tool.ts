@@ -1,4 +1,4 @@
-import type { ToolTimelineEvent } from '@agenxy/shared'
+import type { ToolTimelineEvent } from '@agenwork/shared'
 import type { z } from 'zod'
 
 /**

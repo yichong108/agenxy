@@ -1,5 +1,5 @@
 /**
- * @agenxy/agent 公共 API — 以 createAgent 为入口，辅以工具定义与宿主持久化所需类型。
+ * @agenwork/agent 公共 API — 以 createAgent 为入口，辅以工具定义与宿主持久化所需类型。
  */
 
 export {

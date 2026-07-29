@@ -1,4 +1,4 @@
-﻿import {
+import {
   type AgentMessage,
   aiMessage,
   contentToText,
@@ -7,7 +7,7 @@
   humanMessage,
   isInternalAgentMessage,
   type PendingToolCall
-} from '@agenxy/agent'
+} from '@agenwork/agent'
 import type { WebContents } from 'electron'
 
 import { desktopAgent } from '@/main/agent/agent-instance'

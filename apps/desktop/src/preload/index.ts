@@ -1,4 +1,4 @@
-﻿import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 
 import { installElectronLogBridge } from '@/preload/electron-log-bridge'
 import {
@@ -159,4 +159,4 @@ const api = {
 
 contextBridge.exposeInMainWorld('bridge', api)
 
-export type AgenxyApi = typeof api
+export type AgenworkApi = typeof api

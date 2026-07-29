@@ -4,7 +4,7 @@
  * 模型仍从每次 send 的 settings 解析（不在此固定 provider），
  * 工作区 root 由 session 注入 runMeta。
  */
-import { createAgent, type CreateAgentOptions } from '@agenxy/agent'
+import { createAgent, type CreateAgentOptions } from '@agenwork/agent'
 
 import { buildAgentRunPrompt, prepareAgentTooling } from '@/main/agent/agent-tooling'
 import { runLangfuseReactObservation } from '@/main/langfuse'

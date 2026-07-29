@@ -1,4 +1,4 @@
-﻿import { randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 
 import { app } from 'electron'
@@ -42,7 +42,7 @@ type StoreSchema = {
 const DEFAULT_WORKSPACE_ID = 'workspace-default'
 
 const store = new Store<StoreSchema>({
-  name: 'agenxy',
+  name: 'agenwork',
   defaults: {
     workspaces: [],
     activeWorkspaceId: null,

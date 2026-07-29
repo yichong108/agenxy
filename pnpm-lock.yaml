@@ -20,10 +20,10 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@agenxy/agent':
+      '@agenwork/agent':
         specifier: workspace:*
         version: link:../../packages/agent
-      '@agenxy/shared':
+      '@agenwork/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       '@ai-sdk/openai':
@@ -262,7 +262,7 @@ importers:
 
   packages/agent:
     dependencies:
-      '@agenxy/shared':
+      '@agenwork/shared':
         specifier: workspace:*
         version: link:../shared
       '@ai-sdk/openai':
@@ -290,7 +290,7 @@ importers:
 
   services/api:
     dependencies:
-      '@agenxy/shared':
+      '@agenwork/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       cors:

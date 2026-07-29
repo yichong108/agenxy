@@ -2,7 +2,7 @@
  * @file react-loop.ts
  * @description ReAct 循环实现
  */
-import { type AppSettings } from '@agenxy/shared'
+import { type AppSettings } from '@agenwork/shared'
 import { streamText, tool, type LanguageModel, type ToolSet } from 'ai'
 
 import type { NamedTool } from './define-tool.js'

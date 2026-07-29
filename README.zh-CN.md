@@ -1,12 +1,12 @@
-# Agenxy
+# Agenwork
 
 [English README](README.md)
 
-**Agenxy** 是一款基于 Electron 的 AI Agent 桌面应用。界面使用 React 与 Ant Design；主进程集成 LangChain 与各模型提供商，并支持 **MCP（Model Context Protocol）** 以接入外部工具与能力。
+**Agenwork** 是一款基于 Electron 的 AI Agent 桌面应用。界面使用 React 与 Ant Design；主进程集成 LangChain 与各模型提供商，并支持 **MCP（Model Context Protocol）** 以接入外部工具与能力。
 
 ## 界面预览
 
-![Agenxy 主界面：工作区侧栏、会话树与对话区](assets/agenxy-ui-screenshot.png)
+![Agenwork 主界面：工作区侧栏、会话树与对话区](assets/agenwork-ui-screenshot.png)
 
 ## 功能概览
 

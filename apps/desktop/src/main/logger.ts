@@ -15,7 +15,7 @@ let initialized = false
 
 /**
  * 配置主进程日志（控制台 + 用户目录下文件，见 electron-log 默认路径）。
- * 环境变量 `AGENXY_LOG_LEVEL` 可设为 error | warn | info | verbose | debug | silly。
+ * 环境变量 `AGENWORK_LOG_LEVEL` 可设为 error | warn | info | verbose | debug | silly。
  */
 export function initMainLogger(): void {
   if (initialized) return
@@ -23,7 +23,7 @@ export function initMainLogger(): void {
 
   log.initialize({ preload: false })
 
-  const fromEnv = parseLevel(process.env['AGENXY_LOG_LEVEL'])
+  const fromEnv = parseLevel(process.env['AGENWORK_LOG_LEVEL'])
   const isPackaged = app.isPackaged
   const fileLevel: LogLevelName = fromEnv ?? (isPackaged ? 'info' : 'debug')
   const consoleLevel: LogLevelName = fromEnv ?? (isPackaged ? 'info' : 'debug')
@@ -43,14 +43,14 @@ export function initMainLogger(): void {
   logAppDirectoriesToConsole()
 }
 
-/** 始终在终端打印，便于定位日志文件（不受 AGENXY_LOG_LEVEL 影响） */
+/** 始终在终端打印，便于定位日志文件（不受 AGENWORK_LOG_LEVEL 影响） */
 function logAppDirectoriesToConsole(): void {
   const emit = (): void => {
     try {
-      console.log('[agenxy] 用户数据目录:', app.getPath('userData'))
-      console.log('[agenxy] Electron 日志目录:', app.getPath('logs'))
+      console.log('[agenwork] 用户数据目录:', app.getPath('userData'))
+      console.log('[agenwork] Electron 日志目录:', app.getPath('logs'))
     } catch (e) {
-      console.warn('[agenxy] 读取 app 路径失败:', e)
+      console.warn('[agenwork] 读取 app 路径失败:', e)
     }
   }
   if (app.isReady()) {

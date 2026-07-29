@@ -9,7 +9,7 @@ import { WorkspaceMessagesInner } from './WorkspaceMessagesInner'
 import { MenuUnfoldOutlined } from '@ant-design/icons'
 import { Alert, Button, Space, Tag, Typography } from 'antd'
 
-import agenxyLogoUrl from '@/renderer/src/assets/agenxy-logo.png'
+import agenworkLogoUrl from '@/renderer/src/assets/agenwork-logo.png'
 
 const { Text } = Typography
 
@@ -33,7 +33,7 @@ export function WorkspaceCenterPane(props: WorkspaceCenterPaneProps) {
           <div className="app-topbar-leading-cluster">
             <span className="app-brand-logo-visual app-brand-logo-visual--topbar">
               <img
-                src={agenxyLogoUrl}
+                src={agenworkLogoUrl}
                 alt=""
                 width={19}
                 height={19}

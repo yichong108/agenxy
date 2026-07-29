@@ -105,9 +105,9 @@ export type LangfuseRunContext = {
 }
 
 export type LangfuseReactTraceContext = LangfuseRunContext & {
-  /** Agenxy 侧 trace id（sessionId:runId），写入 metadata 便于关联 */
+  /** Agenwork 侧 trace id（sessionId:runId），写入 metadata 便于关联 */
   traceId: string
-  /** Langfuse trace 展示名，默认 `agenxy-react` */
+  /** Langfuse trace 展示名，默认 `agenwork-react` */
   traceName?: string
   /** 写入根 observation 的用户输入 */
   input?: unknown
@@ -138,7 +138,7 @@ function toPropagatedMetadata(
 /**
  * 用单一 Langfuse trace 包裹完整 ReAct 运行（含 Build HITL 多轮循环）。
  *
- * 层级：`agenxy-graph` (agent) → `react` (chain)；通过 OpenTelemetry SDK 自动采集 AI SDK 调用。
+ * 层级：`agenwork-graph` (agent) → `react` (chain)；通过 OpenTelemetry SDK 自动采集 AI SDK 调用。
  *
  * @param ctx - session、tags、metadata、traceId、可选 input
  * @param fn - 执行函数
@@ -153,7 +153,7 @@ export async function runLangfuseReactObservation<T>(
   const keys = readLangfuseKeys()
   if (!keys) return fn()
 
-  const traceName = ctx.traceName ?? 'agenxy-react'
+  const traceName = ctx.traceName ?? 'agenwork-react'
   const metadata = toPropagatedMetadata(ctx.traceMetadata)
 
   mainLog.info('[langfuse] runLangfuseReactObservation:', {
@@ -175,7 +175,7 @@ export async function runLangfuseReactObservation<T>(
           propagateAttributes(
             {
               sessionId: ctx.sessionId,
-              tags: ctx.tags?.length ? ctx.tags : ['agenxy'],
+              tags: ctx.tags?.length ? ctx.tags : ['agenwork'],
               metadata
             },
             () => fn()

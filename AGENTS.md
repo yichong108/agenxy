@@ -4,7 +4,7 @@ This file guides AI assistants and contributors working on this repository.
 
 ## Project
 
-**Agenxy** — an Electron desktop app for agents (React, Ant Design, AI SDK, MCP). Main code lives under `src/` (`main`, `renderer`, `preload`).
+**Agenwork** — an Electron desktop app for agents (React, Ant Design, AI SDK, MCP). Main code lives under `src/` (`main`, `renderer`, `preload`).
 
 ## Package Manager
 

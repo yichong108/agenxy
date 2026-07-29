@@ -2,7 +2,7 @@
  * @file llm.ts 单元测试
  */
 
-import { defaultSettings } from '@agenxy/shared'
+import { defaultSettings } from '@agenwork/shared'
 import { describe, expect, it, vi } from 'vitest'
 import { getChatModel } from '../src/llm.js'
 

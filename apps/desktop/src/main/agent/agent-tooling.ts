@@ -4,8 +4,12 @@ import {
   type NamedTool,
   type ToolExecutorContext,
   type UserIntent
-} from '@agenxy/agent'
-import { type AgentComposerMode, type AppSettings, MAX_TERMINAL_OUTPUT_CHARS } from '@agenxy/shared'
+} from '@agenwork/agent'
+import {
+  type AgentComposerMode,
+  type AppSettings,
+  MAX_TERMINAL_OUTPUT_CHARS
+} from '@agenwork/shared'
 import { z } from 'zod'
 
 import { buildSkillBundle } from '@/main/agent/skills/index'
@@ -23,7 +27,7 @@ import { GREP_TOOL_DESCRIPTION, grepWorkspace } from '@/main/tools/grep'
 import { runCommand } from '@/main/tools/terminal'
 import { isTavilyConfigured, tavilyWebSearch } from '@/main/tools/web-search'
 
-export type { NamedTool, ToolExecutorContext } from '@agenxy/agent'
+export type { NamedTool, ToolExecutorContext } from '@agenwork/agent'
 
 /**
  * Agent 工具集与 prompt 片段（skills / MCP hints）。

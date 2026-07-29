@@ -1,12 +1,12 @@
-# Agenxy
+# Agenwork
 
 [简体中文说明](README.zh-CN.md)
 
-**Agenxy** is an AI agent suite in a **pnpm + Turborepo** monorepo: an **Electron** desktop client, a **Next.js** marketing site, and an optional **local Langfuse** stack for observability.
+**Agenwork** is an AI agent suite in a **pnpm + Turborepo** monorepo: an **Electron** desktop client, a **Next.js** marketing site, and an optional **local Langfuse** stack for observability.
 
 ## Preview
 
-![Agenxy main UI: workspace sidebar, session tree, and chat](assets/agenxy-ui-screenshot.png)
+![Agenwork main UI: workspace sidebar, session tree, and chat](assets/agenwork-ui-screenshot.png)
 
 ## Highlights (desktop)
 
@@ -21,7 +21,7 @@
 The workspace is defined in `pnpm-workspace.yaml` (`apps/*`, `packages/*`, `services/*`). Current first-party packages live under `apps/` and `services/`.
 
 ```
-agenxy/
+agenwork/
 ├── apps/
 │   ├── desktop/              # Electron app (electron-vite, React, Ant Design)
 │   └── landing/              # Next.js landing page
@@ -64,7 +64,7 @@ pnpm desktop:dev
 Debug build (inspect / remote debugging ports):
 
 ```bash
-pnpm --filter @agenxy/desktop run dev:debug
+pnpm --filter @agenwork/desktop run dev:debug
 ```
 
 ### Landing page

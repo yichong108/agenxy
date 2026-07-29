@@ -5,4 +5,4 @@ export {
   findLastAiMessage,
   getAgentMessageType,
   getBaseMessageType
-} from '@agenxy/agent'
+} from '@agenwork/agent'

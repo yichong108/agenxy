@@ -1,4 +1,4 @@
-import { type AppSettings } from '@agenxy/shared'
+import { type AppSettings } from '@agenwork/shared'
 import { generateObject, type LanguageModel } from 'ai'
 import { z } from 'zod'
 
