@@ -3,12 +3,10 @@
  */
 import { createAgent, type CreateAgentOptions } from '@agenxy/agent'
 
-import { agentLog } from '@/main/agent/agent-log'
 import { buildAgentRunPrompt, prepareAgentTooling } from '@/main/agent/agent-tooling'
 import { runLangfuseReactObservation } from '@/main/langfuse'
 
 const desktopAgentOptions: CreateAgentOptions = {
-  logger: agentLog,
   prepareTooling: async ({ composerMode, sessionId, root, settings, runCtx, filterIntents }) => {
     const bundle = await prepareAgentTooling(
       composerMode,

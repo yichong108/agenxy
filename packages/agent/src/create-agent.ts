@@ -21,17 +21,15 @@ import {
   type HitlUserDecision,
   type PendingToolCall
 } from './hitl.js'
-import { setAgentLogger, type AgentLogger } from './logger.js'
 import { type AgentMessage, contentToText, findLastAiMessage } from './messages.js'
 import { runWorkflow, type WorkflowDeps } from './run-workflow.js'
 
 /**
- * createAgent 配置项：宿主注入工具组装与可观测性等依赖。
+ * createAgent 配置项：宿主注入工具组装等依赖。
  */
 export type CreateAgentOptions = {
   prepareTooling: WorkflowDeps['prepareTooling']
   wrapReactRun?: WorkflowDeps['wrapReactRun']
-  logger?: AgentLogger
 }
 
 /**
@@ -87,7 +85,7 @@ export type Agent = {
 /**
  * 创建 agent 实例 — packages/agent 的唯一入口工厂。
  *
- * 封装 ReAct 流水线与 HITL，宿主仅注入工具与可观测性依赖。
+ * 封装 ReAct 流水线与 HITL，宿主仅注入工具组装等依赖。
  *
  * 注意：不直接与外部耦合。同会话「运行中不可再发」由宿主按 session 互斥；
  * 不同会话各自独立 send，互不排队。
@@ -99,10 +97,6 @@ export function createAgent(options: CreateAgentOptions): Agent {
   const deps: WorkflowDeps = {
     prepareTooling: options.prepareTooling,
     wrapReactRun: options.wrapReactRun
-  }
-
-  if (options.logger) {
-    setAgentLogger(options.logger)
   }
 
   /**

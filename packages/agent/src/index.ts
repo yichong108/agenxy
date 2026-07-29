@@ -33,4 +33,4 @@ export { SKILLS_WITH_TAGS, type SkillTagEntry } from './skill-tags.js'
 
 export { getChatModel } from './llm.js'
 
-export { setAgentLogger, type AgentLogger } from './logger.js'
+export { agentLog, type AgentLogger } from './logger.js'
