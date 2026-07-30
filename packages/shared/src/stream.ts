@@ -69,29 +69,9 @@ export type StreamRunStartEvent = StreamBase & {
   timestampMs?: number
 }
 
-export type HitlToolCallPayload = {
-  id: string
-  name: string
-  args: string
-}
-
-export type StreamHitlRequiredEvent = StreamBase & {
-  type: 'hitl-required'
-  hitlId: string
-  toolCalls: HitlToolCallPayload[]
-}
-
-export type StreamStreamResetEvent = StreamBase & {
-  type: 'stream-reset'
-}
-
-export type HitlResumeDecision = 'accept' | 'reject'
-
 export type StreamEvent =
   | StreamTextDeltaEvent
   | StreamIntentClassifiedEvent
-  | StreamHitlRequiredEvent
-  | StreamStreamResetEvent
   | StreamToolEvent
   | StreamErrorEvent
   | StreamDoneEvent

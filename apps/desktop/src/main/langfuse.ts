@@ -136,7 +136,7 @@ function toPropagatedMetadata(
 }
 
 /**
- * 用单一 Langfuse trace 包裹完整 ReAct 运行（含 Build HITL 多轮循环）。
+ * 用单一 Langfuse trace 包裹完整 ReAct 运行。
  *
  * 层级：`agenwork-graph` (agent) → `react` (chain)；通过 OpenTelemetry SDK 自动采集 AI SDK 调用。
  *

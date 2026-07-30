@@ -18,9 +18,6 @@ import { runWorkflow } from '../src/run-workflow.js'
 function createCallbacks() {
   return {
     onTextDelta: vi.fn(),
-    onStreamReset: vi.fn(),
-    onHitlRequired: vi.fn(),
-    onToolsRejected: vi.fn(),
     onTool: vi.fn(),
     emit: vi.fn(),
     persistMessages: vi.fn()
@@ -32,11 +29,9 @@ describe('createAgent', () => {
     vi.mocked(runWorkflow).mockClear()
   })
 
-  it('返回含 send / submitHitlDecision / cancelAllHitlWaiters 的实例', () => {
+  it('返回含 send 的实例', () => {
     const agent = createAgent({ local: { cwd: '/tmp/ws' } })
     expect(agent.send).toBeTypeOf('function')
-    expect(agent.submitHitlDecision).toBeTypeOf('function')
-    expect(agent.cancelAllHitlWaiters).toBeTypeOf('function')
   })
 
   it('send 将 local.cwd 写入 runMeta.root 并调用 workflow', async () => {

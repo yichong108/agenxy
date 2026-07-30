@@ -66,11 +66,6 @@ type Api = {
     opts?: AgentSendOptions
   ) => Promise<{ ok: true } | { ok: false; error: string }>
   cancelAgent: (sessionId: string) => Promise<{ ok: true }>
-  resumeAgentHitl: (
-    sessionId: string,
-    hitlId: string,
-    decision: 'accept' | 'reject'
-  ) => Promise<{ ok: true } | { ok: false; error: string }>
   toggleDevtools: () => Promise<{ open: boolean }>
   openExternal: (url: string) => Promise<{ ok: boolean }>
   mcpProbeServer: (entry: McpServerEntry) => Promise<McpProbeResult>

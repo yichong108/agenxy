@@ -3,10 +3,8 @@ import {
   aiMessage,
   contentToText,
   getAgentMessageType,
-  type HitlUserDecision,
   humanMessage,
-  isInternalAgentMessage,
-  type PendingToolCall
+  isInternalAgentMessage
 } from '@agenwork/agent'
 import type { WebContents } from 'electron'
 
@@ -32,10 +30,6 @@ type SessionRuntime = {
   messages: AgentMessage[]
   controller: AbortController | null
   terminalKey: string
-  pendingHitl?: {
-    hitlId: string
-    toolCalls: PendingToolCall[]
-  }
 }
 
 const sessions = new Map<string, SessionRuntime>()
@@ -179,37 +173,7 @@ export function cancelRun(sessionId: string): void {
   if (s?.controller) {
     s.controller.abort()
   }
-  if (s) {
-    s.pendingHitl = undefined
-  }
-  desktopAgent.cancelAllHitlWaiters('运行已取消')
   void killCommand(`term:${sessionId}`)
-}
-
-/**
- * 恢复 HITL：将用户决策交给 agent，由 ReAct 循环继续执行。
- *
- * @param sessionId - 会话 ID
- * @param hitlId - 审批批次 ID
- * @param decision - accept / reject
- */
-export function resumeAgentHitl(
-  sessionId: string,
-  hitlId: string,
-  decision: HitlUserDecision
-): { ok: true } | { ok: false; error: string } {
-  const s = sessions.get(sessionId)
-  const pending = s?.pendingHitl
-  if (!s || !pending || pending.hitlId !== hitlId) {
-    return { ok: false, error: '当前会话没有待审批的工具调用' }
-  }
-  s.pendingHitl = undefined
-  const submitted = desktopAgent.submitHitlDecision(hitlId, decision)
-  if (!submitted) {
-    return { ok: false, error: '审批请求已过期或已处理' }
-  }
-  agentLog.info(`[resumeAgentHitl] hitlId=${hitlId} decision=${decision}`)
-  return { ok: true }
 }
 
 /**
@@ -324,28 +288,11 @@ export async function runUserMessage(
         onTextDelta: (text) => {
           emit({ type: 'text-delta', sessionId, text, runId, traceId })
         },
-        onStreamReset: () => {
-          emit({ type: 'stream-reset', sessionId, runId, traceId })
-        },
-        onHitlRequired: (hitlId, toolCalls) => {
-          emit({
-            type: 'hitl-required',
-            sessionId,
-            runId,
-            traceId,
-            hitlId,
-            toolCalls
-          })
-        },
-        onToolsRejected: () => {},
         onTool,
         emit,
         persistMessages: (messages) => {
           session.messages = messages
           persistSessionMessages(session.workspaceId, sessionId, messages)
-        },
-        setPendingHitl: (hitlId, toolCalls) => {
-          session.pendingHitl = { hitlId, toolCalls }
         }
       }
     })
@@ -354,7 +301,6 @@ export async function runUserMessage(
     if (!latest) return
 
     latest.messages = graphResult.messages
-    latest.pendingHitl = undefined
 
     persistSessionMessages(latest.workspaceId, sessionId, latest.messages, {
       toolEventsForLastAssistant: graphResult.toolEvents
@@ -404,7 +350,6 @@ export async function runUserMessage(
     const latest = sessions.get(sessionId)
     if (latest) {
       latest.controller = null
-      latest.pendingHitl = undefined
     }
     void flushLangfuseTracing()
   }

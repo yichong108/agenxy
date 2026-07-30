@@ -175,7 +175,7 @@ async function prepareToolingPhase(
 }
 
 /**
- * 运行 Agent Loop 阶段（流式生成、工具调用与 HITL）。
+ * 运行 Agent Loop 阶段（流式生成与工具调用）。
  *
  * @param state - 当前状态
  * @param runContext - 运行上下文
@@ -202,8 +202,6 @@ async function runAgentLoopPhase(
     `[runAgentLoopPhase] mode=${composerMode} runPrompt: ${JSON.stringify(runPrompt, null, 2)}`
   )
 
-  const hitlEnabled = composerMode === 'build' && settings.toolApprovalInBuild !== false
-
   const onStreamToken = (token: string) => {
     bridge.streamedCharsRef.current += token.length
     bridge.pushStreamToken(token)
@@ -226,20 +224,6 @@ async function runAgentLoopPhase(
           sessionId,
           runId,
           traceId
-        },
-        hitl: {
-          enabled: hitlEnabled,
-          onPending: (hitlId, toolCalls) => {
-            bridge.setPendingHitl(hitlId, toolCalls)
-          },
-          emitRequired: (hitlId, toolCalls) => {
-            bridge.resetStream()
-            bridge.emitHitlRequired(hitlId, toolCalls)
-          },
-          onRejected: (toolCalls) => {
-            bridge.resetStream()
-            bridge.emitToolsRejected(toolCalls)
-          }
         }
       },
       deps.provider ?? runContext.provider

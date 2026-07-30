@@ -1,6 +1,5 @@
 import {
   defineTool,
-  HITL_EXEMPT_TOOL_NAMES,
   type NamedTool,
   type ToolExecutorContext,
   type UserIntent
@@ -26,6 +25,18 @@ import {
 import { GREP_TOOL_DESCRIPTION, grepWorkspace } from '@/main/tools/grep'
 import { runCommand } from '@/main/tools/terminal'
 import { isTavilyConfigured, tavilyWebSearch } from '@/main/tools/web-search'
+
+/** Ask 模式允许的只读工具名 */
+const ASK_MODE_ALLOWED_TOOL_NAMES = new Set([
+  'read_file',
+  'list_dir',
+  'glob',
+  'grep',
+  'search_workspace',
+  'web_search',
+  'mcp_list_servers',
+  'mcp_inspect_server'
+])
 
 export type { NamedTool, ToolExecutorContext } from '@agenwork/agent'
 
@@ -186,7 +197,7 @@ function buildSystemPrompt(root: string, settings: AppSettings): string {
     ? 'read_file、write_file、delete_file、list_dir、glob、grep、search_workspace、shell、web_search（Tavily 联网搜索）、mcp_list_servers、mcp_inspect_server'
     : 'read_file、write_file、delete_file、list_dir、glob、grep、search_workspace、shell、mcp_list_servers、mcp_inspect_server（未配置 Tavily API Key 时无 web_search）'
   const webRule = web
-    ? '- 用户询问**天气、气温、降雨、实时新闻、股价、政策**等需要外部信息时，必须先调用 **web_search** 再回答；不要编造天气或声称「搜索失败」。\n- 若用户**拒绝**某次工具调用（结果含已拒绝/未执行），**本轮不得再次调用该工具**；用中文简要说明并给出替代方案（如请用户提供城市/地区，或说明可在设置中调整审批）。'
+    ? '- 用户询问**天气、气温、降雨、实时新闻、股价、政策**等需要外部信息时，必须先调用 **web_search** 再回答；不要编造天气或声称「搜索失败」。'
     : '- 未配置 Tavily，**web_search 不可用**：若用户需要今日天气等实时信息，明确告知在应用设置中填写「Tavily API Key」或配置环境变量 TAVILY_API_KEY；可建议天气网站/App；不要声称「搜索引擎坏了」或「无法联网」。'
   return `你是协助办公与软件开发的智能体。工作区根目录：${root}。
 - 工具中使用**相对于工作区根目录**的路径（如 src/index.ts）；不要用 ../ 逃出工作区。
@@ -242,7 +253,7 @@ export async function prepareAgentTooling(
 
   if (mode === 'ask') {
     const tools = [...baseTools, ...webSearchTools].filter((t) =>
-      HITL_EXEMPT_TOOL_NAMES.has(t.name)
+      ASK_MODE_ALLOWED_TOOL_NAMES.has(t.name)
     )
     return { tools, skillHint: '', mcpContextHints: '' }
   }

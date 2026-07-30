@@ -118,7 +118,6 @@ export type AppSettings = {
   providerProfiles: Record<ModelProviderId, ProviderProfile>
   maxAgentLoopSteps: number
   agentRunTimeoutMs: number
-  toolApprovalInBuild: boolean
   tavilyApiKey: string
   mcpServers: McpServerEntry[]
 }
@@ -136,7 +135,6 @@ export const defaultSettings: AppSettings = {
   providerProfiles: defaultProviderProfiles(),
   maxAgentLoopSteps: 24,
   agentRunTimeoutMs: 120_000,
-  toolApprovalInBuild: true,
   tavilyApiKey: '',
   mcpServers: []
 }
@@ -288,21 +286,27 @@ export function normalizeSettings(
 
   const provider: ModelProviderId = 'deepseek'
 
+  // 忽略已废弃的 toolApprovalInBuild（HITL 已移除）
+  const { toolApprovalInBuild: _legacyToolApprovalInBuild, ...inputWithoutLegacy } = inputRest as typeof inputRest & {
+    toolApprovalInBuild?: unknown
+  }
+  void _legacyToolApprovalInBuild
+
   const merged: AppSettings = {
     ...defaults,
-    ...inputRest,
+    ...inputWithoutLegacy,
     provider,
     providerProfiles,
-    maxAgentLoopSteps: inputRest.maxAgentLoopSteps ?? defaults.maxAgentLoopSteps,
-    agentRunTimeoutMs: inputRest.agentRunTimeoutMs ?? defaults.agentRunTimeoutMs,
-    toolApprovalInBuild:
-      typeof inputRest.toolApprovalInBuild === 'boolean'
-        ? inputRest.toolApprovalInBuild
-        : defaults.toolApprovalInBuild,
+    maxAgentLoopSteps: inputWithoutLegacy.maxAgentLoopSteps ?? defaults.maxAgentLoopSteps,
+    agentRunTimeoutMs: inputWithoutLegacy.agentRunTimeoutMs ?? defaults.agentRunTimeoutMs,
     tavilyApiKey:
-      typeof inputRest.tavilyApiKey === 'string' ? inputRest.tavilyApiKey : defaults.tavilyApiKey,
+      typeof inputWithoutLegacy.tavilyApiKey === 'string'
+        ? inputWithoutLegacy.tavilyApiKey
+        : defaults.tavilyApiKey,
     mcpServers: parseMcpServersFromUnknown(
-      inputRest.mcpServers !== undefined ? inputRest.mcpServers : defaults.mcpServers
+      inputWithoutLegacy.mcpServers !== undefined
+        ? inputWithoutLegacy.mcpServers
+        : defaults.mcpServers
     )
   }
 

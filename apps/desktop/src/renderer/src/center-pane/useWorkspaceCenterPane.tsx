@@ -13,7 +13,7 @@ import {
   SendOutlined,
   StopOutlined
 } from '@ant-design/icons'
-import { Alert, App as AntdApp, Button, Dropdown, Input, MenuProps, Space, Typography } from 'antd'
+import { App as AntdApp, Button, Dropdown, Input, MenuProps } from 'antd'
 import type { InputRef } from 'antd/es/input'
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
@@ -24,7 +24,6 @@ import {
   type AgentComposerMode,
   type AgentSendOptions,
   type ChatMessage,
-  type HitlToolCallPayload,
   HOME_WORKSPACE_ID,
   type SessionInfo,
   type StreamEvent,
@@ -32,7 +31,6 @@ import {
   type WorkspaceInfo
 } from '@/shared/ipc'
 
-const { Text } = Typography
 const { TextArea } = Input
 
 const legacyWorkspaceId = 'legacy-single-workspace'
@@ -125,10 +123,6 @@ export function useWorkspaceCenterPane({
   const [timeline, setTimeline] = useState<Record<string, ToolTimelineEvent[]>>({})
   const [running, setRunning] = useState<Record<string, boolean>>({})
   const [runStats, setRunStats] = useState<Record<string, RunStats | undefined>>({})
-  /** LangGraph interruptBefore tools：待用户批准的工具批次 */
-  const [hitlPending, setHitlPending] = useState<
-    Record<string, { hitlId: string; toolCalls: HitlToolCallPayload[] }>
-  >({})
   const streamBuf = useRef<Record<string, string>>({})
   const assistantMsgId = useRef<Record<string, string | null>>({})
   const hydratedMessageSessions = useRef<Set<string>>(new Set())
@@ -145,19 +139,6 @@ export function useWorkspaceCenterPane({
     },
     [bridge]
   )
-
-  const clearAssistantStreamDraft = useCallback((sessionId: string) => {
-    streamBuf.current[sessionId] = ''
-    const amId = assistantMsgId.current[sessionId]
-    if (!amId) return
-    setMessages((m) => {
-      const cur = [...(m[sessionId] ?? [])]
-      const idx = cur.findIndex((c) => c.id === amId)
-      if (idx < 0) return m
-      cur[idx] = { ...cur[idx]!, content: '' }
-      return { ...m, [sessionId]: cur }
-    })
-  }, [])
 
   const load = useCallback(async () => {
     if (supportsMultiWorkspaceApi) {
@@ -273,18 +254,6 @@ export function useWorkspaceCenterPane({
         setTimeline((t) => ({ ...t, [e.sessionId]: [] }))
         return
       }
-      if (e.type === 'stream-reset') {
-        clearAssistantStreamDraft(e.sessionId)
-        return
-      }
-      if (e.type === 'hitl-required') {
-        clearAssistantStreamDraft(e.sessionId)
-        setHitlPending((h) => ({
-          ...h,
-          [e.sessionId]: { hitlId: e.hitlId, toolCalls: e.toolCalls }
-        }))
-        return
-      }
       if (e.type === 'text-delta') {
         streamBuf.current[e.sessionId] = (streamBuf.current[e.sessionId] ?? '') + e.text
         const buf = streamBuf.current[e.sessionId]!
@@ -337,11 +306,6 @@ export function useWorkspaceCenterPane({
         return
       }
       if (e.type === 'error') {
-        setHitlPending((h) => {
-          const next = { ...h }
-          delete next[e.sessionId]
-          return next
-        })
         msgApi.error(e.message)
         setMessages((m) => {
           const cur = m[e.sessionId] ?? []
@@ -364,11 +328,6 @@ export function useWorkspaceCenterPane({
         return
       }
       if (e.type === 'done') {
-        setHitlPending((h) => {
-          const next = { ...h }
-          delete next[e.sessionId]
-          return next
-        })
         setRunning((r) => ({ ...r, [e.sessionId]: false }))
         setRunStats((s) => {
           const cur = s[e.sessionId]
@@ -385,7 +344,7 @@ export function useWorkspaceCenterPane({
         void ensureSessionMessages(e.sessionId, true)
       }
     },
-    [clearAssistantStreamDraft, ensureSessionMessages, msgApi]
+    [ensureSessionMessages, msgApi]
   )
 
   useEffect(() => {
@@ -595,27 +554,6 @@ export function useWorkspaceCenterPane({
   )
   const isRun = activeId ? running[activeId] : false
   const currentRunStats = activeId ? runStats[activeId] : undefined
-  const activeHitl = activeId ? hitlPending[activeId] : undefined
-
-  const resumeHitl = useCallback(
-    async (decision: 'accept' | 'reject') => {
-      if (!activeId || !activeHitl) return
-      if (decision === 'reject') {
-        clearAssistantStreamDraft(activeId)
-      }
-      const r = await bridge.resumeAgentHitl(activeId, activeHitl.hitlId, decision)
-      if (!r.ok) {
-        msgApi.error(r.error)
-        return
-      }
-      setHitlPending((h) => {
-        const next = { ...h }
-        delete next[activeId]
-        return next
-      })
-    },
-    [activeHitl, activeId, bridge, clearAssistantStreamDraft, msgApi]
-  )
   const hasInput = input.trim().length > 0
   const canSend = !isRun && hasInput
   const showSendButton = !isRun
@@ -649,36 +587,6 @@ export function useWorkspaceCenterPane({
       </Dropdown>
     </div>
   )
-
-  const hitlApprovalBar =
-    activeHitl && activeHitl.toolCalls.length > 0 ? (
-      <Alert
-        type="warning"
-        showIcon
-        className="app-hitl-bar"
-        message="工具执行待批准"
-        description={
-          <ul className="app-hitl-tool-list">
-            {activeHitl.toolCalls.map((t) => (
-              <li key={t.id}>
-                <Text code>{t.name}</Text>
-                {t.args ? <Text type="secondary"> {t.args}</Text> : null}
-              </li>
-            ))}
-          </ul>
-        }
-        action={
-          <Space>
-            <Button size="small" onClick={() => void resumeHitl('reject')}>
-              拒绝
-            </Button>
-            <Button size="small" type="primary" onClick={() => void resumeHitl('accept')}>
-              批准
-            </Button>
-          </Space>
-        }
-      />
-    ) : null
 
   const composerInput = (
     <div className="app-composer">
@@ -755,7 +663,6 @@ export function useWorkspaceCenterPane({
     activeId,
     currentRunStats,
     composerWorkspaceToolbar,
-    hitlApprovalBar,
     composerInput,
     isEmptyConversation,
     currentMessages,

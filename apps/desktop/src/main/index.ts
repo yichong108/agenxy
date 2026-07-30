@@ -11,7 +11,6 @@ import {
   bindAgentIpc,
   cancelRun,
   isSessionRunning,
-  resumeAgentHitl,
   runUserMessage
 } from '@/main/agent/agent-service'
 import {
@@ -584,17 +583,6 @@ function registerIpc(): void {
     cancelRun(sessionId)
     return { ok: true as const }
   })
-  ipcMain.handle(
-    IPC.AGENT_HITL_RESUME,
-    (
-      _e,
-      sessionId: string,
-      hitlId: string,
-      decision: 'accept' | 'reject'
-    ): { ok: true } | { ok: false; error: string } => {
-      return resumeAgentHitl(sessionId, hitlId, decision)
-    }
-  )
   ipcMain.handle(IPC.AGENT_STATUS, () => {
     // 可选：主进程不暴露细粒度
     return { ok: true as const }

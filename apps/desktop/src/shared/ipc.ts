@@ -28,8 +28,6 @@ export const IPC = {
   SESSIONS_DELETE: 'sessions:delete',
   AGENT_SEND: 'agent:send',
   AGENT_CANCEL: 'agent:cancel',
-  /** Resume a paused tool-approval interrupt */
-  AGENT_HITL_RESUME: 'agent:hitl-resume',
   AGENT_STATUS: 'agent:status',
   DEVTOOLS_TOGGLE: 'devtools:toggle',
   EXTERNAL_OPEN: 'external:open',
@@ -135,10 +133,8 @@ export type {
   StreamDoneEvent,
   StreamErrorEvent,
   StreamEvent,
-  StreamHitlRequiredEvent,
   StreamIntentClassifiedEvent,
   StreamRunStartEvent,
-  StreamStreamResetEvent,
   StreamTextDeltaEvent,
   StreamToolEvent,
   ToolCallEvent,
@@ -158,14 +154,6 @@ export {
   parseMcpServersFromUnknown,
   settingsToFormValues
 } from '@agenwork/shared'
-
-export type HitlResumeDecision = 'accept' | 'reject'
-
-export type HitlToolCallPayload = {
-  id: string
-  name: string
-  args: string
-}
 
 export type McpProbeToolInfo = {
   name: string

@@ -1,7 +1,7 @@
 {
   "name": "@agenwork/agent",
   "version": "0.0.0",
-  "description": "Agenwork agent core — ReAct loop, messages, HITL, pipeline",
+  "description": "Agenwork agent core — ReAct loop, messages, pipeline",
   "type": "module",
   "private": true,
   "exports": {

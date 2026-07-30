@@ -101,7 +101,6 @@ export function WorkspaceCenterPane(props: WorkspaceCenterPaneProps) {
           <div className="app-composer-hero">
             <div className="app-composer-hero-inner">
               {p.composerWorkspaceToolbar}
-              {p.hitlApprovalBar}
               {p.composerInput}
             </div>
           </div>
@@ -114,10 +113,7 @@ export function WorkspaceCenterPane(props: WorkspaceCenterPaneProps) {
               isRun={Boolean(p.isRun)}
               currentRunStats={p.currentRunStats}
             />
-            <div className="app-composer-stack">
-              {p.hitlApprovalBar}
-              {p.composerInput}
-            </div>
+            <div className="app-composer-stack">{p.composerInput}</div>
           </>
         )}
       </div>

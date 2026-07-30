@@ -14,14 +14,6 @@ import type { LanguageModel } from 'ai'
 import type { ReactRunBridge } from './graph/react-run-bridge.js'
 import type { AgenworkGraphRunContext } from './graph/run-context.js'
 import type { AgenworkRunMeta, PreparedTooling } from './graph/state.js'
-import {
-  TOOL_REJECTED_RESULT,
-  cancelAllHitlWaiters,
-  formatToolArgs,
-  submitHitlDecision,
-  type HitlUserDecision,
-  type PendingToolCall
-} from './hitl.js'
 import { type AgentMessage, contentToText, findLastAiMessage } from './messages.js'
 import { runWorkflow, type WorkflowDeps } from './run-workflow.js'
 
@@ -61,20 +53,13 @@ export type CreateAgentOptions = {
 }
 
 /**
- * 单次 run 的宿主回调：流式输出、HITL、timeline 与持久化。
+ * 单次 run 的宿主回调：流式输出、timeline 与持久化。
  */
 export type AgentRunCallbacks = {
   onTextDelta: (text: string) => void
-  onStreamReset: () => void
-  onHitlRequired: (
-    hitlId: string,
-    toolCalls: Array<{ id: string; name: string; args: string }>
-  ) => void
-  onToolsRejected: (toolCalls: PendingToolCall[]) => void
   onTool: (event: ToolTimelineEvent) => void
   emit: (event: StreamEvent) => void
   persistMessages: (messages: AgentMessage[]) => void
-  setPendingHitl?: (hitlId: string, toolCalls: PendingToolCall[]) => void
 }
 
 /**
@@ -106,8 +91,6 @@ export type AgentRunResult = {
 export type Agent = {
   /** 发起一次 run；同会话互斥由宿主保证，不同会话可并行 */
   send: (input: AgentRunInput) => Promise<AgentRunResult>
-  submitHitlDecision: (hitlId: string, decision: HitlUserDecision) => boolean
-  cancelAllHitlWaiters: (reason?: string) => void
 }
 
 /**
@@ -172,54 +155,7 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
       recursionLimit,
       invokeTimeoutMs,
       streamedCharsRef,
-      pushStreamToken: (token) => callbacks.onTextDelta(token),
-      resetStream: () => {
-        streamedCharsRef.current = 0
-        callbacks.onStreamReset()
-      },
-      setPendingHitl: (hitlId, toolCalls) => {
-        callbacks.setPendingHitl?.(hitlId, toolCalls)
-      },
-      emitHitlRequired: (hitlId, toolCalls) => {
-        reactBridge.resetStream()
-        callbacks.onHitlRequired(
-          hitlId,
-          toolCalls.map((t) => ({
-            id: t.id,
-            name: t.name,
-            args: formatToolArgs(t.args)
-          }))
-        )
-      },
-      emitToolsRejected: (toolCalls) => {
-        reactBridge.resetStream()
-        const now = Date.now()
-        for (const tc of toolCalls) {
-          const formattedArgs = formatToolArgs(tc.args)
-          callbacks.onTool({
-            kind: 'tool',
-            id: tc.id,
-            name: tc.name,
-            status: 'start',
-            args: formattedArgs,
-            runId: runMeta.runId,
-            traceId: runMeta.traceId,
-            timestampMs: now
-          })
-          callbacks.onTool({
-            kind: 'tool',
-            id: tc.id,
-            name: tc.name,
-            status: 'end',
-            result: TOOL_REJECTED_RESULT,
-            runId: runMeta.runId,
-            traceId: runMeta.traceId,
-            timestampMs: now,
-            durationMs: 0
-          })
-        }
-        callbacks.onToolsRejected(toolCalls)
-      }
+      pushStreamToken: (token) => callbacks.onTextDelta(token)
     }
 
     const runContext: AgenworkGraphRunContext = {
@@ -272,8 +208,6 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
   }
 
   return {
-    send,
-    submitHitlDecision,
-    cancelAllHitlWaiters
+    send
   }
 }
