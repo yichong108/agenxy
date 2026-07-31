@@ -9,18 +9,16 @@ import { type AgentComposerMode, type AppSettings } from '@agenwork/shared'
 
 import type { UserIntent } from '@/main/agent/intent/skill-tags'
 import { buildSkillBundle } from '@/main/agent/skills/index'
-import { buildMcpTools } from '@/main/mcp/mcp-runtime'
 import { userDataPath } from '@/main/store'
 
 export type { NamedTool, ToolExecutorContext } from '@agenwork/agent'
 
 /**
- * Agent 工具集与 prompt 片段（skills / MCP hints）。
+ * Agent 工具集与 prompt 片段（skills；MCP 由 createAgent.mcp.configPath 叠加）。
  */
 export type AgentTooling = {
   tools: NamedTool[]
   skillHint: string
-  mcpContextHints: string
 }
 
 export type PrepareAgentToolingOptions = {
@@ -29,9 +27,10 @@ export type PrepareAgentToolingOptions = {
 }
 
 /**
- * 按 composer mode 组装工具、skills 与 MCP。
+ * 按 composer mode 组装工具与 skills。
  *
- * 工作区内置工具来自 @agenwork/agent；本函数叠加 Desktop 增强（意图筛选 skills、MCP）。
+ * 工作区内置工具来自 @agenwork/agent；本函数叠加 Desktop 增强（意图筛选 skills）。
+ * MCP 由 createAgent 根据 mcp.configPath 在 agent 内部叠加，勿在此重复绑定。
  *
  * @param mode - ask / build
  * @param sessionId - 会话 ID（terminal key）
@@ -60,28 +59,27 @@ export async function prepareAgentTooling(
   })
 
   if (mode === 'ask') {
-    return { tools: workspaceTools, skillHint: '', mcpContextHints: '' }
+    return { tools: workspaceTools, skillHint: '' }
   }
 
   const termKey = `term:${sessionId}`
   const filterIntents = options?.filterIntents
-  const [skillBundle, mcpResult] = await Promise.all([
-    buildSkillBundle(
-      { root, termKey, settings, runCtx, onTool: runCtx.onTool },
-      filterIntents !== undefined ? { filterIntents } : undefined
-    ),
-    buildMcpTools(settings, runCtx, runCtx.onTool)
-  ])
-  const tools = [...skillBundle.tools, ...workspaceTools, ...mcpResult.tools]
+  const skillBundle = await buildSkillBundle(
+    { root, termKey, settings, runCtx, onTool: runCtx.onTool },
+    filterIntents !== undefined ? { filterIntents } : undefined
+  )
+  const tools = [...skillBundle.tools, ...workspaceTools]
   return {
     tools,
-    skillHint: skillBundle.hint,
-    mcpContextHints: mcpResult.contextHints
+    skillHint: skillBundle.hint
   }
 }
 
 /**
  * 根据 mode 与 tooling 组装 ReAct system prompt。
+ *
+ * MCP 元信息仍从 settings.mcpServers 读取（与 mcp.json 由 store 同步）；
+ * MCP 工具上下文提示由 createAgent 在叠加 MCP 时追加。
  *
  * @param mode - composer mode
  * @param root - 工作区根
@@ -98,7 +96,6 @@ export function buildAgentRunPrompt(
   const mcpEnabled = (settings.mcpServers ?? []).filter((s) => s.enabled && s.command.trim())
   const extras: WorkspacePromptExtras = {
     skillHint: tooling.skillHint,
-    mcpContextHints: tooling.mcpContextHints,
     includeMcpMeta: true,
     enabledMcpNames: mcpEnabled.map((s) => s.name || s.id),
     hasDisabledMcpEntries: (settings.mcpServers?.length ?? 0) > 0 && mcpEnabled.length === 0,

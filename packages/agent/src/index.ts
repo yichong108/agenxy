@@ -1,14 +1,19 @@
 /**
  * @agenwork/agent 公共 API — 以 createAgent 为入口，辅以工具定义与宿主持久化所需类型。
+ *
+ * MCP 通过 createAgent({ mcp: { configPath } }) 启用，宿主侧用 agent.mcp（probe/warmup/dispose）；
+ * 不在包根导出 MCP 实现细节。
  */
 
 export {
   createAgent,
   type Agent,
+  type AgentMcp,
   type AgentRunCallbacks,
   type AgentRunInput,
   type AgentRunResult,
   type CreateAgentLocalOptions,
+  type CreateAgentMcpOptions,
   type CreateAgentOptions,
   type CreateAgentSkillsOptions
 } from './create-agent.js'

@@ -1,21 +1,21 @@
-import type { NamedTool } from '@agenwork/agent'
+/**
+ * MCP stdio 连接池与 Agent 工具绑定。
+ *
+ * 按 `McpServerEntry.id` 复用连接；配置变更时重连；空闲后自动关闭。
+ */
+
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import {
   getDefaultEnvironment,
   StdioClientTransport
 } from '@modelcontextprotocol/sdk/client/stdio.js'
+import type { McpServerEntry } from '@agenwork/shared'
 import { z } from 'zod'
 
-import { logScope } from '@/main/logger'
-import type {
-  AppSettings,
-  McpProbeResult,
-  McpServerEntry,
-  McpWarmupServerResult,
-  ToolTimelineEvent
-} from '@/shared/ipc'
-
-const mcpLog = logScope('mcp')
+import { type NamedTool, type ToolExecutorContext } from '../define-tool.js'
+import { agentLog } from '../logger.js'
+import { loadMcpServersFromConfig } from './load-config.js'
+import type { McpProbeResult, McpWarmupServerResult } from './types.js'
 
 function safeMcpSegment(s: string): string {
   const t = s.trim().replace(/[^a-zA-Z0-9_-]/g, '_')
@@ -59,7 +59,11 @@ function formatCallToolResult(result: unknown): string {
 }
 
 /**
- * 使用MCP客户端连接MCP服务器
+ * 使用一次性 MCP 客户端连接服务器并执行回调。
+ *
+ * @param entry - MCP 服务器配置
+ * @param fn - 连接成功后的操作
+ * @returns 回调返回值
  */
 async function withMcpClient<T>(
   entry: McpServerEntry,
@@ -135,7 +139,7 @@ async function closeSlot(serverId: string, slot: PooledSlot): Promise<void> {
   try {
     await slot.client.close()
   } catch (e) {
-    mcpLog.warn(
+    agentLog.warn(
       `[mcp-pool] Failed to close connection ${serverId}:`,
       e instanceof Error ? e.message : e
     )
@@ -194,6 +198,10 @@ function runPooledExclusive<T>(slot: PooledSlot, fn: () => Promise<T>): Promise<
 /**
  * 按 `McpServerEntry.id` 复用一条 stdio 连接；`command/args/cwd/env` 变化会丢弃旧连接并重连。
  * 空闲 `MCP_POOL_IDLE_MS` 后自动关闭子进程。探测接口仍用一次性 `withMcpClient`。
+ *
+ * @param entry - MCP 服务器配置
+ * @param fn - 在池化客户端上执行的操作
+ * @returns 回调返回值
  */
 async function withPooledMcpClient<T>(
   entry: McpServerEntry,
@@ -208,7 +216,9 @@ async function withPooledMcpClient<T>(
   }
 }
 
-/** 应用退出时关闭所有池化 MCP 子进程 */
+/**
+ * 应用退出时关闭所有池化 MCP 子进程。
+ */
 export async function disposeMcpConnectionPool(): Promise<void> {
   const snapshots = [...pooledSlots.values()]
   pooledSlots.clear()
@@ -222,7 +232,11 @@ export async function disposeMcpConnectionPool(): Promise<void> {
   }
 }
 
-/** 从池中移除并关闭指定 id 的 MCP（预热失败时避免留下半开连接） */
+/**
+ * 从池中移除并关闭指定 id 的 MCP（预热失败时避免留下半开连接）。
+ *
+ * @param serverId - 服务器条目 id
+ */
 export async function evictPooledMcpServer(serverId: string): Promise<void> {
   const slot = pooledSlots.get(serverId)
   if (!slot) return
@@ -231,6 +245,12 @@ export async function evictPooledMcpServer(serverId: string): Promise<void> {
 
 const PROBE_TIMEOUT_MS = 22_000
 
+/**
+ * 一次性探测 MCP 服务器（列出工具），不入连接池。
+ *
+ * @param entry - MCP 服务器配置
+ * @returns 探测结果
+ */
 export async function probeMcpServer(entry: McpServerEntry): Promise<McpProbeResult> {
   if (!entry.command?.trim()) {
     return { ok: false, error: 'command cannot be empty' }
@@ -264,11 +284,16 @@ export async function probeMcpServer(entry: McpServerEntry): Promise<McpProbeRes
 /**
  * 对已启用的 MCP 逐个池化建连并 `listTools`：成功则连接留在池中供 Agent 复用（直至空闲超时）；
  * 失败则 `evict` 该 id，避免坏连接占位。
+ *
+ * @param servers - MCP 服务器列表（通常来自配置文件）
+ * @returns 各服务器预热结果
  */
-export async function warmupMcpServers(settings: AppSettings): Promise<McpWarmupServerResult[]> {
-  const servers = (settings.mcpServers ?? []).filter((s) => s.enabled && s.command.trim())
+export async function warmupMcpServers(
+  servers: McpServerEntry[]
+): Promise<McpWarmupServerResult[]> {
+  const enabled = servers.filter((s) => s.enabled && s.command.trim())
   const out: McpWarmupServerResult[] = []
-  for (const srv of servers) {
+  for (const srv of enabled) {
     const run = async (): Promise<McpWarmupServerResult> => {
       try {
         const toolCount = await withPooledMcpClient(srv, async (client) => {
@@ -302,7 +327,18 @@ export async function warmupMcpServers(settings: AppSettings): Promise<McpWarmup
   return out
 }
 
-type RunCtx = { runId: string; traceId: string }
+/**
+ * 从配置文件加载服务器并执行预热。
+ *
+ * @param configPath - MCP 配置文件路径
+ * @returns 各服务器预热结果
+ */
+export async function warmupMcpServersFromConfig(
+  configPath: string
+): Promise<McpWarmupServerResult[]> {
+  const servers = await loadMcpServersFromConfig(configPath)
+  return warmupMcpServers(servers)
+}
 
 const MAX_MCP_INSTRUCTIONS_CHARS = 12_000
 const MAX_MCP_PROMPTS_LIST = 40
@@ -311,7 +347,7 @@ const MAX_MCP_TOOL_DESC_CHARS = 400
 
 type McpToolListItem = { name: string; description?: string | null }
 
-/** Collect within single connection: initialize instructions, prompts index, tools index (most servers only have tools, previously causing empty hint) */
+/** 在单次连接内收集 instructions / prompts / tools 索引 */
 async function gatherMcpClientHints(
   client: Client,
   srv: McpServerEntry,
@@ -378,11 +414,16 @@ async function gatherMcpClientHints(
   return `### ${srv.name}（id: ${srv.id}）\n${sections.join('\n\n')}`
 }
 
-/** Fetch individual MCP instructions / prompts / tools index when tools are not built, for injection into pure dialogue mode context */
-export async function collectMcpServerContextHints(settings: AppSettings): Promise<string> {
-  const servers = (settings.mcpServers ?? []).filter((s) => s.enabled && s.command.trim())
+/**
+ * 收集已启用 MCP 的 instructions / prompts / tools 索引，注入对话上下文。
+ *
+ * @param servers - MCP 服务器列表
+ * @returns 合并后的 markdown 提示；无内容时为空串
+ */
+export async function collectMcpServerContextHints(servers: McpServerEntry[]): Promise<string> {
+  const enabled = servers.filter((s) => s.enabled && s.command.trim())
   const blocks: string[] = []
-  for (const srv of servers) {
+  for (const srv of enabled) {
     try {
       await withPooledMcpClient(srv, async (client) => {
         const block = await gatherMcpClientHints(client, srv)
@@ -390,7 +431,7 @@ export async function collectMcpServerContextHints(settings: AppSettings): Promi
       })
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
-      mcpLog.warn(`[mcp] Failed to collect server hints ${srv.name} (${srv.id}): ${message}`)
+      agentLog.warn(`[mcp] Failed to collect server hints ${srv.name} (${srv.id}): ${message}`)
     }
   }
   if (!blocks.length) return ''
@@ -407,16 +448,31 @@ function truncateSchema(schema: unknown, max = 1800): string {
   }
 }
 
-/** 为已启用的 MCP 服务器生成 Agent 工具（池化 stdio 连接，空闲自动断开） */
+/** buildMcpTools 的返回值 */
+export type BuildMcpToolsResult = {
+  tools: NamedTool[]
+  contextHints: string
+  /** 参与构建的完整服务器列表（含未启用），供 prompt 元信息使用 */
+  servers: McpServerEntry[]
+}
+
+/**
+ * 为已启用的 MCP 服务器生成 Agent 工具（池化 stdio 连接，空闲自动断开）。
+ *
+ * @param servers - MCP 服务器列表
+ * @param runCtx - 工具 timeline 上下文
+ * @returns 工具列表、上下文提示与原始服务器列表
+ */
 export async function buildMcpTools(
-  settings: AppSettings,
-  runCtx: RunCtx,
-  onTool: (e: ToolTimelineEvent) => void
-): Promise<{ tools: NamedTool[]; contextHints: string }> {
-  const servers = (settings.mcpServers ?? []).filter((s) => s.enabled && s.command.trim())
+  servers: McpServerEntry[],
+  runCtx: ToolExecutorContext
+): Promise<BuildMcpToolsResult> {
+  const enabled = servers.filter((s) => s.enabled && s.command.trim())
   const out: NamedTool[] = []
   const hintBlocks: string[] = []
-  for (const srv of servers) {
+  const onTool = runCtx.onTool
+
+  for (const srv of enabled) {
     try {
       await withPooledMcpClient(srv, async (client) => {
         const { tools: listed } = await client.listTools()
@@ -499,13 +555,28 @@ export async function buildMcpTools(
       })
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
-      mcpLog.warn(`[mcp] Skipping server ${srv.name} (${srv.id}): ${message}`)
+      agentLog.warn(`[mcp] Skipping server ${srv.name} (${srv.id}): ${message}`)
     }
   }
   const contextHints = hintBlocks.length
     ? `## MCP 服务器上下文（说明 / prompt / 工具索引）\n\n${hintBlocks.join('\n\n---\n\n')}`
     : ''
-  return { tools: out, contextHints }
+  return { tools: out, contextHints, servers }
+}
+
+/**
+ * 从配置文件加载 MCP 并生成 Agent 工具。
+ *
+ * @param configPath - MCP 配置文件路径
+ * @param runCtx - 工具 timeline 上下文
+ * @returns 工具列表、上下文提示与服务器列表
+ */
+export async function buildMcpToolsFromConfig(
+  configPath: string,
+  runCtx: ToolExecutorContext
+): Promise<BuildMcpToolsResult> {
+  const servers = await loadMcpServersFromConfig(configPath)
+  return buildMcpTools(servers, runCtx)
 }
 
 /** @deprecated 使用 buildMcpTools */

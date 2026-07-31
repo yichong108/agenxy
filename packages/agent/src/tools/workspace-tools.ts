@@ -58,7 +58,7 @@ export type BuildWorkspaceToolsOptions = {
  * 构建工作区内置工具列表。
  *
  * 这是 agent 内建能力：读写文件、搜索、shell、可选联网搜索。
- * MCP / 意图筛选等增强由宿主在 prepareTooling 中叠加。
+ * MCP 由 createAgent 的 mcp.configPath 在 tooling 层叠加；意图筛选由宿主增强。
  *
  * @param options - 会话、工作区、设置与运行上下文
  * @returns NamedTool 列表

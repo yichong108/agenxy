@@ -3,6 +3,7 @@
  *
  * 模型仍从每次 send 的 settings 解析（不在此固定 provider），
  * 工作区 root 由 session 注入 runMeta。
+ * MCP 通过 mcp.configPath 交给 @agenwork/agent 内部实现。
  *
  * 意图分类与 skills 筛选是 Desktop 可选增强，在 prepareTooling 内完成，
  * 不进入 @agenwork/agent 核心。
@@ -14,8 +15,10 @@ import { resolveFilterIntents } from '@/main/agent/intent/classify-intent'
 import type { UserIntent } from '@/main/agent/intent/skill-tags'
 import { runLangfuseReactObservation } from '@/main/langfuse'
 import { mainLog } from '@/main/logger'
+import { getMcpConfigPath } from '@/main/store'
 
 const desktopAgentOptions: CreateAgentOptions = {
+  mcp: { configPath: getMcpConfigPath() },
   prepareTooling: async ({
     composerMode,
     sessionId,

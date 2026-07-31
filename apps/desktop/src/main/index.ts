@@ -8,6 +8,7 @@ import '@/main/agent/agent-log'
 import { completeCommandInWorkspace, killCommand, runCommand } from '@agenwork/agent'
 import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron'
 
+import { desktopAgent } from '@/main/agent/agent-instance'
 import {
   bindAgentIpc,
   cancelRun,
@@ -22,7 +23,6 @@ import {
 } from '@/main/agent/skills'
 import { shutdownLangfuseTracing, startLangfuseTracingIfConfigured } from '@/main/langfuse'
 import { mainLog } from '@/main/logger'
-import { disposeMcpConnectionPool, probeMcpServer, warmupMcpServers } from '@/main/mcp/mcp-runtime'
 import {
   createSession,
   deleteSession,
@@ -38,7 +38,6 @@ import {
   getActiveWorkspace,
   getActiveWorkspaceId,
   getSessionMessages,
-  getSettings,
   getUiState,
   getWorkspace,
   getWorkspaceById,
@@ -131,7 +130,7 @@ function getMcpWarmupStatus(): McpWarmupStatus {
 
 async function executeMcpWarmupCycle(): Promise<McpWarmupReport> {
   const gen = ++mcpWarmupGen
-  const servers = await warmupMcpServers(getSettings())
+  const servers = (await desktopAgent.mcp?.warmup()) ?? []
   if (gen !== mcpWarmupGen) {
     return lastMcpWarmupReport ?? { atMs: Date.now(), servers: [] }
   }
@@ -479,7 +478,7 @@ function registerIpc(): void {
     if (patch.mcpServers !== undefined) {
       mcpWarmupGen++
       mcpWarmupPromise = null
-      void disposeMcpConnectionPool()
+      void desktopAgent.mcp?.dispose()
     }
     const next = await setSettings(patch)
     mainWindow?.webContents.send(EVENTS.SETTINGS_SYNC, next)
@@ -615,7 +614,7 @@ function registerIpc(): void {
     if (!entry || typeof entry !== 'object') {
       return { ok: false as const, error: '无效配置' }
     }
-    return await probeMcpServer(entry)
+    return (await desktopAgent.mcp?.probe(entry)) ?? { ok: false as const, error: 'MCP 未配置' }
   })
   ipcMain.handle(IPC.SKILLS_STATE, async () => gatherSkillsRuntimeState())
   ipcMain.handle(IPC.SKILLS_UNINSTALL, async (_e, payload: SkillsUninstallPayload) => {
@@ -715,7 +714,7 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   applicationIsQuitting = true
-  void disposeMcpConnectionPool()
+  void desktopAgent.mcp?.dispose()
   void shutdownLangfuseTracing()
 })
 

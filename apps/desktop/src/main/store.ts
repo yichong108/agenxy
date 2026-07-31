@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 import { app } from 'electron'
@@ -255,7 +256,32 @@ export function setWorkspace(dir: string): void {
  * @param next - 完整 AppSettings
  */
 function writeLocalSettingsCache(next: AppSettings): void {
-  store.set('settings', normalizeSettings(next))
+  const normalized = normalizeSettings(next)
+  store.set('settings', normalized)
+  syncMcpConfigFile(normalized)
+}
+
+/**
+ * MCP 配置文件路径（userData/mcp.json），供 createAgent.mcp.configPath 使用。
+ *
+ * @returns 绝对路径
+ */
+export function getMcpConfigPath(): string {
+  return path.join(userDataPath(), 'mcp.json')
+}
+
+/**
+ * 将 settings.mcpServers 同步写入 mcp.json，供 agent 包读取。
+ *
+ * @param settings - 当前应用设置
+ */
+function syncMcpConfigFile(settings: AppSettings): void {
+  try {
+    const payload = { mcpServers: settings.mcpServers ?? [] }
+    writeFileSync(getMcpConfigPath(), `${JSON.stringify(payload, null, 2)}\n`, 'utf8')
+  } catch (e) {
+    console.warn('[store] Failed to sync mcp.json:', e instanceof Error ? e.message : e)
+  }
 }
 
 /**
@@ -578,4 +604,11 @@ export function moveWorkspaceSessionData(fromWorkspaceId: string, toWorkspaceId:
 
 export function userDataPath(): string {
   return app.getPath('userData')
+}
+
+// 模块加载时同步一次，保证 createAgent 首次 run 前 mcp.json 已存在
+try {
+  syncMcpConfigFile(normalizeSettings(store.get('settings')))
+} catch {
+  /* ignore */
 }
