@@ -1,9 +1,4 @@
-import {
-  defineTool,
-  type NamedTool,
-  type ToolExecutorContext,
-  type UserIntent
-} from '@agenwork/agent'
+import { defineTool, type NamedTool, type ToolExecutorContext } from '@agenwork/agent'
 import {
   type AgentComposerMode,
   type AppSettings,
@@ -11,6 +6,7 @@ import {
 } from '@agenwork/shared'
 import { z } from 'zod'
 
+import type { UserIntent } from '@/main/agent/intent/skill-tags'
 import { buildSkillBundle } from '@/main/agent/skills/index'
 import { buildMcpTools } from '@/main/mcp/mcp-runtime'
 import { userDataPath } from '@/main/store'

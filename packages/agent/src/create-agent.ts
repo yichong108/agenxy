@@ -16,8 +16,9 @@ import type { AgenworkGraphRunContext } from './graph/run-context.js'
 import type { AgenworkRunMeta, PreparedTooling } from './graph/state.js'
 import { type AgentMessage, contentToText, findLastAiMessage } from './messages.js'
 import { runWorkflow, type WorkflowDeps } from './run-workflow.js'
+import { loadSkillsFromPaths } from './skills/load-skills.js'
 
-/** 未注入 prepareTooling 时的默认 system prompt */
+/** 未注入 prepareTooling 且未配置 skills 时的默认 system prompt */
 const DEFAULT_RUN_PROMPT = 'You are a helpful coding assistant.'
 
 /**
@@ -29,15 +30,27 @@ export type CreateAgentLocalOptions = {
 }
 
 /**
+ * createAgent Skills 配置：仅声明扫描路径，由 agent 实现基础加载。
+ *
+ * 意图分类、按标签筛选等增强应由宿主在 prepareTooling 中自行完成。
+ */
+export type CreateAgentSkillsOptions = {
+  /** 技能根目录绝对路径列表；递归扫描 SKILL.md，同名时靠前路径优先 */
+  paths: string[]
+}
+
+/**
  * createAgent 配置项。
  *
  * 最简用法只需 provider 与 local.cwd；其余未传时使用内置默认。
+ * 配置 skills.paths 后，默认 tooling 会加载这些路径下的技能工具。
  *
  * @example
  * ```ts
  * const agent = await createAgent({
  *   provider: model,
- *   local: { cwd: process.cwd() }
+ *   local: { cwd: process.cwd() },
+ *   skills: { paths: ['/path/to/skills'] }
  * })
  * ```
  */
@@ -46,7 +59,12 @@ export type CreateAgentOptions = {
   provider?: LanguageModel
   /** 本地运行环境 */
   local?: CreateAgentLocalOptions
-  /** 工具与 prompt 组装；未传则使用空工具 + 默认 prompt */
+  /**
+   * Skills 扫描路径；仅在未注入 prepareTooling 时由默认 tooling 使用。
+   * 宿主注入 prepareTooling 时自行决定如何加载 skills。
+   */
+  skills?: CreateAgentSkillsOptions
+  /** 工具与 prompt 组装；未传则按 skills.paths（若有）加载基础技能 */
   prepareTooling?: WorkflowDeps['prepareTooling']
   /** 可观测性包装（如 Langfuse）；未传则直接执行 */
   wrapReactRun?: WorkflowDeps['wrapReactRun']
@@ -94,23 +112,29 @@ export type Agent = {
 }
 
 /**
- * 默认工具组装：无工具，仅基础 system prompt。
+ * 创建默认 tooling：无 prepareTooling 时，按 skills.paths 加载基础技能。
  *
- * Desktop 等宿主应注入完整 prepareTooling（文件系统、MCP、skills 等）。
- *
- * @param _args - 与宿主 prepareTooling 相同的参数（默认实现忽略）
- * @returns 空工具集与默认 prompt
+ * @param skillPaths - createAgent 配置的技能路径
+ * @returns prepareTooling 实现
  */
-async function defaultPrepareTooling(
-  _args: Parameters<NonNullable<CreateAgentOptions['prepareTooling']>>[0]
-): Promise<PreparedTooling> {
-  return { tools: [], runPrompt: DEFAULT_RUN_PROMPT }
+function createDefaultPrepareTooling(
+  skillPaths: string[]
+): NonNullable<CreateAgentOptions['prepareTooling']> {
+  return async ({ runCtx }) => {
+    if (!skillPaths.length) {
+      return { tools: [], runPrompt: DEFAULT_RUN_PROMPT }
+    }
+    const bundle = await loadSkillsFromPaths(skillPaths, runCtx)
+    const runPrompt = [DEFAULT_RUN_PROMPT, bundle.hint].filter(Boolean).join('\n\n')
+    return { tools: bundle.tools, runPrompt }
+  }
 }
 
 /**
  * 创建 agent 实例 — packages/agent 的唯一入口工厂。
  *
  * 最简入参为 provider + local.cwd；prepareTooling / wrapReactRun 等未传时使用默认。
+ * 可选 skills.paths 提供基础 Skills；意图筛选等增强由宿主注入 prepareTooling 实现。
  * 可 `await createAgent(...)`（函数本身同步，await 无害）。
  *
  * 注意：不直接与外部耦合。同会话「运行中不可再发」由宿主按 session 互斥；
@@ -121,8 +145,9 @@ async function defaultPrepareTooling(
  */
 export function createAgent(options: CreateAgentOptions = {}): Agent {
   const defaultCwd = options.local?.cwd?.trim() || undefined
+  const skillPaths = (options.skills?.paths ?? []).map((p) => p.trim()).filter(Boolean)
   const deps: WorkflowDeps = {
-    prepareTooling: options.prepareTooling ?? defaultPrepareTooling,
+    prepareTooling: options.prepareTooling ?? createDefaultPrepareTooling(skillPaths),
     wrapReactRun: options.wrapReactRun,
     provider: options.provider
   }

@@ -1,7 +1,6 @@
 import type { AgentComposerMode, ToolTimelineEvent } from '@agenwork/shared'
 
 import type { NamedTool } from '../define-tool.js'
-import type { UserIntent } from '../intent-classifier.js'
 import type { AgentMessage } from '../messages.js'
 
 /**
@@ -32,7 +31,6 @@ export type AgenworkGraphStateType = {
   messages: AgentMessage[]
   composerMode: AgentComposerMode
   runMeta: AgenworkRunMeta
-  detectedIntents: UserIntent[]
   tooling: PreparedTooling | null
   toolEvents: ToolTimelineEvent[]
 }

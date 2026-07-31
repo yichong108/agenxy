@@ -2,9 +2,11 @@ import type { Dirent } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-import { type NamedTool, shouldLoadSkill, type UserIntent } from '@agenwork/agent'
+import { type NamedTool } from '@agenwork/agent'
 import { z } from 'zod'
 
+import { shouldLoadSkill, type UserIntent } from '@/main/agent/intent/classify-intent'
+import { SKILLS_WITH_TAGS, type SkillTagEntry } from '@/main/agent/intent/skill-tags'
 import {
   getBundledSkillsSourceDir,
   marketSkillsInstallRoot,
@@ -32,8 +34,8 @@ const MAX_LOADED_SKILLS = 96
 
 export const MAX_SKILL_MD_SIZE_BYTES = 10 * 1024 * 1024
 
-export type { SkillTagEntry } from '@agenwork/agent'
-export { SKILLS_WITH_TAGS } from '@agenwork/agent'
+export type { SkillTagEntry, UserIntent }
+export { shouldLoadSkill, SKILLS_WITH_TAGS }
 
 type MarkdownCollectOpts = {
   /** Only skip these top-level subdirectories when `current === rootAbs` */

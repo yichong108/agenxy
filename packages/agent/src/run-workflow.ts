@@ -1,9 +1,7 @@
-import { type AgentComposerMode, type AppSettings } from '@agenwork/shared'
+import { type AgentComposerMode, type AppSettings, type StreamEvent } from '@agenwork/shared'
 import type { LanguageModel } from 'ai'
 
-import { AGENWORK_USER_DISPLAY_KW } from './constants.js'
 import type { ToolExecutorContext } from './define-tool.js'
-import { classifyIntent, type UserIntent } from './intent-classifier.js'
 import { agentLog } from './logger.js'
 import {
   type AgentMessage,
@@ -12,9 +10,9 @@ import {
   humanMessage
 } from './messages.js'
 import { runReactLoop } from './react-loop.js'
-import { isAbortError } from './run-utils.js'
 import type { AgenworkGraphRunContext } from './graph/run-context.js'
 import type { AgenworkGraphStateType, AgenworkRunMeta, PreparedTooling } from './graph/state.js'
+import { AGENWORK_USER_DISPLAY_KW } from './constants.js'
 
 export type InitRunCallbacks = {
   persistMessages: (messages: AgentMessage[]) => void
@@ -51,6 +49,9 @@ export type ReactObservationContext = {
 
 /**
  * 宿主注入的工作流依赖（工具组装、Langfuse 等）。
+ *
+ * 意图分类 / skills 筛选等增强由宿主在 prepareTooling 内自行完成；
+ * agent 核心只负责调用 prepareTooling 并进入 ReAct 循环。
  */
 export type WorkflowDeps = {
   prepareTooling: (args: {
@@ -59,7 +60,11 @@ export type WorkflowDeps = {
     root: string
     settings: AppSettings
     runCtx: ToolExecutorContext
-    filterIntents?: UserIntent[]
+    /** 本轮用户可见/代理文本，供宿主做意图分类等可选增强 */
+    userText: string
+    signal?: AbortSignal
+    emit: (event: StreamEvent) => void
+    provider?: LanguageModel
   }) => Promise<PreparedTooling>
 
   wrapReactRun?: <T>(
@@ -95,70 +100,23 @@ function appendUserMessagePhase(
 }
 
 /**
- * 分类用户意图，供 Build 模式筛选工具。
- *
- * @param state - 当前流水线状态
- * @param runContext - 运行上下文
- * @param signal - 可选取消信号
- * @returns 检测到的意图列表
- */
-async function classifyIntentPhase(
-  state: AgenworkGraphStateType,
-  runContext: AgenworkGraphRunContext,
-  signal?: AbortSignal
-): Promise<Partial<AgenworkGraphStateType>> {
-  const { runMeta } = state
-  const { settings, emit } = runContext
-  let detectedIntents: AgenworkGraphStateType['detectedIntents'] = []
-
-  try {
-    const classification = await classifyIntent(
-      runMeta.userDisplayText || runMeta.agentUserText,
-      settings,
-      signal,
-      runContext.provider
-    )
-    if (classification.intent !== 'general' && classification.confidence > 0.6) {
-      detectedIntents = [classification.intent]
-    }
-    agentLog.info(
-      `[classifyIntentPhase] intent=${classification.intent} confidence=${classification.confidence.toFixed(2)}`
-    )
-  } catch (e) {
-    if (isAbortError(e)) throw e
-    agentLog.warn('[classifyIntentPhase] failed:', e)
-    const message = e instanceof Error ? e.message : String(e)
-    emit({
-      type: 'intent-classified',
-      sessionId: runMeta.sessionId,
-      runId: runMeta.runId,
-      traceId: runMeta.traceId,
-      intent: 'general',
-      skillNames: [],
-      error: message
-    })
-  }
-
-  agentLog.info(`[classifyIntentPhase] detectedIntents=${JSON.stringify(detectedIntents)}`)
-  return { detectedIntents }
-}
-
-/**
- * 按模式与意图组装本轮可用工具与 system prompt。
+ * 按模式组装本轮可用工具与 system prompt。
  *
  * @param state - 当前流水线状态
  * @param runContext - 运行上下文
  * @param deps - 宿主注入依赖
+ * @param signal - 可选取消信号
  * @returns tooling 产物
  */
 async function prepareToolingPhase(
   state: AgenworkGraphStateType,
   runContext: AgenworkGraphRunContext,
-  deps: WorkflowDeps
+  deps: WorkflowDeps,
+  signal?: AbortSignal
 ): Promise<Partial<AgenworkGraphStateType>> {
-  const { composerMode, runMeta, detectedIntents } = state
-  const { settings, onTool } = runContext
-  const { sessionId, root, runId, traceId } = runMeta
+  const { composerMode, runMeta } = state
+  const { settings, onTool, emit, provider } = runContext
+  const { sessionId, root, runId, traceId, userDisplayText, agentUserText } = runMeta
 
   const toolingBundle = await deps.prepareTooling({
     composerMode,
@@ -166,7 +124,10 @@ async function prepareToolingPhase(
     root,
     settings,
     runCtx: { runId, traceId, onTool },
-    filterIntents: composerMode === 'build' ? detectedIntents : undefined
+    userText: userDisplayText || agentUserText,
+    signal,
+    emit,
+    provider: deps.provider ?? provider
   })
 
   agentLog.info(`[prepareToolingPhase] mode=${composerMode} tools=${toolingBundle.tools.length}`)
@@ -259,7 +220,9 @@ async function runAgentLoopPhase(
 }
 
 /**
- * 执行完整 agent 工作流（按阶段编排：消息、意图、工具、Agent Loop）。
+ * 执行完整 agent 工作流（按阶段编排：消息、工具、Agent Loop）。
+ *
+ * 意图分类不属于 agent 核心；需要时由宿主在 prepareTooling 中实现。
  *
  * @param input - 初始状态与 runContext
  * @param deps - 宿主注入依赖
@@ -273,7 +236,6 @@ export async function runWorkflow(
     messages: input.messages,
     composerMode: input.composerMode,
     runMeta: input.runMeta,
-    detectedIntents: [],
     tooling: null,
     toolEvents: []
   }
@@ -281,12 +243,7 @@ export async function runWorkflow(
   const { runContext, initRunCallbacks, signal } = input
 
   Object.assign(state, appendUserMessagePhase(state, initRunCallbacks))
-
-  if (state.composerMode === 'build') {
-    Object.assign(state, await classifyIntentPhase(state, runContext, signal))
-  }
-
-  Object.assign(state, await prepareToolingPhase(state, runContext, deps))
+  Object.assign(state, await prepareToolingPhase(state, runContext, deps, signal))
 
   const agentLoopResult = await runAgentLoopPhase(state, runContext, deps)
   state.messages = agentLoopResult.messages

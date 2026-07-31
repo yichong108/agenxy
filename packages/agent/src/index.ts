@@ -9,7 +9,8 @@ export {
   type AgentRunInput,
   type AgentRunResult,
   type CreateAgentLocalOptions,
-  type CreateAgentOptions
+  type CreateAgentOptions,
+  type CreateAgentSkillsOptions
 } from './create-agent.js'
 
 export { defineTool, type NamedTool, type ToolExecutorContext } from './define-tool.js'
@@ -26,8 +27,12 @@ export {
   isInternalAgentMessage
 } from './messages.js'
 
-export { shouldLoadSkill, type UserIntent } from './intent-classifier.js'
-export { SKILLS_WITH_TAGS, type SkillTagEntry } from './skill-tags.js'
+export {
+  loadSkillsFromPaths,
+  parseSkillFrontmatter,
+  sanitizeSkillToolName,
+  type LoadedSkillsBundle
+} from './skills/load-skills.js'
 
 export { getChatModel, resolveChatModel } from './llm.js'
 

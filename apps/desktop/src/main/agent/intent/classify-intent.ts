@@ -1,10 +1,17 @@
+/**
+ * 用户意图分类 — Desktop 可选增强。
+ *
+ * 用于 Build 模式下按意图筛选 skills；与 @agenwork/agent 解耦，
+ * agent 核心不依赖本模块。
+ */
+
+import { resolveChatModel } from '@agenwork/agent'
 import { type AppSettings } from '@agenwork/shared'
 import { generateObject, type LanguageModel } from 'ai'
 import { z } from 'zod'
 
-import { agentLog } from './logger.js'
-import { resolveChatModel } from './llm.js'
-import { SKILLS_WITH_TAGS } from './skill-tags.js'
+import { SKILLS_WITH_TAGS, type UserIntent } from '@/main/agent/intent/skill-tags'
+import { mainLog } from '@/main/logger'
 
 const IntentClassificationSchema = z.object({
   intent: z.enum(['coding', 'general']).describe('用户意图类型'),
@@ -12,7 +19,7 @@ const IntentClassificationSchema = z.object({
   reasoning: z.string().describe('分类理由说明')
 })
 
-export type UserIntent = 'coding' | 'general'
+export type { UserIntent }
 
 export type IntentClassification = {
   intent: UserIntent
@@ -26,7 +33,7 @@ export type IntentClassification = {
  * @param userText - 用户消息
  * @param settings - 应用设置
  * @param signal - 可选取消信号
- * @param provider - createAgent 可选注入的模型；未传则从 settings 解析
+ * @param provider - 可选注入的模型；未传则从 settings 解析
  * @returns 意图分类结果
  */
 export async function classifyIntent(
@@ -79,7 +86,7 @@ export async function classifyIntent(
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') throw error
-    agentLog.warn('[classifyIntent] Failed:', error instanceof Error ? error.message : error)
+    mainLog.warn('[classifyIntent] Failed:', error instanceof Error ? error.message : error)
     return {
       intent: 'general',
       confidence: 0.5,
@@ -102,7 +109,7 @@ function validateIntent(raw: unknown): UserIntent {
  * 检查技能是否应该被加载。
  *
  * @param skillName - 技能名
- * @param targetIntents - 目标意图列表（空表示加载所有）
+ * @param targetIntents - 目标意图列表（空或含 general 表示加载所有）
  * @returns 是否应加载
  */
 export function shouldLoadSkill(skillName: string, targetIntents: UserIntent[]): boolean {
@@ -111,4 +118,37 @@ export function shouldLoadSkill(skillName: string, targetIntents: UserIntent[]):
   const tags = SKILLS_WITH_TAGS.find((el) => el.id === skillName)?.tags || ['general']
 
   return tags.some((el) => targetIntents.includes(el))
+}
+
+/**
+ * Build 模式下解析应加载的意图列表。
+ *
+ * 置信度不足或为 general 时返回空数组（表示加载全部 skills）。
+ *
+ * @param userText - 用户文本
+ * @param settings - 应用设置
+ * @param signal - 可选取消信号
+ * @param provider - 可选模型
+ * @returns 检测到的意图列表
+ */
+export async function resolveFilterIntents(
+  userText: string,
+  settings: AppSettings,
+  signal?: AbortSignal,
+  provider?: LanguageModel | null
+): Promise<UserIntent[]> {
+  try {
+    const classification = await classifyIntent(userText, settings, signal, provider)
+    mainLog.info(
+      `[resolveFilterIntents] intent=${classification.intent} confidence=${classification.confidence.toFixed(2)}`
+    )
+    if (classification.intent !== 'general' && classification.confidence > 0.6) {
+      return [classification.intent]
+    }
+    return []
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') throw e
+    mainLog.warn('[resolveFilterIntents] failed:', e)
+    throw e
+  }
 }
