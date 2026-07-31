@@ -67,7 +67,7 @@ export function findLastAiMessage(
 }
 
 /**
- * 判断是否为内部 graph 消息（不持久化、不展示）。
+ * 判断是否为内部消息（不持久化、不展示）。
  *
  * @param msg - 会话消息
  * @returns 是否标记为 internal

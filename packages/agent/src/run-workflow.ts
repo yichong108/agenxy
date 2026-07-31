@@ -10,8 +10,12 @@ import {
   humanMessage
 } from './messages.js'
 import { runReactLoop } from './react-loop.js'
-import type { AgenworkGraphRunContext } from './graph/run-context.js'
-import type { AgenworkGraphStateType, AgenworkRunMeta, PreparedTooling } from './graph/state.js'
+import type {
+  PreparedTooling,
+  RunMeta,
+  WorkflowRunContext,
+  WorkflowState
+} from './run-types.js'
 import { AGENWORK_USER_DISPLAY_KW } from './constants.js'
 
 export type InitRunCallbacks = {
@@ -20,16 +24,16 @@ export type InitRunCallbacks = {
 
 export type RunWorkflowInput = {
   composerMode: AgentComposerMode
-  runMeta: AgenworkRunMeta
+  runMeta: RunMeta
   messages: AgentMessage[]
-  runContext: AgenworkGraphRunContext
+  runContext: WorkflowRunContext
   initRunCallbacks: InitRunCallbacks
   signal?: AbortSignal
 }
 
 export type RunWorkflowResult = {
   messages: AgentMessage[]
-  toolEvents: AgenworkGraphStateType['toolEvents']
+  toolEvents: WorkflowState['toolEvents']
 }
 
 /** @deprecated 使用 RunWorkflowInput */
@@ -85,9 +89,9 @@ export type WorkflowDeps = {
  * @returns 更新后的 messages 片段
  */
 function appendUserMessagePhase(
-  state: AgenworkGraphStateType,
+  state: WorkflowState,
   callbacks: InitRunCallbacks
-): Partial<AgenworkGraphStateType> {
+): Partial<WorkflowState> {
   const { runMeta } = state
   const displayText =
     runMeta.userDisplayText && runMeta.userDisplayText !== runMeta.agentUserText
@@ -109,11 +113,11 @@ function appendUserMessagePhase(
  * @returns tooling 产物
  */
 async function prepareToolingPhase(
-  state: AgenworkGraphStateType,
-  runContext: AgenworkGraphRunContext,
+  state: WorkflowState,
+  runContext: WorkflowRunContext,
   deps: WorkflowDeps,
   signal?: AbortSignal
-): Promise<Partial<AgenworkGraphStateType>> {
+): Promise<Partial<WorkflowState>> {
   const { composerMode, runMeta } = state
   const { settings, onTool, emit, provider } = runContext
   const { sessionId, root, runId, traceId, userDisplayText, agentUserText } = runMeta
@@ -144,10 +148,10 @@ async function prepareToolingPhase(
  * @returns 运行结束后的 messages 与 toolEvents
  */
 async function runAgentLoopPhase(
-  state: AgenworkGraphStateType,
-  runContext: AgenworkGraphRunContext,
+  state: WorkflowState,
+  runContext: WorkflowRunContext,
   deps: WorkflowDeps
-): Promise<{ messages: AgentMessage[]; toolEvents: AgenworkGraphStateType['toolEvents'] }> {
+): Promise<{ messages: AgentMessage[]; toolEvents: WorkflowState['toolEvents'] }> {
   const bridge = runContext.reactBridge
   const prepared = state.tooling
   if (!prepared) {
@@ -200,7 +204,7 @@ async function runAgentLoopPhase(
       step: 'react'
     },
     traceId,
-    traceName: 'agenwork-graph',
+    traceName: 'agenwork-workflow',
     input: userDisplayText || agentUserText
   }
 
@@ -230,7 +234,7 @@ export async function runWorkflow(
   input: RunWorkflowInput,
   deps: WorkflowDeps
 ): Promise<RunWorkflowResult> {
-  const state: AgenworkGraphStateType = {
+  const state: WorkflowState = {
     messages: input.messages,
     composerMode: input.composerMode,
     runMeta: input.runMeta,

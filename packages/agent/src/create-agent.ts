@@ -12,9 +12,7 @@ import {
 } from '@agenwork/shared'
 import type { LanguageModel } from 'ai'
 
-import type { ReactRunBridge } from './graph/react-run-bridge.js'
-import type { AgenworkGraphRunContext } from './graph/run-context.js'
-import type { AgenworkRunMeta } from './graph/state.js'
+import type { ReactRunBridge, RunMeta, WorkflowRunContext } from './run-types.js'
 import {
   buildMcpToolsFromConfig,
   disposeMcpConnectionPool,
@@ -130,7 +128,7 @@ export type AgentRunInput = {
   messages: AgentMessage[]
   abortController: AbortController
   settings: AppSettings
-  runMeta: AgenworkRunMeta
+  runMeta: RunMeta
   callbacks: AgentRunCallbacks
   recursionLimit: number
   invokeTimeoutMs: number
@@ -288,7 +286,7 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
     } = input
 
     const root = input.runMeta.root?.trim() || defaultCwd || process.cwd()
-    const runMeta: AgenworkRunMeta = { ...input.runMeta, root }
+    const runMeta: RunMeta = { ...input.runMeta, root }
 
     const runToolEvents: ToolTimelineEvent[] = []
     const streamedCharsRef = { current: 0 }
@@ -301,7 +299,7 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
       pushStreamToken: (token) => callbacks.onTextDelta(token)
     }
 
-    const runContext: AgenworkGraphRunContext = {
+    const runContext: WorkflowRunContext = {
       settings,
       signal: abortController.signal,
       onTool: (e) => {
