@@ -3,13 +3,16 @@ import path from 'node:path'
 
 import { rgPath } from '@vscode/ripgrep'
 
-import { ensureWorkspaceExists, resolveSafePath } from '@/main/path-guard'
+import { ensureWorkspaceExists, resolveSafePath } from './path-guard.js'
 
-/** Hard cap on output lines (Cursor-style responsiveness). */
+/** 输出行数硬上限（响应速度） */
 export const GREP_MAX_OUTPUT_LINES = 2000
 
 const RG_TIMEOUT_MS = 60_000
 
+/**
+ * grep 工具入参（对齐 Cursor / ripgrep 常见选项）。
+ */
 export type GrepToolArgs = {
   pattern: string
   path?: string
@@ -199,7 +202,11 @@ function runRipgrep(
 }
 
 /**
- * Cursor-compatible grep: spawns bundled ripgrep (`@vscode/ripgrep`) in the workspace.
+ * 在工作区内用捆绑的 ripgrep（`@vscode/ripgrep`）执行搜索。
+ *
+ * @param workspace - 工作区根目录
+ * @param args - 搜索参数
+ * @returns 搜索结果或错误说明
  */
 export async function grepWorkspace(workspace: string, args: GrepToolArgs): Promise<string> {
   const root = ensureWorkspaceExists(workspace)

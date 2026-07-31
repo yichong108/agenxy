@@ -13,13 +13,11 @@ import type { LanguageModel } from 'ai'
 
 import type { ReactRunBridge } from './graph/react-run-bridge.js'
 import type { AgenworkGraphRunContext } from './graph/run-context.js'
-import type { AgenworkRunMeta, PreparedTooling } from './graph/state.js'
+import type { AgenworkRunMeta } from './graph/state.js'
 import { type AgentMessage, contentToText, findLastAiMessage } from './messages.js'
 import { runWorkflow, type WorkflowDeps } from './run-workflow.js'
 import { loadSkillsFromPaths } from './skills/load-skills.js'
-
-/** 未注入 prepareTooling 且未配置 skills 时的默认 system prompt */
-const DEFAULT_RUN_PROMPT = 'You are a helpful coding assistant.'
+import { buildWorkspaceRunPrompt, buildWorkspaceTools } from './tools/workspace-tools.js'
 
 /**
  * createAgent 本地运行环境配置。
@@ -42,8 +40,8 @@ export type CreateAgentSkillsOptions = {
 /**
  * createAgent 配置项。
  *
- * 最简用法只需 provider 与 local.cwd；其余未传时使用内置默认。
- * 配置 skills.paths 后，默认 tooling 会加载这些路径下的技能工具。
+ * 最简用法只需 provider 与 local.cwd；其余未传时使用内置默认（工作区工具）。
+ * 配置 skills.paths 后，默认 tooling 会叠加这些路径下的技能工具。
  *
  * @example
  * ```ts
@@ -64,7 +62,7 @@ export type CreateAgentOptions = {
    * 宿主注入 prepareTooling 时自行决定如何加载 skills。
    */
   skills?: CreateAgentSkillsOptions
-  /** 工具与 prompt 组装；未传则按 skills.paths（若有）加载基础技能 */
+  /** 工具与 prompt 组装；未传则使用工作区内置工具 + skills.paths（若有） */
   prepareTooling?: WorkflowDeps['prepareTooling']
   /** 可观测性包装（如 Langfuse）；未传则直接执行 */
   wrapReactRun?: WorkflowDeps['wrapReactRun']
@@ -112,7 +110,7 @@ export type Agent = {
 }
 
 /**
- * 创建默认 tooling：无 prepareTooling 时，按 skills.paths 加载基础技能。
+ * 创建默认 tooling：工作区内置工具 + 可选 skills.paths。
  *
  * @param skillPaths - createAgent 配置的技能路径
  * @returns prepareTooling 实现
@@ -120,13 +118,29 @@ export type Agent = {
 function createDefaultPrepareTooling(
   skillPaths: string[]
 ): NonNullable<CreateAgentOptions['prepareTooling']> {
-  return async ({ runCtx }) => {
-    if (!skillPaths.length) {
-      return { tools: [], runPrompt: DEFAULT_RUN_PROMPT }
+  return async ({ composerMode, sessionId, root, settings, runCtx }) => {
+    const workspaceTools = buildWorkspaceTools({
+      sessionId,
+      root,
+      settings,
+      runCtx,
+      mode: composerMode
+    })
+
+    if (!skillPaths.length || composerMode === 'ask') {
+      return {
+        tools: workspaceTools,
+        runPrompt: buildWorkspaceRunPrompt(composerMode, root, settings)
+      }
     }
+
     const bundle = await loadSkillsFromPaths(skillPaths, runCtx)
-    const runPrompt = [DEFAULT_RUN_PROMPT, bundle.hint].filter(Boolean).join('\n\n')
-    return { tools: bundle.tools, runPrompt }
+    return {
+      tools: [...bundle.tools, ...workspaceTools],
+      runPrompt: buildWorkspaceRunPrompt(composerMode, root, settings, {
+        skillHint: bundle.hint
+      })
+    }
   }
 }
 

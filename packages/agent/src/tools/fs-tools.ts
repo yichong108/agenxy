@@ -1,7 +1,7 @@
-﻿import fs from 'node:fs/promises'
+import fs from 'node:fs/promises'
 import path from 'node:path'
 
-import { ensureWorkspaceExists, resolveSafePath } from '@/main/path-guard'
+import { ensureWorkspaceExists, resolveSafePath } from './path-guard.js'
 
 const MAX_READ = 500_000
 
@@ -32,6 +32,13 @@ function looksTextual(file: string): boolean {
   return TEXT_EXT.has(ext)
 }
 
+/**
+ * 读取工作区内 UTF-8 文本文件。
+ *
+ * @param workspace - 工作区根目录
+ * @param relPath - 相对工作区的文件路径
+ * @returns 文件内容；超大文件会截断并附注
+ */
 export async function readFileTool(workspace: string, relPath: string): Promise<string> {
   const root = ensureWorkspaceExists(workspace)
   const file = resolveSafePath(relPath, root)
@@ -55,6 +62,14 @@ export async function readFileTool(workspace: string, relPath: string): Promise<
   return await fs.readFile(file, 'utf8')
 }
 
+/**
+ * 写入或覆盖工作区文件，自动创建父目录。
+ *
+ * @param workspace - 工作区根目录
+ * @param relPath - 相对路径
+ * @param content - 写入内容
+ * @returns 成功说明
+ */
 export async function writeFileTool(
   workspace: string,
   relPath: string,
@@ -67,6 +82,13 @@ export async function writeFileTool(
   return `已写入：${path.relative(root, file)}`
 }
 
+/**
+ * 删除工作区内单个普通文件（不能删目录）。
+ *
+ * @param workspace - 工作区根目录
+ * @param relPath - 相对路径
+ * @returns 操作结果说明
+ */
 export async function deleteFileTool(workspace: string, relPath: string): Promise<string> {
   const root = ensureWorkspaceExists(workspace)
   const file = resolveSafePath(relPath, root)
@@ -87,6 +109,14 @@ export async function deleteFileTool(workspace: string, relPath: string): Promis
   return `已删除：${path.relative(root, file)}`
 }
 
+/**
+ * 列出目录树（相对路径，深度可配）。
+ *
+ * @param workspace - 工作区根目录
+ * @param relPath - 相对路径；空表示根
+ * @param options - depth 等
+ * @returns 缩进文本树
+ */
 export async function listDirTool(
   workspace: string,
   relPath: string,
@@ -124,6 +154,14 @@ export async function listDirTool(
   return lines.length ? lines.join('\n') : '（空目录）'
 }
 
+/**
+ * 在文本文件中做简单子串搜索（无正则）。
+ *
+ * @param workspace - 工作区根目录
+ * @param query - 子串
+ * @param options - maxFiles 等
+ * @returns 匹配预览文本
+ */
 export async function searchWorkspace(
   workspace: string,
   query: string,
@@ -192,7 +230,7 @@ const GLOB_EXCLUDE = [
   '**/coverage/**'
 ] as const
 
-/** Extra excludes under user data root (Electron/Chromium caches, etc.) */
+/** 第二根目录（如 Electron userData）额外排除项 */
 const GLOB_EXCLUDE_USERDATA_EXTRA = [
   '**/Cache/**',
   '**/GPUCache/**',
@@ -241,8 +279,12 @@ function rootsAreSame(a: string, b: string): boolean {
 }
 
 /**
- * Glob find **files** (not directories) under workspace root and optional Electron userData root by filename pattern.
- * Pattern is Node glob relative to each root (same pattern used for both locations).
+ * 按 glob 模式在工作区（及可选第二根目录）查找文件路径。
+ *
+ * @param workspace - 工作区根目录
+ * @param pattern - Node 风格 glob（相对路径）
+ * @param options - maxFiles、userDataRoot（如 Electron userData）
+ * @returns 分段路径列表文本
  */
 export async function globFilesTool(
   workspace: string,
@@ -297,7 +339,7 @@ export async function globFilesTool(
         }
       }
     } catch {
-      // userData doesn't exist or unreadable: ignore, return workspace results only
+      // userData doesn't exist or unreadable: ignore
     }
   }
 
@@ -310,7 +352,7 @@ export async function globFilesTool(
     lines.push('[工作区]\n' + [...wsRel].sort().join('\n'))
   }
   if (udRel.length) {
-    lines.push('[用户数据]（相对 Electron userData 根目录）\n' + [...udRel].sort().join('\n'))
+    lines.push('[用户数据]（相对第二根目录）\n' + [...udRel].sort().join('\n'))
   }
 
   const truncatedNote =

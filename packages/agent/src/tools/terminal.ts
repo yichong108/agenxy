@@ -1,8 +1,8 @@
-﻿import { type ChildProcess, spawn } from 'node:child_process'
+import { type ChildProcess, spawn } from 'node:child_process'
 import { readdir } from 'node:fs/promises'
 import path from 'node:path'
 
-import { ensureWorkspaceExists } from '@/main/path-guard'
+import { ensureWorkspaceExists } from './path-guard.js'
 
 const running = new Map<string, ChildProcess>()
 const cancelledSessions = new Set<string>()
@@ -15,8 +15,11 @@ function truncate(s: string, max: number): { text: string; truncated: boolean } 
   }
 }
 
+/**
+ * shell 命令流式输出回调（如宿主右侧终端）。
+ */
 export type RunCommandHandlers = {
-  /** 右侧栏终端：实时推送输出；提供时 resolve 仅返回尾部状态行，避免与流式重复 */
+  /** 实时推送输出；提供时 resolve 仅返回尾部状态行，避免与流式重复 */
   onChunk?: (text: string, stream: 'stdout' | 'stderr') => void
 }
 
@@ -39,7 +42,14 @@ function spawnWorkspaceShell(command: string, cwd: string): ChildProcess {
 }
 
 /**
- * Execute shell command in workspace root directory (MVP: no PTY; optional streaming for right-pane terminal)
+ * 在工作区根目录执行 shell 命令并等待结束（MVP：无 PTY；可流式推送）。
+ *
+ * @param sessionKey - 会话键，用于取消/互斥
+ * @param workspace - 工作区根目录
+ * @param command - 要执行的命令
+ * @param maxOutputChars - 输出截断上限
+ * @param handlers - 可选流式回调
+ * @returns 合并 stdout/stderr（或流式模式下的状态后缀）
  */
 export function runCommand(
   sessionKey: string,
@@ -66,7 +76,6 @@ export function runCommand(
       out += text
       handlers?.onChunk?.(text, stream)
       if (out.length > maxOutputChars * 2) {
-        // Rough truncation first to avoid memory growth
         out = out.slice(0, maxOutputChars * 2)
         child.stdout?.removeAllListeners('data')
         child.stderr?.removeAllListeners('data')
@@ -97,6 +106,11 @@ export function runCommand(
   })
 }
 
+/**
+ * 终止 sessionKey 对应的正在运行命令。
+ *
+ * @param sessionKey - 与 runCommand 相同的会话键
+ */
 export function killCommand(sessionKey: string): Promise<void> {
   const c = running.get(sessionKey)
   if (!c) return Promise.resolve()
@@ -135,6 +149,12 @@ export function killCommand(sessionKey: string): Promise<void> {
   })
 }
 
+/**
+ * 判断指定会话键是否有命令在跑。
+ *
+ * @param key - 会话键
+ * @returns 是否在运行
+ */
 export function isRunning(key: string): boolean {
   return running.has(key)
 }
@@ -156,7 +176,11 @@ function isPathInsideWorkspace(workspaceRoot: string, targetPath: string): boole
 }
 
 /**
- * Provide basic path completion for terminal command line (match only by last token).
+ * 为终端命令行提供基于工作区路径的补全（仅匹配最后一个 token）。
+ *
+ * @param workspace - 工作区根目录
+ * @param commandLine - 当前命令行
+ * @returns 补全候选
  */
 export async function completeCommandInWorkspace(
   workspace: string,

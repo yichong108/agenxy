@@ -1,6 +1,11 @@
 const TAVILY_SEARCH_URL = 'https://api.tavily.com/search'
 
-/** Consider Tavily configured if either settings or env var TAVILY_API_KEY has value */
+/**
+ * 判断 Tavily 是否已配置（设置项或环境变量 TAVILY_API_KEY）。
+ *
+ * @param tavilyApiKeyFromSettings - 应用设置中的 API Key
+ * @returns 是否可用
+ */
 export function isTavilyConfigured(tavilyApiKeyFromSettings?: string): boolean {
   return Boolean(tavilyApiKeyFromSettings?.trim() || process.env.TAVILY_API_KEY?.trim())
 }
@@ -46,8 +51,13 @@ function formatTavilyResponse(data: TavilySearchJson): string {
 }
 
 /**
- * Use Tavily Search API (https://tavily.com) for internet search.
- * apiKey priority: parameter first, else read from env var TAVILY_API_KEY (for local debugging).
+ * 使用 Tavily Search API 联网搜索。
+ *
+ * apiKey 优先用参数，否则读环境变量 TAVILY_API_KEY。
+ *
+ * @param query - 搜索词
+ * @param options - maxResults、apiKey
+ * @returns 格式化搜索结果或错误说明
  */
 export async function tavilyWebSearch(
   query: string,

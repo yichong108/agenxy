@@ -4,7 +4,8 @@ import {
   contentToText,
   getAgentMessageType,
   humanMessage,
-  isInternalAgentMessage
+  isInternalAgentMessage,
+  killCommand
 } from '@agenwork/agent'
 import type { WebContents } from 'electron'
 
@@ -12,7 +13,6 @@ import { desktopAgent } from '@/main/agent/agent-instance'
 import { agentLog } from '@/main/agent/agent-log'
 import { flushLangfuseTracing } from '@/main/langfuse'
 import { getSessionMessages, getSettings, getWorkspaceById, setSessionMessages } from '@/main/store'
-import { killCommand } from '@/main/tools/terminal'
 import {
   type AgentSendOptions,
   type ChatMessage,

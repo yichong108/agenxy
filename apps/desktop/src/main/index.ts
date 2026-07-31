@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 import '@/main/env-bootstrap'
 import '@/main/agent/agent-log'
+import { completeCommandInWorkspace, killCommand, runCommand } from '@agenwork/agent'
 import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron'
 
 import {
@@ -52,7 +53,6 @@ import {
   setUiState,
   upsertWorkspaceByPath
 } from '@/main/store'
-import { completeCommandInWorkspace, killCommand, runCommand } from '@/main/tools/terminal'
 import { listWorkspaceFileTree, readWorkspaceFileContent } from '@/main/workspace-files'
 import {
   type AboutAppInfo,
