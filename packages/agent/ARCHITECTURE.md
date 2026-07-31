@@ -27,7 +27,7 @@
 - 可选的基础 Skills：仅通过 `skills.paths` 配置扫描路径，加载 `SKILL.md` 为工具
 
 - 可选 MCP：通过 `mcp.configPath` 读取配置文件，内部实现连接池与工具绑定；宿主侧仅用 `agent.mcp`（probe / warmup / dispose）
-- 宿主可注入 `prepareTooling` / `wrapReactRun`；注入 `prepareTooling` 时仍会按 `mcp.configPath` 自动叠加 MCP
+- 宿主可注入 `prepareTooling`；注入时仍会按 `mcp.configPath` 自动叠加 MCP
 
 
 

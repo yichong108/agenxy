@@ -8,34 +8,42 @@ import {
   type AppSettings,
   type McpServerEntry,
   type StreamEvent,
-  type ToolTimelineEvent
-} from '@agenwork/shared'
-import type { LanguageModel } from 'ai'
+  type ToolTimelineEvent,
+} from "@agenwork/shared";
+import type { LanguageModel } from "ai";
 
-import type { ReactRunBridge, RunMeta, WorkflowRunContext } from './run-types.js'
+import type {
+  ReactRunBridge,
+  RunMeta,
+  WorkflowRunContext,
+} from "./run-types.js";
 import {
   buildMcpToolsFromConfig,
   disposeMcpConnectionPool,
   probeMcpServer,
-  warmupMcpServersFromConfig
-} from './mcp/mcp-runtime.js'
-import type { McpProbeResult, McpWarmupServerResult } from './mcp/types.js'
-import { type AgentMessage, contentToText, findLastAiMessage } from './messages.js'
-import { runWorkflow, type WorkflowDeps } from './run-workflow.js'
-import { loadSkillsFromPaths } from './skills/load-skills.js'
+  warmupMcpServersFromConfig,
+} from "./mcp/mcp-runtime.js";
+import type { McpProbeResult, McpWarmupServerResult } from "./mcp/types.js";
+import {
+  type AgentMessage,
+  contentToText,
+  findLastAiMessage,
+} from "./messages.js";
+import { runWorkflow, type WorkflowDeps } from "./run-workflow.js";
+import { loadSkillsFromPaths } from "./skills/load-skills.js";
 import {
   buildWorkspaceRunPrompt,
   buildWorkspaceTools,
-  type WorkspacePromptExtras
-} from './tools/workspace-tools.js'
+  type WorkspacePromptExtras,
+} from "./tools/workspace-tools.js";
 
 /**
  * createAgent 本地运行环境配置。
  */
 export type CreateAgentLocalOptions = {
   /** 工作区根目录；send 时若未指定 runMeta.root 则使用此值 */
-  cwd?: string
-}
+  cwd?: string;
+};
 
 /**
  * createAgent Skills 配置：仅声明扫描路径，由 agent 实现基础加载。
@@ -44,8 +52,8 @@ export type CreateAgentLocalOptions = {
  */
 export type CreateAgentSkillsOptions = {
   /** 技能根目录绝对路径列表；递归扫描 SKILL.md，同名时靠前路径优先 */
-  paths: string[]
-}
+  paths: string[];
+};
 
 /**
  * createAgent MCP 配置：传入配置文件路径，由 agent 内部加载并绑定 MCP 工具。
@@ -55,8 +63,8 @@ export type CreateAgentSkillsOptions = {
  */
 export type CreateAgentMcpOptions = {
   /** MCP 配置文件绝对路径 */
-  configPath: string
-}
+  configPath: string;
+};
 
 /**
  * Agent 上的 MCP 宿主能力（探测 / 预热 / 释放连接池）。
@@ -65,12 +73,12 @@ export type CreateAgentMcpOptions = {
  */
 export type AgentMcp = {
   /** 一次性探测单个 MCP 服务器（不入池） */
-  probe: (entry: McpServerEntry) => Promise<McpProbeResult>
+  probe: (entry: McpServerEntry) => Promise<McpProbeResult>;
   /** 按 configPath 预热已启用的 MCP（池化建连） */
-  warmup: () => Promise<McpWarmupServerResult[]>
+  warmup: () => Promise<McpWarmupServerResult[]>;
   /** 关闭所有池化 MCP 子进程（设置变更或应用退出时调用） */
-  dispose: () => Promise<void>
-}
+  dispose: () => Promise<void>;
+};
 
 /**
  * createAgent 配置项。
@@ -91,67 +99,65 @@ export type AgentMcp = {
  */
 export type CreateAgentOptions = {
   /** AI SDK LanguageModel；未传则在 send 时从 settings 解析 */
-  provider?: LanguageModel
+  provider?: LanguageModel;
   /** 本地运行环境 */
-  local?: CreateAgentLocalOptions
+  local?: CreateAgentLocalOptions;
   /**
    * Skills 扫描路径；仅在未注入 prepareTooling 时由默认 tooling 使用。
    * 宿主注入 prepareTooling 时自行决定如何加载 skills。
    */
-  skills?: CreateAgentSkillsOptions
+  skills?: CreateAgentSkillsOptions;
   /**
    * MCP 配置文件路径；由 agent 内部实现连接池与工具绑定。
    * 注入 prepareTooling 时仍会自动叠加 MCP 工具与上下文提示。
    */
-  mcp?: CreateAgentMcpOptions
+  mcp?: CreateAgentMcpOptions;
   /** 工具与 prompt 组装；未传则使用工作区内置工具 + skills.paths（若有） */
-  prepareTooling?: WorkflowDeps['prepareTooling']
-  /** 可观测性包装（如 Langfuse）；未传则直接执行 */
-  wrapReactRun?: WorkflowDeps['wrapReactRun']
-}
+  prepareTooling?: WorkflowDeps["prepareTooling"];
+};
 
 /**
  * 单次 run 的宿主回调：流式输出、timeline 与持久化。
  */
 export type AgentRunCallbacks = {
-  onTextDelta: (text: string) => void
-  onTool: (event: ToolTimelineEvent) => void
-  emit: (event: StreamEvent) => void
-  persistMessages: (messages: AgentMessage[]) => void
-}
+  onTextDelta: (text: string) => void;
+  onTool: (event: ToolTimelineEvent) => void;
+  emit: (event: StreamEvent) => void;
+  persistMessages: (messages: AgentMessage[]) => void;
+};
 
 /**
  * 单次 agent run 的输入。
  */
 export type AgentRunInput = {
-  composerMode: AgentComposerMode
-  messages: AgentMessage[]
-  abortController: AbortController
-  settings: AppSettings
-  runMeta: RunMeta
-  callbacks: AgentRunCallbacks
-  recursionLimit: number
-  invokeTimeoutMs: number
-}
+  composerMode: AgentComposerMode;
+  messages: AgentMessage[];
+  abortController: AbortController;
+  settings: AppSettings;
+  runMeta: RunMeta;
+  callbacks: AgentRunCallbacks;
+  recursionLimit: number;
+  invokeTimeoutMs: number;
+};
 
 /**
  * 单次 agent run 的结果。
  */
 export type AgentRunResult = {
-  messages: AgentMessage[]
-  toolEvents: ToolTimelineEvent[]
-  streamedChars: number
-}
+  messages: AgentMessage[];
+  toolEvents: ToolTimelineEvent[];
+  streamedChars: number;
+};
 
 /**
  * createAgent 返回的 agent 实例。
  */
 export type Agent = {
   /** 发起一次 run；同会话互斥由宿主保证，不同会话可并行 */
-  send: (input: AgentRunInput) => Promise<AgentRunResult>
+  send: (input: AgentRunInput) => Promise<AgentRunResult>;
   /** MCP 宿主侧能力；未配置 mcp.configPath 时为 undefined */
-  mcp?: AgentMcp
-}
+  mcp?: AgentMcp;
+};
 
 /**
  * 将 MCP 工具与上下文提示合并进已有 prepareTooling 结果。
@@ -161,23 +167,23 @@ export type Agent = {
  * @returns 叠加 MCP 后的 prepareTooling
  */
 function wrapPrepareToolingWithMcp(
-  base: NonNullable<CreateAgentOptions['prepareTooling']>,
-  mcpConfigPath: string
-): NonNullable<CreateAgentOptions['prepareTooling']> {
+  base: NonNullable<CreateAgentOptions["prepareTooling"]>,
+  mcpConfigPath: string,
+): NonNullable<CreateAgentOptions["prepareTooling"]> {
   return async (args) => {
-    const prepared = await base(args)
-    if (args.composerMode === 'ask') return prepared
+    const prepared = await base(args);
+    if (args.composerMode === "ask") return prepared;
 
-    const mcpResult = await buildMcpToolsFromConfig(mcpConfigPath, args.runCtx)
-    if (!mcpResult.tools.length && !mcpResult.contextHints) return prepared
+    const mcpResult = await buildMcpToolsFromConfig(mcpConfigPath, args.runCtx);
+    if (!mcpResult.tools.length && !mcpResult.contextHints) return prepared;
 
     return {
       tools: [...prepared.tools, ...mcpResult.tools],
       runPrompt: mcpResult.contextHints
         ? `${prepared.runPrompt}\n\n${mcpResult.contextHints}`
-        : prepared.runPrompt
-    }
-  }
+        : prepared.runPrompt,
+    };
+  };
 }
 
 /**
@@ -189,56 +195,59 @@ function wrapPrepareToolingWithMcp(
  */
 function createDefaultPrepareTooling(
   skillPaths: string[],
-  mcpConfigPath?: string
-): NonNullable<CreateAgentOptions['prepareTooling']> {
+  mcpConfigPath?: string,
+): NonNullable<CreateAgentOptions["prepareTooling"]> {
   return async ({ composerMode, sessionId, root, settings, runCtx }) => {
     const workspaceTools = buildWorkspaceTools({
       sessionId,
       root,
       settings,
       runCtx,
-      mode: composerMode
-    })
+      mode: composerMode,
+    });
 
-    if (composerMode === 'ask') {
+    if (composerMode === "ask") {
       return {
         tools: workspaceTools,
-        runPrompt: buildWorkspaceRunPrompt(composerMode, root, settings)
-      }
+        runPrompt: buildWorkspaceRunPrompt(composerMode, root, settings),
+      };
     }
 
     const skillBundle = skillPaths.length
       ? await loadSkillsFromPaths(skillPaths, runCtx)
-      : { tools: [], hint: '' }
+      : { tools: [], hint: "" };
 
-    let mcpExtras: WorkspacePromptExtras = {}
-    let mcpTools: typeof workspaceTools = []
+    let mcpExtras: WorkspacePromptExtras = {};
+    let mcpTools: typeof workspaceTools = [];
     if (mcpConfigPath) {
-      const mcpResult = await buildMcpToolsFromConfig(mcpConfigPath, runCtx)
-      mcpTools = mcpResult.tools
-      const enabled = mcpResult.servers.filter((s) => s.enabled && s.command.trim())
+      const mcpResult = await buildMcpToolsFromConfig(mcpConfigPath, runCtx);
+      mcpTools = mcpResult.tools;
+      const enabled = mcpResult.servers.filter(
+        (s) => s.enabled && s.command.trim(),
+      );
       mcpExtras = {
         mcpContextHints: mcpResult.contextHints,
         includeMcpMeta: true,
         enabledMcpNames: enabled.map((s) => s.name || s.id),
-        hasDisabledMcpEntries: mcpResult.servers.length > 0 && enabled.length === 0
-      }
+        hasDisabledMcpEntries:
+          mcpResult.servers.length > 0 && enabled.length === 0,
+      };
     }
 
     return {
       tools: [...skillBundle.tools, ...workspaceTools, ...mcpTools],
       runPrompt: buildWorkspaceRunPrompt(composerMode, root, settings, {
         skillHint: skillBundle.hint,
-        ...mcpExtras
-      })
-    }
-  }
+        ...mcpExtras,
+      }),
+    };
+  };
 }
 
 /**
  * 创建 agent 实例 — packages/agent 的唯一入口工厂。
  *
- * 最简入参为 provider + local.cwd；prepareTooling / wrapReactRun 等未传时使用默认。
+ * 最简入参为 provider + local.cwd；prepareTooling 等未传时使用默认。
  * 可选 skills.paths 提供基础 Skills；mcp.configPath 由 agent 内部实现 MCP。
  * 可 `await createAgent(...)`（函数本身同步，await 无害）。
  *
@@ -249,24 +258,26 @@ function createDefaultPrepareTooling(
  * @returns 可 send 的 agent 实例
  */
 export function createAgent(options: CreateAgentOptions = {}): Agent {
-  const defaultCwd = options.local?.cwd?.trim() || undefined
-  const skillPaths = (options.skills?.paths ?? []).map((p) => p.trim()).filter(Boolean)
-  const mcpConfigPath = options.mcp?.configPath?.trim() || undefined
+  const defaultCwd = options.local?.cwd?.trim() || undefined;
+  const skillPaths = (options.skills?.paths ?? [])
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const mcpConfigPath = options.mcp?.configPath?.trim() || undefined;
 
   const basePrepare =
-    options.prepareTooling ?? createDefaultPrepareTooling(skillPaths, mcpConfigPath)
+    options.prepareTooling ??
+    createDefaultPrepareTooling(skillPaths, mcpConfigPath);
 
   // 宿主注入 prepareTooling 时，默认 tooling 不会跑；仍需按 configPath 叠加 MCP
   const prepareTooling =
     options.prepareTooling && mcpConfigPath
       ? wrapPrepareToolingWithMcp(options.prepareTooling, mcpConfigPath)
-      : basePrepare
+      : basePrepare;
 
   const deps: WorkflowDeps = {
     prepareTooling,
-    wrapReactRun: options.wrapReactRun,
-    provider: options.provider
-  }
+    provider: options.provider,
+  };
 
   /**
    * 发起一次 agent run
@@ -282,35 +293,35 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
       settings,
       callbacks,
       recursionLimit,
-      invokeTimeoutMs
-    } = input
+      invokeTimeoutMs,
+    } = input;
 
-    const root = input.runMeta.root?.trim() || defaultCwd || process.cwd()
-    const runMeta: RunMeta = { ...input.runMeta, root }
+    const root = input.runMeta.root?.trim() || defaultCwd || process.cwd();
+    const runMeta: RunMeta = { ...input.runMeta, root };
 
-    const runToolEvents: ToolTimelineEvent[] = []
-    const streamedCharsRef = { current: 0 }
+    const runToolEvents: ToolTimelineEvent[] = [];
+    const streamedCharsRef = { current: 0 };
 
     const reactBridge: ReactRunBridge = {
       abortController,
       recursionLimit,
       invokeTimeoutMs,
       streamedCharsRef,
-      pushStreamToken: (token) => callbacks.onTextDelta(token)
-    }
+      pushStreamToken: (token) => callbacks.onTextDelta(token),
+    };
 
     const runContext: WorkflowRunContext = {
       settings,
       signal: abortController.signal,
       onTool: (e) => {
-        runToolEvents.push(e)
-        callbacks.onTool(e)
+        runToolEvents.push(e);
+        callbacks.onTool(e);
       },
       emit: callbacks.emit,
       runToolEvents,
       reactBridge,
-      provider: options.provider
-    }
+      provider: options.provider,
+    };
 
     const workflowResult = await runWorkflow(
       {
@@ -319,12 +330,12 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
         runMeta,
         runContext,
         initRunCallbacks: {
-          persistMessages: callbacks.persistMessages
+          persistMessages: callbacks.persistMessages,
         },
-        signal: abortController.signal
+        signal: abortController.signal,
       },
-      deps
-    )
+      deps,
+    );
 
     // 如果流式文本为空，则尝试 fallback 到最后一轮 AI 消息。
     // 因为流式文本为空，说明用户没有输入，或者输入了但是没有触发流式输出。
@@ -334,30 +345,30 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
     // 当然，如果最后一轮 AI 消息也没有内容，则不进行 fallback。
     // fallback是为了什么？避免用户输入了但是没有触发流式输出，导致用户没有收到任何内容。
     if (streamedCharsRef.current === 0) {
-      const lastAi = findLastAiMessage(workflowResult.messages)
-      const fallback = lastAi ? contentToText(lastAi.content) : ''
+      const lastAi = findLastAiMessage(workflowResult.messages);
+      const fallback = lastAi ? contentToText(lastAi.content) : "";
       if (fallback) {
-        callbacks.onTextDelta(fallback)
+        callbacks.onTextDelta(fallback);
       }
     }
 
     return {
       messages: workflowResult.messages,
       toolEvents: workflowResult.toolEvents,
-      streamedChars: streamedCharsRef.current
-    }
+      streamedChars: streamedCharsRef.current,
+    };
   }
 
   const mcp: AgentMcp | undefined = mcpConfigPath
     ? {
         probe: (entry) => probeMcpServer(entry),
         warmup: () => warmupMcpServersFromConfig(mcpConfigPath),
-        dispose: () => disposeMcpConnectionPool()
+        dispose: () => disposeMcpConnectionPool(),
       }
-    : undefined
+    : undefined;
 
   return {
     send,
-    ...(mcp ? { mcp } : {})
-  }
+    ...(mcp ? { mcp } : {}),
+  };
 }

@@ -3,12 +3,7 @@ import type { LanguageModel } from 'ai'
 
 import type { ToolExecutorContext } from './define-tool.js'
 import { agentLog } from './logger.js'
-import {
-  type AgentMessage,
-  contentToText,
-  findLastAiMessage,
-  humanMessage
-} from './messages.js'
+import { type AgentMessage, humanMessage } from './messages.js'
 import { runReactLoop } from './react-loop.js'
 import type {
   PreparedTooling,
@@ -42,17 +37,8 @@ export type RunAgenworkPipelineInput = RunWorkflowInput
 /** @deprecated 使用 RunWorkflowResult */
 export type RunAgenworkPipelineResult = RunWorkflowResult
 
-export type ReactObservationContext = {
-  sessionId: string
-  tags: string[]
-  traceMetadata: Record<string, string>
-  traceId: string
-  traceName: string
-  input: string
-}
-
 /**
- * 宿主注入的工作流依赖（工具组装、Langfuse 等）。
+ * 宿主注入的工作流依赖（工具组装等）。
  *
  * agent 核心只负责调用 prepareTooling 并进入 ReAct 循环；
  * 宿主可在 prepareTooling 内完成自定义工具/skills 组装。
@@ -70,12 +56,6 @@ export type WorkflowDeps = {
     emit: (event: StreamEvent) => void
     provider?: LanguageModel
   }) => Promise<PreparedTooling>
-
-  wrapReactRun?: <T>(
-    ctx: ReactObservationContext,
-    fn: () => Promise<T>,
-    opts?: { formatOutput?: (messages: AgentMessage[]) => string }
-  ) => Promise<T>
 
   /** createAgent 注入的模型；未设则各阶段从 settings 解析 */
   provider?: LanguageModel
@@ -161,7 +141,7 @@ async function runAgentLoopPhase(
   const { composerMode, runMeta } = state
   const { settings, runToolEvents } = runContext
   const { tools, runPrompt } = prepared
-  const { sessionId, runId, traceId, workspaceId, userDisplayText, agentUserText } = runMeta
+  const { sessionId, runId, traceId } = runMeta
 
   agentLog.info(
     `[runAgentLoopPhase] mode=${composerMode} runPrompt: ${JSON.stringify(runPrompt, null, 2)}`
@@ -172,50 +152,26 @@ async function runAgentLoopPhase(
     bridge.pushStreamToken(token)
   }
 
-  const runAgentLoop = async () =>
-    runReactLoop(
-      settings,
-      runPrompt,
-      state.messages,
-      tools,
-      bridge.abortController,
-      onStreamToken,
-      {
-        recursionLimit: bridge.recursionLimit,
-        timeoutMs: bridge.invokeTimeoutMs
-      },
-      {
-        meta: {
-          sessionId,
-          runId,
-          traceId
-        }
-      },
-      deps.provider ?? runContext.provider
-    )
-
-  const observationCtx: ReactObservationContext = {
-    sessionId,
-    tags: ['agenwork', 'pipeline', 'react', composerMode],
-    traceMetadata: {
-      run_id: runId,
-      trace_id: traceId,
-      workspace_id: workspaceId,
-      step: 'react'
+  const runMessages = await runReactLoop(
+    settings,
+    runPrompt,
+    state.messages,
+    tools,
+    bridge.abortController,
+    onStreamToken,
+    {
+      recursionLimit: bridge.recursionLimit,
+      timeoutMs: bridge.invokeTimeoutMs
     },
-    traceId,
-    traceName: 'agenwork-workflow',
-    input: userDisplayText || agentUserText
-  }
-
-  const runMessages = deps.wrapReactRun
-    ? await deps.wrapReactRun(observationCtx, runAgentLoop, {
-        formatOutput: (messages) => {
-          const lastAi = findLastAiMessage(messages)
-          return lastAi ? contentToText(lastAi.content) : ''
-        }
-      })
-    : await runAgentLoop()
+    {
+      meta: {
+        sessionId,
+        runId,
+        traceId
+      }
+    },
+    deps.provider ?? runContext.provider
+  )
 
   return {
     messages: runMessages.length > 0 ? runMessages : state.messages,
