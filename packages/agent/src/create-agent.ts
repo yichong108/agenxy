@@ -42,7 +42,7 @@ export type CreateAgentLocalOptions = {
 /**
  * createAgent Skills 配置：仅声明扫描路径，由 agent 实现基础加载。
  *
- * 意图分类、按标签筛选等增强应由宿主在 prepareTooling 中自行完成。
+ * 更复杂的 skills 组装（如按来源合并、市场安装）应由宿主在 prepareTooling 中自行完成。
  */
 export type CreateAgentSkillsOptions = {
   /** 技能根目录绝对路径列表；递归扫描 SKILL.md，同名时靠前路径优先 */
@@ -242,7 +242,6 @@ function createDefaultPrepareTooling(
  *
  * 最简入参为 provider + local.cwd；prepareTooling / wrapReactRun 等未传时使用默认。
  * 可选 skills.paths 提供基础 Skills；mcp.configPath 由 agent 内部实现 MCP。
- * 意图筛选等增强由宿主注入 prepareTooling 实现。
  * 可 `await createAgent(...)`（函数本身同步，await 无害）。
  *
  * 注意：不直接与外部耦合。同会话「运行中不可再发」由宿主按 session 互斥；

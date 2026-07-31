@@ -50,8 +50,8 @@ export type ReactObservationContext = {
 /**
  * 宿主注入的工作流依赖（工具组装、Langfuse 等）。
  *
- * 意图分类 / skills 筛选等增强由宿主在 prepareTooling 内自行完成；
- * agent 核心只负责调用 prepareTooling 并进入 ReAct 循环。
+ * agent 核心只负责调用 prepareTooling 并进入 ReAct 循环；
+ * 宿主可在 prepareTooling 内完成自定义工具/skills 组装。
  */
 export type WorkflowDeps = {
   prepareTooling: (args: {
@@ -60,7 +60,7 @@ export type WorkflowDeps = {
     root: string
     settings: AppSettings
     runCtx: ToolExecutorContext
-    /** 本轮用户可见/代理文本，供宿主做意图分类等可选增强 */
+    /** 本轮用户可见/代理文本，供宿主按需使用 */
     userText: string
     signal?: AbortSignal
     emit: (event: StreamEvent) => void
@@ -221,8 +221,6 @@ async function runAgentLoopPhase(
 
 /**
  * 执行完整 agent 工作流（按阶段编排：消息、工具、Agent Loop）。
- *
- * 意图分类不属于 agent 核心；需要时由宿主在 prepareTooling 中实现。
  *
  * @param input - 初始状态与 runContext
  * @param deps - 宿主注入依赖

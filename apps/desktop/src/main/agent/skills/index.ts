@@ -5,8 +5,6 @@ import path from 'node:path'
 import { type NamedTool } from '@agenwork/agent'
 import { z } from 'zod'
 
-import { shouldLoadSkill, type UserIntent } from '@/main/agent/intent/classify-intent'
-import { SKILLS_WITH_TAGS, type SkillTagEntry } from '@/main/agent/intent/skill-tags'
 import {
   getBundledSkillsSourceDir,
   marketSkillsInstallRoot,
@@ -33,9 +31,6 @@ export {
 const MAX_LOADED_SKILLS = 96
 
 export const MAX_SKILL_MD_SIZE_BYTES = 10 * 1024 * 1024
-
-export type { SkillTagEntry, UserIntent }
-export { shouldLoadSkill, SKILLS_WITH_TAGS }
 
 type MarkdownCollectOpts = {
   /** Only skip these top-level subdirectories when `current === rootAbs` */
@@ -383,25 +378,16 @@ function toTool(def: SkillDefinition, ctx: SkillToolContext): SkillTool {
   }
 }
 
-export type BuildSkillBundleOptions = {
-  /** Filter skills by intent, empty array means load all skills */
-  filterIntents?: UserIntent[]
-}
-
-export async function buildSkillBundle(
-  ctx: SkillToolContext,
-  options?: BuildSkillBundleOptions
-): Promise<SkillBundle> {
-  const filterIntents = options?.filterIntents ?? []
+/**
+ * 加载并组装本轮可用的 skills 工具集。
+ *
+ * @param ctx - skill 工具执行上下文（工作区、终端 key、settings、timeline）
+ * @returns 工具列表与写入 system prompt 的 hint
+ */
+export async function buildSkillBundle(ctx: SkillToolContext): Promise<SkillBundle> {
   const fileSkills = await loadFileSkillDefinitions()
-  let mergedDefs = [...fileSkills]
-
-  mergedDefs = mergedDefs.filter((def) => shouldLoadSkill(def.name, filterIntents))
-  mainLog.info(
-    `[buildSkillBundle] Filtered skills by intents [${filterIntents.join(', ')}]: ${mergedDefs.length} skills loaded`
-  )
-
-  const merged = dedupeSkillDefinitionsFirstWins(mergedDefs)
+  const merged = dedupeSkillDefinitionsFirstWins(fileSkills)
+  mainLog.info(`[buildSkillBundle] ${merged.length} skills loaded`)
   const tools = merged.map((item) => toTool(item, ctx))
   return {
     tools,

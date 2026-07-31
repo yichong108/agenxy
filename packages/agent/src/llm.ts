@@ -43,7 +43,6 @@ export function createOpenAiProvider(settings: AppSettings) {
 /**
  * 获取 OpenAI 兼容聊天模型（对话 + 工具调用）。
  *
- * 主循环与辅助 LLM（意图分类）共用同一模型。
  * 未配置 API Key 时返回 null，由调用方决定抛错或降级。
  *
  * @param settings - 应用设置

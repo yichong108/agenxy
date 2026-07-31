@@ -7,7 +7,6 @@ import {
 } from '@agenwork/agent'
 import { type AgentComposerMode, type AppSettings } from '@agenwork/shared'
 
-import type { UserIntent } from '@/main/agent/intent/skill-tags'
 import { buildSkillBundle } from '@/main/agent/skills/index'
 import { userDataPath } from '@/main/store'
 
@@ -21,15 +20,10 @@ export type AgentTooling = {
   skillHint: string
 }
 
-export type PrepareAgentToolingOptions = {
-  /** Build mode: filter skills by intent (empty = load all) */
-  filterIntents?: UserIntent[]
-}
-
 /**
  * 按 composer mode 组装工具与 skills。
  *
- * 工作区内置工具来自 @agenwork/agent；本函数叠加 Desktop 增强（意图筛选 skills）。
+ * 工作区内置工具来自 @agenwork/agent；本函数叠加 Desktop skills。
  * MCP 由 createAgent 根据 mcp.configPath 在 agent 内部叠加，勿在此重复绑定。
  *
  * @param mode - ask / build
@@ -37,7 +31,6 @@ export type PrepareAgentToolingOptions = {
  * @param root - 工作区根目录
  * @param settings - 应用设置
  * @param runCtx - 工具 timeline 回调
- * @param options - Build 模式可选意图过滤
  * @returns 工具列表与 prompt 片段
  */
 export async function prepareAgentTooling(
@@ -45,8 +38,7 @@ export async function prepareAgentTooling(
   sessionId: string,
   root: string,
   settings: AppSettings,
-  runCtx: ToolExecutorContext,
-  options?: PrepareAgentToolingOptions
+  runCtx: ToolExecutorContext
 ): Promise<AgentTooling> {
   const userDataRoot = userDataPath()
   const workspaceTools = buildWorkspaceTools({
@@ -63,11 +55,13 @@ export async function prepareAgentTooling(
   }
 
   const termKey = `term:${sessionId}`
-  const filterIntents = options?.filterIntents
-  const skillBundle = await buildSkillBundle(
-    { root, termKey, settings, runCtx, onTool: runCtx.onTool },
-    filterIntents !== undefined ? { filterIntents } : undefined
-  )
+  const skillBundle = await buildSkillBundle({
+    root,
+    termKey,
+    settings,
+    runCtx,
+    onTool: runCtx.onTool
+  })
   const tools = [...skillBundle.tools, ...workspaceTools]
   return {
     tools,

@@ -39,14 +39,6 @@ export type StreamTextDeltaEvent = StreamBase & {
   text: string
 }
 
-export type StreamIntentClassifiedEvent = StreamBase &
-  RunRef & {
-    type: 'intent-classified'
-    intent: string
-    skillNames: string[]
-    error?: string
-  }
-
 export type StreamToolEvent = StreamBase & {
   type: 'tool'
   event: ToolTimelineEvent
@@ -71,7 +63,6 @@ export type StreamRunStartEvent = StreamBase & {
 
 export type StreamEvent =
   | StreamTextDeltaEvent
-  | StreamIntentClassifiedEvent
   | StreamToolEvent
   | StreamErrorEvent
   | StreamDoneEvent

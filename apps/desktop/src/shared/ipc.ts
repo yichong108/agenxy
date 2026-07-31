@@ -133,7 +133,6 @@ export type {
   StreamDoneEvent,
   StreamErrorEvent,
   StreamEvent,
-  StreamIntentClassifiedEvent,
   StreamRunStartEvent,
   StreamTextDeltaEvent,
   StreamToolEvent,
