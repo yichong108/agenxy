@@ -35,15 +35,14 @@ function buildToolDeclarations(tools: ToolSet): ToolSet {
 
 /**
  * 构造单条 tool 结果消息。
- * 
+ *
  * 如果把完整 tools（含 execute）直接传给 streamText，SDK 在模型返回 tool_calls 后会自动执行（即使默认 maxSteps: 1）。
  *
  * @param tc - 对应的工具调用
- * @param result - 执行结果文本
- * @param isError - 是否为错误结果
+ * @param result - 执行结果（保留结构化对象；provider 发送前再序列化）
  * @returns AI SDK tool 消息
  */
-function toolResultMessage(tc: ToolCallPart, result: string, isError?: boolean): CoreToolMessage {
+function toolResultMessage(tc: ToolCallPart, result: unknown): CoreToolMessage {
   return {
     role: 'tool',
     content: [
@@ -51,8 +50,7 @@ function toolResultMessage(tc: ToolCallPart, result: string, isError?: boolean):
         type: 'tool-result',
         toolCallId: tc.toolCallId,
         toolName: tc.toolName,
-        result,
-        ...(isError ? { isError: true } : {})
+        result
       }
     ]
   }
@@ -78,7 +76,8 @@ async function executeToolCalls(
   for (const tc of toolCalls) {
     const impl = tools[tc.toolName]
     if (!impl?.execute) {
-      out.push(toolResultMessage(tc, `Tool not found: ${tc.toolName}`, true))
+      // 失败时仍把错误信息写进 result，靠文案让模型感知失败
+      out.push(toolResultMessage(tc, `Tool not found: ${tc.toolName}`))
       continue
     }
     try {
@@ -87,11 +86,10 @@ async function executeToolCalls(
         messages,
         abortSignal: signal
       })
-      const content = typeof result === 'string' ? result : JSON.stringify(result)
-      out.push(toolResultMessage(tc, content))
+      out.push(toolResultMessage(tc, result))
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
-      out.push(toolResultMessage(tc, message, true))
+      out.push(toolResultMessage(tc, message))
     }
   }
   return out
@@ -158,7 +156,7 @@ export async function runReactLoop(
       throw new Error(`Model-tool loop timeout (>${resolvedTimeoutMs}ms), run aborted`)
     }
 
-    // messages 里尽量不要再塞 role: 'system'，避免和顶层 system 重复
+    // messages 里不要塞 role: 'system'，避免和顶层 system 重复
     const result = streamText({
       model,
       system: systemPrompt,
