@@ -117,4 +117,5 @@ class SessionManager {
 - [@agenwork/shared](packages/shared/ARCHITECTURE.md) 公用工具
 - [@agenwork/api](services/api/ARCHITECTURE.md) 后端API服务
 - [@agenwork/desktop](apps/desktop/ARCHITECTURE.md) 桌面客户端
+- [@agenwork/command](apps/command/ARCHITECTURE.md) 命令行客户端
 - [@agenwork/landing](apps/landing/ARCHITECTURE.md) 文档项目

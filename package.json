@@ -1,12 +1,14 @@
 {
   "name": "agenwork",
   "version": "1.0.0-alpha.1",
-  "description": "Agenwork — AI Agent 套件 (桌面应用 + 落地页 + 本地服务)",
+  "description": "Agenwork — AI Agent 套件 (桌面应用 + 命令行 + 落地页 + 本地服务)",
   "keywords": [
     "agenwork",
     "ai",
     "agent",
     "desktop",
+    "command",
+    "cli",
     "landing",
     "langfuse"
   ],
@@ -47,6 +49,11 @@
     "api:build": "pnpm --filter @agenwork/api build",
     "api:start": "pnpm --filter @agenwork/api start",
     "api:typecheck": "pnpm --filter @agenwork/api typecheck",
+    "command:dev": "pnpm --filter @agenwork/command dev",
+    "command:start": "pnpm --filter @agenwork/command start",
+    "command:build": "pnpm --filter @agenwork/command build",
+    "command:start:dist": "pnpm --filter @agenwork/command start:dist",
+    "command:typecheck": "pnpm --filter @agenwork/command typecheck",
     "prepare": "husky"
   },
   "devDependencies": {

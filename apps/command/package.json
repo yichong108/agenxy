@@ -1,0 +1,28 @@
+{
+  "name": "@agenwork/command",
+  "version": "0.0.0",
+  "description": "Agenwork CLI — 命令行调用 @agenwork/agent",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "preinstall": "npx only-allow pnpm",
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "build": "node esbuild.config.mjs",
+    "start:dist": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@agenwork/agent": "workspace:*",
+    "@agenwork/shared": "workspace:*",
+    "@vscode/ripgrep": "^1.18.0",
+    "dotenv": "^17.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}

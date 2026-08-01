@@ -18,6 +18,34 @@ importers:
         specifier: ^2.0.0
         version: 2.9.12
 
+  apps/command:
+    dependencies:
+      '@agenwork/agent':
+        specifier: workspace:*
+        version: link:../../packages/agent
+      '@agenwork/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@vscode/ripgrep':
+        specifier: ^1.18.0
+        version: 1.18.0
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.21
+        version: 22.19.19
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
+      tsx:
+        specifier: ^4.19.4
+        version: 4.23.1
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
   apps/desktop:
     dependencies:
       '@agenwork/agent':
