@@ -3,9 +3,15 @@ import {
   type AppSettings,
   MAX_TERMINAL_OUTPUT_CHARS
 } from '@agenwork/shared'
+import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import { defineTool, type NamedTool, type ToolExecutorContext } from '../define-tool.js'
+import {
+  defineTool,
+  filterToolSet,
+  mergeToolSets,
+  type ToolExecutorContext
+} from '../define-tool.js'
 import {
   deleteFileTool,
   globFilesTool,
@@ -31,7 +37,7 @@ const ASK_MODE_ALLOWED_TOOL_NAMES = new Set([
 type ToolDefinition<T extends z.ZodTypeAny> = {
   name: string
   description: string
-  schema: T
+  parameters: T
   execute: (input: z.infer<T>, ctx: ToolExecutorContext) => Promise<unknown>
   formatResult?: (result: unknown) => string
   truncateTo?: number
@@ -61,9 +67,9 @@ export type BuildWorkspaceToolsOptions = {
  * MCP 由 createAgent 的 mcp.configPath 在 tooling 层叠加；意图筛选由宿主增强。
  *
  * @param options - 会话、工作区、设置与运行上下文
- * @returns NamedTool 列表
+ * @returns AI SDK ToolSet
  */
-export function buildWorkspaceTools(options: BuildWorkspaceToolsOptions): NamedTool[] {
+export function buildWorkspaceTools(options: BuildWorkspaceToolsOptions): ToolSet {
   const { sessionId, root, settings, runCtx, userDataRoot, mode } = options
   const termKey = `term:${sessionId}`
 
@@ -71,26 +77,26 @@ export function buildWorkspaceTools(options: BuildWorkspaceToolsOptions): NamedT
     {
       name: 'read_file',
       description: '读取工作区内 UTF-8 文本文件，路径相对于工作区根目录',
-      schema: z.object({ path: z.string() }),
+      parameters: z.object({ path: z.string() }),
       execute: ({ path }) => readFileTool(root, path),
       truncateTo: 1_000
     },
     {
       name: 'write_file',
       description: '写入或覆盖工作区文件，自动创建父目录',
-      schema: z.object({ path: z.string(), content: z.string() }),
+      parameters: z.object({ path: z.string(), content: z.string() }),
       execute: ({ path, content }) => writeFileTool(root, path, content)
     },
     {
       name: 'delete_file',
       description: '删除工作区内单个普通文件（相对路径）；不能删除目录',
-      schema: z.object({ path: z.string() }),
+      parameters: z.object({ path: z.string() }),
       execute: ({ path }) => deleteFileTool(root, path)
     },
     {
       name: 'list_dir',
       description: '列出目录，路径相对或空表示根目录，深度 1–3',
-      schema: z.object({
+      parameters: z.object({
         path: z.string().optional(),
         depth: z.number().int().min(1).max(3).optional()
       }),
@@ -100,7 +106,7 @@ export function buildWorkspaceTools(options: BuildWorkspaceToolsOptions): NamedT
     {
       name: 'grep',
       description: GREP_TOOL_DESCRIPTION,
-      schema: z
+      parameters: z
         .object({
           pattern: z.string(),
           path: z.string().optional(),
@@ -123,7 +129,7 @@ export function buildWorkspaceTools(options: BuildWorkspaceToolsOptions): NamedT
       name: 'search_workspace',
       description:
         '在文本文件中做简单子串搜索（无正则）。需要正则、glob 或匹配上下文时用 grep。',
-      schema: z.object({ query: z.string() }),
+      parameters: z.object({ query: z.string() }),
       execute: ({ query }) => searchWorkspace(root, query, { maxFiles: 50 }),
       truncateTo: 8_000
     },
@@ -132,7 +138,7 @@ export function buildWorkspaceTools(options: BuildWorkspaceToolsOptions): NamedT
       description: userDataRoot
         ? '按模式在工作区根目录与用户数据根下 glob 匹配文件。仅返回文件路径（不含目录），分「工作区」与「用户数据」两段；模式为 Node 风格如 **/*.ts；两侧均排除 node_modules/.git/dist 及缓存目录'
         : '按模式在工作区根目录下 glob 匹配文件。仅返回文件路径；模式为 Node 风格如 **/*.ts；排除 node_modules/.git/dist 等',
-      schema: z.object({
+      parameters: z.object({
         pattern: z.string(),
         max_results: z.number().int().min(1).max(500).optional()
       }),
@@ -144,38 +150,36 @@ export function buildWorkspaceTools(options: BuildWorkspaceToolsOptions): NamedT
       name: 'shell',
       description:
         '在工作区根目录执行 shell 命令并等待结束，返回合并的 stdout/stderr（过长会截断）。用于安装依赖、构建、测试、git 等。',
-      schema: z.object({ command: z.string() }),
+      parameters: z.object({ command: z.string() }),
       execute: ({ command }) => runCommand(termKey, root, command, MAX_TERMINAL_OUTPUT_CHARS),
       truncateTo: 4_000
     }
   ]
 
-  const baseTools = baseToolDefs.map((def) => defineTool(def, runCtx))
+  const baseTools = mergeToolSets(...baseToolDefs.map((def) => defineTool(def, runCtx)))
 
-  const webSearchTools: NamedTool[] = isTavilyConfigured(settings.tavilyApiKey)
-    ? [
-        defineTool(
-          {
-            name: 'web_search',
-            description:
-              '用 Tavily 搜索公开网页（天气、新闻、文档等）。search_workspace 只搜工作区代码；需要外部信息时调用本工具。',
-            schema: z.object({
-              query: z.string(),
-              max_results: z.number().int().min(1).max(20).optional()
-            }),
-            execute: ({ query, max_results }) =>
-              tavilyWebSearch(query, { maxResults: max_results, apiKey: settings.tavilyApiKey }),
-            formatResult: (r) => (typeof r === 'string' ? r : String(r)),
-            truncateTo: 12_000
-          },
-          runCtx
-        )
-      ]
-    : []
+  const webSearchTools: ToolSet = isTavilyConfigured(settings.tavilyApiKey)
+    ? defineTool(
+        {
+          name: 'web_search',
+          description:
+            '用 Tavily 搜索公开网页（天气、新闻、文档等）。search_workspace 只搜工作区代码；需要外部信息时调用本工具。',
+          parameters: z.object({
+            query: z.string(),
+            max_results: z.number().int().min(1).max(20).optional()
+          }),
+          execute: ({ query, max_results }) =>
+            tavilyWebSearch(query, { maxResults: max_results, apiKey: settings.tavilyApiKey }),
+          formatResult: (r) => (typeof r === 'string' ? r : String(r)),
+          truncateTo: 12_000
+        },
+        runCtx
+      )
+    : {}
 
-  const tools = [...baseTools, ...webSearchTools]
+  const tools = mergeToolSets(baseTools, webSearchTools)
   if (mode === 'ask') {
-    return tools.filter((t) => ASK_MODE_ALLOWED_TOOL_NAMES.has(t.name))
+    return filterToolSet(tools, (name) => ASK_MODE_ALLOWED_TOOL_NAMES.has(name))
   }
   return tools
 }

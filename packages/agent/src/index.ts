@@ -1,6 +1,7 @@
 /**
  * @agenwork/agent 公共 API — 以 createAgent 为入口，辅以工具定义与宿主持久化所需类型。
  *
+ * 消息与工具统一使用 AI SDK 的 CoreMessage / Tool / ToolSet。
  * MCP 通过 createAgent({ mcp: { configPath } }) 启用，宿主侧用 agent.mcp（probe/warmup/dispose）；
  * 不在包根导出 MCP 实现细节。
  */
@@ -18,18 +19,24 @@ export {
   type CreateAgentSkillsOptions
 } from './create-agent.js'
 
-export { defineTool, type NamedTool, type ToolExecutorContext } from './define-tool.js'
+export {
+  defineTool,
+  filterToolSet,
+  mergeToolSets,
+  type Tool,
+  type ToolExecutorContext,
+  type ToolSet
+} from './define-tool.js'
 
 export {
-  type AgentMessage,
-  type AgentToolCall,
-  aiMessage,
+  type CoreAssistantMessage,
+  type CoreMessage,
+  type CoreUserMessage,
+  assistantMessage,
   contentToText,
   findLastAiMessage,
-  getAgentMessageType,
-  getBaseMessageType,
-  humanMessage,
-  isInternalAgentMessage
+  findLastAssistantMessage,
+  userMessage
 } from './messages.js'
 
 export {

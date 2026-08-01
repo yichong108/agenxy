@@ -1,11 +1,9 @@
 import {
-  type AgentMessage,
-  aiMessage,
+  assistantMessage,
   contentToText,
-  getAgentMessageType,
-  humanMessage,
-  isInternalAgentMessage,
-  killCommand
+  type CoreMessage,
+  killCommand,
+  userMessage
 } from '@agenwork/agent'
 import type { WebContents } from 'electron'
 
@@ -27,9 +25,11 @@ export { agentLog } from '@/main/agent/agent-log'
 
 type SessionRuntime = {
   workspaceId: string
-  messages: AgentMessage[]
+  messages: CoreMessage[]
   controller: AbortController | null
   terminalKey: string
+  /** 本轮发给 UI 的用户展示文案（与模型侧 content 可能不同） */
+  pendingUserDisplayText?: string
 }
 
 const sessions = new Map<string, SessionRuntime>()
@@ -54,18 +54,31 @@ function trimPersistedMessages(messages: ChatMessage[]): ChatMessage[] {
   return messages.slice(-MAX_PERSISTED_MESSAGES)
 }
 
-function toPersistedMessages(coreMessages: AgentMessage[]): ChatMessage[] {
-  const visible: AgentMessage[] = []
-  for (const msg of coreMessages) {
-    const messageType = getAgentMessageType(msg)
-    if (messageType === 'system' || isInternalAgentMessage(msg)) continue
-    visible.push(msg)
+/**
+ * 将内存中的 CoreMessage 转为可持久化的 ChatMessage。
+ *
+ * 仅保留 user 与最后一条有文本的 assistant；tool 轮次靠 toolEvents 承载。
+ * 最后一个 user 消息优先使用 pendingUserDisplayText（UI 展示文案）。
+ *
+ * @param coreMessages - AI SDK CoreMessage 列表
+ * @param userDisplayText - 本轮用户展示文案（可选）
+ * @returns ChatMessage 列表
+ */
+function toPersistedMessages(coreMessages: CoreMessage[], userDisplayText?: string): ChatMessage[] {
+  const visible = coreMessages.filter((msg) => msg.role === 'user' || msg.role === 'assistant')
+
+  let lastAssistantIndex = -1
+  for (let i = visible.length - 1; i >= 0; i -= 1) {
+    if (visible[i]?.role === 'assistant') {
+      lastAssistantIndex = i
+      break
+    }
   }
 
-  let lastAiIndex = -1
+  let lastUserIndex = -1
   for (let i = visible.length - 1; i >= 0; i -= 1) {
-    if (getAgentMessageType(visible[i]) === 'ai') {
-      lastAiIndex = i
+    if (visible[i]?.role === 'user') {
+      lastUserIndex = i
       break
     }
   }
@@ -73,19 +86,20 @@ function toPersistedMessages(coreMessages: AgentMessage[]): ChatMessage[] {
   const out: ChatMessage[] = []
   for (let i = 0; i < visible.length; i += 1) {
     const msg = visible[i]!
-    const messageType = getAgentMessageType(msg)
-    if (messageType === 'human') {
-      const display =
-        msg.type === 'human' && msg.displayText ? msg.displayText : contentToText(msg.content)
+    if (msg.role === 'user') {
+      const content =
+        i === lastUserIndex && userDisplayText?.trim()
+          ? userDisplayText
+          : contentToText(msg.content)
       out.push({
         id: `u-${Date.now()}-${Math.random().toString(16).slice(2)}`,
         role: 'user',
-        content: display
+        content
       })
       continue
     }
-    if (messageType === 'ai') {
-      if (i !== lastAiIndex) continue
+    if (msg.role === 'assistant') {
+      if (i !== lastAssistantIndex) continue
       const content = contentToText(msg.content)
       if (!content.trim()) continue
       out.push({
@@ -98,20 +112,26 @@ function toPersistedMessages(coreMessages: AgentMessage[]): ChatMessage[] {
   return trimPersistedMessages(out)
 }
 
-function fromPersistedMessages(messages: ChatMessage[]): AgentMessage[] {
-  const list: AgentMessage[] = []
+/**
+ * 从持久化 ChatMessage 恢复为 AI SDK CoreMessage。
+ *
+ * @param messages - 磁盘/store 中的 ChatMessage
+ * @returns CoreMessage 列表
+ */
+function fromPersistedMessages(messages: ChatMessage[]): CoreMessage[] {
+  const list: CoreMessage[] = []
   for (const msg of messages) {
     if (!msg.content?.trim()) continue
     if (msg.role === 'user') {
-      list.push(humanMessage(msg.content))
+      list.push(userMessage(msg.content))
       continue
     }
     if (msg.role === 'assistant') {
-      list.push(aiMessage(msg.content))
+      list.push(assistantMessage(msg.content))
       continue
     }
     if (msg.role === 'system') {
-      list.push({ type: 'system', content: msg.content })
+      list.push({ role: 'system', content: msg.content })
     }
   }
   return list
@@ -120,12 +140,13 @@ function fromPersistedMessages(messages: ChatMessage[]): AgentMessage[] {
 function persistSessionMessages(
   workspaceId: string,
   sessionId: string,
-  coreMessages: AgentMessage[],
+  coreMessages: CoreMessage[],
   opts?: {
     toolEventsForLastAssistant?: ToolTimelineEvent[]
+    userDisplayText?: string
   }
 ): void {
-  const list = toPersistedMessages(coreMessages)
+  const list = toPersistedMessages(coreMessages, opts?.userDisplayText)
   const toolEvents = opts?.toolEventsForLastAssistant
   if (toolEvents && toolEvents.length > 0) {
     for (let i = list.length - 1; i >= 0; i -= 1) {
@@ -155,7 +176,13 @@ export function initSessionState(workspaceId: string, sessionId: string): void {
   }
 }
 
-export function getSessionCoreMessages(sessionId: string): AgentMessage[] {
+/**
+ * 读取会话内存中的 CoreMessage 列表。
+ *
+ * @param sessionId - 会话 ID
+ * @returns CoreMessage 列表（无会话时为空数组）
+ */
+export function getSessionCoreMessages(sessionId: string): CoreMessage[] {
   return sessions.get(sessionId)?.messages ?? []
 }
 
@@ -236,6 +263,7 @@ export async function runUserMessage(
   const ac = new AbortController()
   // 在任意 await 之前占住会话，避免同会话并发进入
   session.controller = ac
+  session.pendingUserDisplayText = userDisplayText
 
   const runId = makeRunId()
   const traceId = makeTraceId(sessionId, runId)
@@ -292,7 +320,9 @@ export async function runUserMessage(
         emit,
         persistMessages: (messages) => {
           session.messages = messages
-          persistSessionMessages(session.workspaceId, sessionId, messages)
+          persistSessionMessages(session.workspaceId, sessionId, messages, {
+            userDisplayText: session.pendingUserDisplayText
+          })
         }
       }
     })
@@ -303,7 +333,8 @@ export async function runUserMessage(
     latest.messages = graphResult.messages
 
     persistSessionMessages(latest.workspaceId, sessionId, latest.messages, {
-      toolEventsForLastAssistant: graphResult.toolEvents
+      toolEventsForLastAssistant: graphResult.toolEvents,
+      userDisplayText: latest.pendingUserDisplayText
     })
     emit({
       type: 'done',
@@ -343,13 +374,15 @@ export async function runUserMessage(
         }
       })
       persistSessionMessages(latest.workspaceId, sessionId, latest.messages, {
-        toolEventsForLastAssistant: runToolEvents.length > 0 ? runToolEvents : undefined
+        toolEventsForLastAssistant: runToolEvents.length > 0 ? runToolEvents : undefined,
+        userDisplayText: latest.pendingUserDisplayText
       })
     }
   } finally {
     const latest = sessions.get(sessionId)
     if (latest) {
       latest.controller = null
+      latest.pendingUserDisplayText = undefined
     }
     void flushLangfuseTracing()
   }

@@ -5,16 +5,13 @@
  */
 
 import type { AgentComposerMode, AppSettings, StreamEvent, ToolTimelineEvent } from '@agenwork/shared'
-import type { LanguageModel } from 'ai'
-
-import type { NamedTool } from './define-tool.js'
-import type { AgentMessage } from './messages.js'
+import type { CoreMessage, LanguageModel, ToolSet } from 'ai'
 
 /**
  * 工具准备阶段产物：ReAct 可用工具与 system prompt。
  */
 export type PreparedTooling = {
-  tools: NamedTool[]
+  tools: ToolSet
   runPrompt: string
 }
 
@@ -27,7 +24,9 @@ export type RunMeta = {
   traceId: string
   workspaceId: string
   root: string
+  /** UI 展示用用户文案（可与 agentUserText 不同） */
   userDisplayText: string
+  /** 发给模型的用户文案 */
   agentUserText: string
 }
 
@@ -64,7 +63,7 @@ export type WorkflowRunContext = {
  * Agent 工作流阶段间传递的状态。
  */
 export type WorkflowState = {
-  messages: AgentMessage[]
+  messages: CoreMessage[]
   composerMode: AgentComposerMode
   runMeta: RunMeta
   tooling: PreparedTooling | null

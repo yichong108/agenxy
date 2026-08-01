@@ -9,9 +9,10 @@ import type { Dirent } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
+import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import { defineTool, type NamedTool, type ToolExecutorContext } from '../define-tool.js'
+import { defineTool, mergeToolSets, type ToolExecutorContext } from '../define-tool.js'
 import { agentLog } from '../logger.js'
 
 /** 单次 run 最多加载的技能数 */
@@ -36,7 +37,7 @@ type SkillDefinition = {
  * 从路径加载 skills 的结果。
  */
 export type LoadedSkillsBundle = {
-  tools: NamedTool[]
+  tools: ToolSet
   /** 注入 system prompt 的技能摘要 */
   hint: string
 }
@@ -180,14 +181,14 @@ async function appendDefsFromRoot(absRoot: string, defs: SkillDefinition[]): Pro
 }
 
 /**
- * 从配置的绝对路径列表加载 Skills，并包装为 NamedTool。
+ * 从配置的绝对路径列表加载 Skills，并包装为 AI SDK ToolSet。
  *
  * 扫描顺序即优先级：同名技能以先出现的路径为准。不包含意图筛选；
  * 宿主若需按意图过滤，应在外部筛选 paths 或过滤返回的 tools。
  *
  * @param paths - 技能根目录绝对路径列表
  * @param runCtx - 工具执行上下文（timeline）
- * @returns 工具列表与 prompt hint
+ * @returns 工具 ToolSet 与 prompt hint
  */
 export async function loadSkillsFromPaths(
   paths: string[],
@@ -195,7 +196,7 @@ export async function loadSkillsFromPaths(
 ): Promise<LoadedSkillsBundle> {
   const cleaned = paths.map((p) => p.trim()).filter(Boolean)
   if (!cleaned.length) {
-    return { tools: [], hint: '' }
+    return { tools: {}, hint: '' }
   }
 
   const defs: SkillDefinition[] = []
@@ -207,20 +208,22 @@ export async function loadSkillsFromPaths(
   const merged = dedupeFirstWins(defs)
   agentLog.info(`[loadSkillsFromPaths] loaded=${merged.length} from ${cleaned.length} path(s)`)
 
-  const tools = merged.map((def) =>
-    defineTool(
-      {
-        name: def.name,
-        description: def.description,
-        schema: z.object({ question: z.string().optional() }),
-        execute: async (args) => {
-          const question = typeof args.question === 'string' ? args.question.trim() : ''
-          if (!question) return def.body
-          return `User question: ${question}\n\nSkill document content:\n${def.body}`
+  const tools = mergeToolSets(
+    ...merged.map((def) =>
+      defineTool(
+        {
+          name: def.name,
+          description: def.description,
+          parameters: z.object({ question: z.string().optional() }),
+          execute: async (args) => {
+            const question = typeof args.question === 'string' ? args.question.trim() : ''
+            if (!question) return def.body
+            return `User question: ${question}\n\nSkill document content:\n${def.body}`
+          },
+          truncateTo: 8_000
         },
-        truncateTo: 8_000
-      },
-      runCtx
+        runCtx
+      )
     )
   )
 

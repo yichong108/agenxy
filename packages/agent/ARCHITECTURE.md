@@ -10,6 +10,8 @@ Agent不负责流程编排；
 Agent可选Skills；
 Agent可选MCP。
 
+会话消息与工具统一使用 AI SDK 的 `CoreMessage` / `Tool` / `ToolSet`。
+
 
 
 ## 边界与依赖
@@ -29,3 +31,4 @@ send的内部不依赖外部，只依赖send的入参
 
 - 在宿主侧重复实现 MCP 连接池 / 工具绑定（应走 `mcp.configPath` 与 `agent.mcp`）
 - 将 MCP 实现细节从包根大量导出（连接池、buildTools 等应保持包内私有）
+- 自定义与 AI SDK 平行的 Message / Tool 数据结构（应直接使用 CoreMessage / ToolSet）

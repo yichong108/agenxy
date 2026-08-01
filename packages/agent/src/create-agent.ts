@@ -10,13 +10,14 @@ import {
   type StreamEvent,
   type ToolTimelineEvent,
 } from "@agenwork/shared";
-import type { LanguageModel } from "ai";
+import type { CoreMessage, LanguageModel, ToolSet } from "ai";
 
 import type {
   ReactRunBridge,
   RunMeta,
   WorkflowRunContext,
 } from "./run-types.js";
+import { mergeToolSets } from "./define-tool.js";
 import {
   buildMcpToolsFromConfig,
   disposeMcpConnectionPool,
@@ -25,9 +26,8 @@ import {
 } from "./mcp/mcp-runtime.js";
 import type { McpProbeResult, McpWarmupServerResult } from "./mcp/types.js";
 import {
-  type AgentMessage,
   contentToText,
-  findLastAiMessage,
+  findLastAssistantMessage,
 } from "./messages.js";
 import { runWorkflow, type WorkflowDeps } from "./run-workflow.js";
 import { loadSkillsFromPaths } from "./skills/load-skills.js";
@@ -123,7 +123,7 @@ export type AgentRunCallbacks = {
   onTextDelta: (text: string) => void;
   onTool: (event: ToolTimelineEvent) => void;
   emit: (event: StreamEvent) => void;
-  persistMessages: (messages: AgentMessage[]) => void;
+  persistMessages: (messages: CoreMessage[]) => void;
 };
 
 /**
@@ -131,7 +131,7 @@ export type AgentRunCallbacks = {
  */
 export type AgentRunInput = {
   composerMode: AgentComposerMode;
-  messages: AgentMessage[];
+  messages: CoreMessage[];
   abortController: AbortController;
   settings: AppSettings;
   runMeta: RunMeta;
@@ -144,7 +144,7 @@ export type AgentRunInput = {
  * 单次 agent run 的结果。
  */
 export type AgentRunResult = {
-  messages: AgentMessage[];
+  messages: CoreMessage[];
   toolEvents: ToolTimelineEvent[];
   streamedChars: number;
 };
@@ -175,10 +175,12 @@ function wrapPrepareToolingWithMcp(
     if (args.composerMode === "ask") return prepared;
 
     const mcpResult = await buildMcpToolsFromConfig(mcpConfigPath, args.runCtx);
-    if (!mcpResult.tools.length && !mcpResult.contextHints) return prepared;
+    if (!Object.keys(mcpResult.tools).length && !mcpResult.contextHints) {
+      return prepared;
+    }
 
     return {
-      tools: [...prepared.tools, ...mcpResult.tools],
+      tools: mergeToolSets(prepared.tools, mcpResult.tools),
       runPrompt: mcpResult.contextHints
         ? `${prepared.runPrompt}\n\n${mcpResult.contextHints}`
         : prepared.runPrompt,
@@ -215,10 +217,10 @@ function createDefaultPrepareTooling(
 
     const skillBundle = skillPaths.length
       ? await loadSkillsFromPaths(skillPaths, runCtx)
-      : { tools: [], hint: "" };
+      : { tools: {}, hint: "" };
 
     let mcpExtras: WorkspacePromptExtras = {};
-    let mcpTools: typeof workspaceTools = [];
+    let mcpTools: ToolSet = {};
     if (mcpConfigPath) {
       const mcpResult = await buildMcpToolsFromConfig(mcpConfigPath, runCtx);
       mcpTools = mcpResult.tools;
@@ -235,7 +237,7 @@ function createDefaultPrepareTooling(
     }
 
     return {
-      tools: [...skillBundle.tools, ...workspaceTools, ...mcpTools],
+      tools: mergeToolSets(skillBundle.tools, workspaceTools, mcpTools),
       runPrompt: buildWorkspaceRunPrompt(composerMode, root, settings, {
         skillHint: skillBundle.hint,
         ...mcpExtras,
@@ -345,8 +347,10 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
     // 当然，如果最后一轮 AI 消息也没有内容，则不进行 fallback。
     // fallback是为了什么？避免用户输入了但是没有触发流式输出，导致用户没有收到任何内容。
     if (streamedCharsRef.current === 0) {
-      const lastAi = findLastAiMessage(workflowResult.messages);
-      const fallback = lastAi ? contentToText(lastAi.content) : "";
+      const lastAssistant = findLastAssistantMessage(workflowResult.messages);
+      const fallback = lastAssistant
+        ? contentToText(lastAssistant.content)
+        : "";
       if (fallback) {
         callbacks.onTextDelta(fallback);
       }

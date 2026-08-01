@@ -1,10 +1,10 @@
 import { type AgentComposerMode, type AppSettings, type StreamEvent } from '@agenwork/shared'
-import type { LanguageModel } from 'ai'
+import type { CoreMessage, LanguageModel } from 'ai'
 
 import type { ToolExecutorContext } from './define-tool.js'
 import { resolveChatModel } from './llm.js'
 import { agentLog } from './logger.js'
-import { type AgentMessage, humanMessage } from './messages.js'
+import { userMessage } from './messages.js'
 import { runReactLoop } from './react-loop.js'
 import type {
   PreparedTooling,
@@ -12,23 +12,22 @@ import type {
   WorkflowRunContext,
   WorkflowState
 } from './run-types.js'
-import { AGENWORK_USER_DISPLAY_KW } from './constants.js'
 
 export type InitRunCallbacks = {
-  persistMessages: (messages: AgentMessage[]) => void
+  persistMessages: (messages: CoreMessage[]) => void
 }
 
 export type RunWorkflowInput = {
   composerMode: AgentComposerMode
   runMeta: RunMeta
-  messages: AgentMessage[]
+  messages: CoreMessage[]
   runContext: WorkflowRunContext
   initRunCallbacks: InitRunCallbacks
   signal?: AbortSignal
 }
 
 export type RunWorkflowResult = {
-  messages: AgentMessage[]
+  messages: CoreMessage[]
   toolEvents: WorkflowState['toolEvents']
 }
 
@@ -65,6 +64,8 @@ export type WorkflowDeps = {
 /**
  * 追加本轮用户消息并持久化。
  *
+ * 模型侧使用 agentUserText；UI 展示文案由宿主凭 RunMeta.userDisplayText 处理。
+ *
  * @param state - 当前流水线状态
  * @param callbacks - 初始化回调（如消息持久化）
  * @returns 更新后的 messages 片段
@@ -74,12 +75,7 @@ function appendUserMessagePhase(
   callbacks: InitRunCallbacks
 ): Partial<WorkflowState> {
   const { runMeta } = state
-  const displayText =
-    runMeta.userDisplayText && runMeta.userDisplayText !== runMeta.agentUserText
-      ? runMeta.userDisplayText
-      : undefined
-  const msg = humanMessage(runMeta.agentUserText, displayText)
-  const messages = [...state.messages, msg]
+  const messages = [...state.messages, userMessage(runMeta.agentUserText)]
   callbacks.persistMessages(messages)
   return { messages }
 }
@@ -115,7 +111,8 @@ async function prepareToolingPhase(
     provider: deps.provider ?? provider
   })
 
-  agentLog.info(`[prepareToolingPhase] mode=${composerMode} tools=${toolingBundle.tools.length}`)
+  const toolCount = Object.keys(toolingBundle.tools).length
+  agentLog.info(`[prepareToolingPhase] mode=${composerMode} tools=${toolCount}`)
 
   return { tooling: toolingBundle }
 }
@@ -132,7 +129,7 @@ async function runAgentLoopPhase(
   state: WorkflowState,
   runContext: WorkflowRunContext,
   deps: WorkflowDeps
-): Promise<{ messages: AgentMessage[]; toolEvents: WorkflowState['toolEvents'] }> {
+): Promise<{ messages: CoreMessage[]; toolEvents: WorkflowState['toolEvents'] }> {
   const bridge = runContext.reactBridge
   const prepared = state.tooling
   if (!prepared) {
@@ -216,5 +213,3 @@ export const runAgenworkGraph = runWorkflow
 
 /** @deprecated 使用 WorkflowDeps */
 export type PipelineDeps = WorkflowDeps
-
-export { AGENWORK_USER_DISPLAY_KW }

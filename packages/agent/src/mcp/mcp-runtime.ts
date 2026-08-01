@@ -10,9 +10,10 @@ import {
   StdioClientTransport
 } from '@modelcontextprotocol/sdk/client/stdio.js'
 import type { McpServerEntry } from '@agenwork/shared'
+import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
 
-import { type NamedTool, type ToolExecutorContext } from '../define-tool.js'
+import { type ToolExecutorContext } from '../define-tool.js'
 import { agentLog } from '../logger.js'
 import { loadMcpServersFromConfig } from './load-config.js'
 import type { McpProbeResult, McpWarmupServerResult } from './types.js'
@@ -450,7 +451,7 @@ function truncateSchema(schema: unknown, max = 1800): string {
 
 /** buildMcpTools 的返回值 */
 export type BuildMcpToolsResult = {
-  tools: NamedTool[]
+  tools: ToolSet
   contextHints: string
   /** 参与构建的完整服务器列表（含未启用），供 prompt 元信息使用 */
   servers: McpServerEntry[]
@@ -461,14 +462,14 @@ export type BuildMcpToolsResult = {
  *
  * @param servers - MCP 服务器列表
  * @param runCtx - 工具 timeline 上下文
- * @returns 工具列表、上下文提示与原始服务器列表
+ * @returns ToolSet、上下文提示与原始服务器列表
  */
 export async function buildMcpTools(
   servers: McpServerEntry[],
   runCtx: ToolExecutorContext
 ): Promise<BuildMcpToolsResult> {
   const enabled = servers.filter((s) => s.enabled && s.command.trim())
-  const out: NamedTool[] = []
+  const out: ToolSet = {}
   const hintBlocks: string[] = []
   const onTool = runCtx.onTool
 
@@ -491,11 +492,10 @@ export async function buildMcpTools(
             schemaHint ? `inputSchema：${schemaHint}` : ''
           ].filter(Boolean)
 
-          const wrapped: NamedTool = {
-            name: lcName,
+          out[lcName] = tool({
             description: descParts.join('\n'),
-            schema: z.object({}).passthrough(),
-            invoke: async (input: unknown) => {
+            parameters: z.object({}).passthrough(),
+            execute: async (input) => {
               const args = (typeof input === 'object' && input !== null ? input : {}) as Record<
                 string,
                 unknown
@@ -549,8 +549,7 @@ export async function buildMcpTools(
                 throw err
               }
             }
-          }
-          out.push(wrapped)
+          })
         }
       })
     } catch (e) {

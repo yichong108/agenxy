@@ -1,8 +1,6 @@
 export {
-  type AgentMessage,
-  type AgentToolCall,
   contentToText,
+  type CoreMessage,
   findLastAiMessage,
-  getAgentMessageType,
-  getBaseMessageType
+  findLastAssistantMessage
 } from '@agenwork/agent'

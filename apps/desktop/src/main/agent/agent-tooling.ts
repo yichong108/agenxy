@@ -1,8 +1,9 @@
 import {
   buildWorkspaceRunPrompt,
   buildWorkspaceTools,
-  type NamedTool,
+  mergeToolSets,
   type ToolExecutorContext,
+  type ToolSet,
   type WorkspacePromptExtras
 } from '@agenwork/agent'
 import { type AgentComposerMode, type AppSettings } from '@agenwork/shared'
@@ -10,13 +11,13 @@ import { type AgentComposerMode, type AppSettings } from '@agenwork/shared'
 import { buildSkillBundle } from '@/main/agent/skills/index'
 import { userDataPath } from '@/main/store'
 
-export type { NamedTool, ToolExecutorContext } from '@agenwork/agent'
+export type { ToolExecutorContext, ToolSet } from '@agenwork/agent'
 
 /**
  * Agent 工具集与 prompt 片段（skills；MCP 由 createAgent.mcp.configPath 叠加）。
  */
 export type AgentTooling = {
-  tools: NamedTool[]
+  tools: ToolSet
   skillHint: string
 }
 
@@ -31,7 +32,7 @@ export type AgentTooling = {
  * @param root - 工作区根目录
  * @param settings - 应用设置
  * @param runCtx - 工具 timeline 回调
- * @returns 工具列表与 prompt 片段
+ * @returns 工具 ToolSet 与 prompt 片段
  */
 export async function prepareAgentTooling(
   mode: AgentComposerMode,
@@ -62,7 +63,7 @@ export async function prepareAgentTooling(
     runCtx,
     onTool: runCtx.onTool
   })
-  const tools = [...skillBundle.tools, ...workspaceTools]
+  const tools = mergeToolSets(skillBundle.tools, workspaceTools)
   return {
     tools,
     skillHint: skillBundle.hint

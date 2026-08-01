@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../src/run-workflow.js', () => ({
   runWorkflow: vi.fn(async () => ({
-    messages: [{ type: 'ai' as const, content: 'hello' }],
+    messages: [{ role: 'assistant' as const, content: 'hello' }],
     toolEvents: []
   }))
 }))
@@ -60,7 +60,7 @@ describe('createAgent', () => {
     expect(runWorkflow).toHaveBeenCalledOnce()
     const [input] = vi.mocked(runWorkflow).mock.calls[0]!
     expect(input.runMeta.root).toBe('/tmp/ws')
-    expect(result.messages).toEqual([{ type: 'ai', content: 'hello' }])
+    expect(result.messages).toEqual([{ role: 'assistant', content: 'hello' }])
     expect(result.toolEvents).toEqual([])
     // 无流式输出时 fallback 到最后一条 AI 消息
     expect(callbacks.onTextDelta).toHaveBeenCalledWith('hello')

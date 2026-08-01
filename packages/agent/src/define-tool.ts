@@ -1,51 +1,74 @@
 import type { ToolTimelineEvent } from '@agenwork/shared'
+import { tool, type Tool, type ToolSet } from 'ai'
 import type { z } from 'zod'
 
 /**
- * Agent 工具定义：带 name、schema 与 invoke，供 ReAct 循环绑定。
+ * 工具执行上下文：run 标识与 timeline 回调。
+ *
+ * AI SDK 的 ToolExecutionOptions 不含 runId / onTool，故由宿主/工作流注入。
  */
-export type NamedTool = {
-  name: string
-  description: string
-  schema: z.ZodTypeAny
-  invoke: (input: unknown, config?: { signal?: AbortSignal }) => Promise<unknown>
-}
-
-type ToolDefinition<T extends z.ZodTypeAny> = {
-  name: string
-  description: string
-  schema: T
-  execute: (input: z.infer<T>, ctx: ToolExecutorContext) => Promise<unknown>
-  formatResult?: (result: unknown) => string
-  truncateTo?: number
-}
-
-/** 工具执行上下文：run 标识与 timeline 回调 */
 export type ToolExecutorContext = {
   runId: string
   traceId: string
   onTool: (e: ToolTimelineEvent) => void
 }
 
+type ToolDefinition<T extends z.ZodTypeAny> = {
+  name: string
+  description: string
+  /** Zod schema，对应 AI SDK Tool.parameters */
+  parameters: T
+  execute: (input: z.infer<T>, ctx: ToolExecutorContext) => Promise<unknown>
+  formatResult?: (result: unknown) => string
+  truncateTo?: number
+}
+
 /**
- * 将 zod schema 工具定义包装为 NamedTool（含 timeline 上报）。
+ * 合并多个 AI SDK ToolSet（同名后者覆盖前者）。
  *
- * @param def - 工具定义（name、schema、execute）
+ * @param sets - 待合并的 ToolSet
+ * @returns 合并后的 ToolSet
+ */
+export function mergeToolSets(...sets: ToolSet[]): ToolSet {
+  return Object.assign({}, ...sets) as ToolSet
+}
+
+/**
+ * 按工具名过滤 ToolSet。
+ *
+ * @param tools - 原始 ToolSet
+ * @param predicate - 保留条件（参数为工具名）
+ * @returns 过滤后的 ToolSet
+ */
+export function filterToolSet(tools: ToolSet, predicate: (name: string) => boolean): ToolSet {
+  const out: ToolSet = {}
+  for (const [name, t] of Object.entries(tools)) {
+    if (predicate(name)) out[name] = t
+  }
+  return out
+}
+
+/**
+ * 将 zod 工具定义包装为单键 AI SDK ToolSet（含 timeline 上报）。
+ *
+ * 返回 ToolSet 而非自定义结构，可直接传给 streamText / generateText，
+ * 或多个结果经 mergeToolSets 合并。
+ *
+ * @param def - 工具定义（name、parameters、execute）
  * @param runCtx - 运行上下文（onTool）
- * @returns 可绑定到 ReAct 循环的 NamedTool
+ * @returns 仅含该工具一项的 ToolSet
  */
 export function defineTool<T extends z.ZodTypeAny>(
   def: ToolDefinition<T>,
   runCtx: ToolExecutorContext
-): NamedTool {
-  const { name, description, schema, execute, formatResult, truncateTo } = def
+): ToolSet {
+  const { name, description, parameters, execute, formatResult, truncateTo } = def
 
-  return {
-    name,
+  const wrapped: Tool = tool({
     description,
-    schema,
-    invoke: async (input: unknown) => {
-      const parsed = schema.parse(input) as z.infer<T>
+    parameters,
+    execute: async (input) => {
+      const parsed = input as z.infer<T>
       const id = `${name}-${Date.now()}`
       const startedAt = Date.now()
       const args =
@@ -82,5 +105,9 @@ export function defineTool<T extends z.ZodTypeAny>(
 
       return result
     }
-  }
+  })
+
+  return { [name]: wrapped }
 }
+
+export type { Tool, ToolSet }

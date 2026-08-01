@@ -2,7 +2,8 @@ import type { Dirent } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-import { type NamedTool } from '@agenwork/agent'
+import { mergeToolSets, type ToolSet } from '@agenwork/agent'
+import { tool } from 'ai'
 import { z } from 'zod'
 
 import {
@@ -52,11 +53,9 @@ type SkillToolContext = {
 }
 
 type SkillBundle = {
-  tools: NamedTool[]
+  tools: ToolSet
   hint: string
 }
-
-type SkillTool = NamedTool
 
 type SkillDefinition = {
   name: string
@@ -324,57 +323,58 @@ function makeSkillHint(defs: SkillDefinition[]): string {
   return `可用技能工具（可自动调用）：\n${lines.join('\n')}\n当用户意图与上述任一描述匹配时，必须先按上方准确名称调用对应技能工具（可传入概括用户问题的 question），再按需使用其他工具；不要跳过匹配技能而用泛化工具猜测。`
 }
 
-function toTool(def: SkillDefinition, ctx: SkillToolContext): SkillTool {
+function toToolSet(def: SkillDefinition, ctx: SkillToolContext): ToolSet {
   return {
-    name: def.name,
-    description: def.description,
-    schema: def.schema,
-    invoke: async (rawArgs: unknown) => {
-      const started = makeToolEventStart(def.name, rawArgs, ctx.runCtx)
-      ctx.onTool(started)
-      const startTime = started.timestampMs || Date.now()
-      try {
-        const args =
-          typeof rawArgs === 'string'
-            ? ({ question: rawArgs } as Record<string, unknown>)
-            : ((rawArgs ?? {}) as Record<string, unknown>)
-        const output = await def.execute(args)
-        ctx.onTool({
-          kind: 'tool',
-          id: started.id,
-          name: def.name,
-          status: 'end',
-          result: output.slice(0, 2_000),
-          runId: ctx.runCtx.runId,
-          traceId: ctx.runCtx.traceId,
-          timestampMs: Date.now(),
-          durationMs: Date.now() - startTime
-        })
-        return output
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        ctx.onTool({
-          kind: 'error',
-          message: `[${def.name}] ${message}`,
-          runId: ctx.runCtx.runId,
-          traceId: ctx.runCtx.traceId,
-          timestampMs: Date.now(),
-          durationMs: Date.now() - startTime
-        })
-        ctx.onTool({
-          kind: 'tool',
-          id: started.id,
-          name: def.name,
-          status: 'end',
-          result: message,
-          runId: ctx.runCtx.runId,
-          traceId: ctx.runCtx.traceId,
-          timestampMs: Date.now(),
-          durationMs: Date.now() - startTime
-        })
-        throw error
+    [def.name]: tool({
+      description: def.description,
+      parameters: def.schema,
+      execute: async (rawArgs) => {
+        const started = makeToolEventStart(def.name, rawArgs, ctx.runCtx)
+        ctx.onTool(started)
+        const startTime = started.timestampMs || Date.now()
+        try {
+          const args =
+            typeof rawArgs === 'string'
+              ? ({ question: rawArgs } as Record<string, unknown>)
+              : ((rawArgs ?? {}) as Record<string, unknown>)
+          const output = await def.execute(args)
+          ctx.onTool({
+            kind: 'tool',
+            id: started.id,
+            name: def.name,
+            status: 'end',
+            result: output.slice(0, 2_000),
+            runId: ctx.runCtx.runId,
+            traceId: ctx.runCtx.traceId,
+            timestampMs: Date.now(),
+            durationMs: Date.now() - startTime
+          })
+          return output
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          ctx.onTool({
+            kind: 'error',
+            message: `[${def.name}] ${message}`,
+            runId: ctx.runCtx.runId,
+            traceId: ctx.runCtx.traceId,
+            timestampMs: Date.now(),
+            durationMs: Date.now() - startTime
+          })
+          ctx.onTool({
+            kind: 'tool',
+            id: started.id,
+            name: def.name,
+            status: 'end',
+            result: message,
+            runId: ctx.runCtx.runId,
+            traceId: ctx.runCtx.traceId,
+            timestampMs: Date.now(),
+            durationMs: Date.now() - startTime
+          })
+          throw error
+        }
       }
-    }
+    })
   }
 }
 
@@ -388,7 +388,8 @@ export async function buildSkillBundle(ctx: SkillToolContext): Promise<SkillBund
   const fileSkills = await loadFileSkillDefinitions()
   const merged = dedupeSkillDefinitionsFirstWins(fileSkills)
   mainLog.info(`[buildSkillBundle] ${merged.length} skills loaded`)
-  const tools = merged.map((item) => toTool(item, ctx))
+  const tools =
+    merged.length > 0 ? mergeToolSets(...merged.map((item) => toToolSet(item, ctx))) : {}
   return {
     tools,
     hint: makeSkillHint(merged)
