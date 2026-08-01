@@ -5,8 +5,15 @@
  * MCP 预热 / 探测 / dispose 使用应用级宿主（getMcpHostAgent），不参与会话 send。
  */
 import { type Agent, createAgent, type CreateAgentOptions } from '@agenwork/agent'
+import type { LanguageModel } from 'ai'
 
 import { getMcpConfigPath } from '@/main/store'
+
+/**
+ * 创建时占位模型：会话实际对话模型由 send 的 provider 覆盖；
+ * MCP 宿主不发起 send，仅需满足 createAgent 必填约束。
+ */
+const PLACEHOLDER_PROVIDER = { modelId: 'desktop-placeholder' } as LanguageModel
 
 /**
  * 组装 Desktop 会话用 createAgent 选项。
@@ -16,6 +23,7 @@ import { getMcpConfigPath } from '@/main/store'
  */
 function buildSessionAgentOptions(cwd?: string): CreateAgentOptions {
   return {
+    provider: PLACEHOLDER_PROVIDER,
     ...(cwd ? { local: { cwd } } : {}),
     mcp: { configPath: getMcpConfigPath() }
   }
@@ -44,7 +52,10 @@ let mcpHostAgent: Agent | undefined
  */
 export function getMcpHostAgent(): Agent {
   if (!mcpHostAgent) {
-    mcpHostAgent = createAgent({ mcp: { configPath: getMcpConfigPath() } })
+    mcpHostAgent = createAgent({
+      provider: PLACEHOLDER_PROVIDER,
+      mcp: { configPath: getMcpConfigPath() }
+    })
   }
   return mcpHostAgent
 }
@@ -56,6 +67,9 @@ export function getMcpHostAgent(): Agent {
  */
 export async function resetMcpHostAgent(): Promise<Agent> {
   await mcpHostAgent?.mcp?.dispose()
-  mcpHostAgent = createAgent({ mcp: { configPath: getMcpConfigPath() } })
+  mcpHostAgent = createAgent({
+    provider: PLACEHOLDER_PROVIDER,
+    mcp: { configPath: getMcpConfigPath() }
+  })
   return mcpHostAgent
 }

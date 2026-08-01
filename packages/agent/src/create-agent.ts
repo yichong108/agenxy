@@ -6,6 +6,7 @@
 import {
   type AgentComposerMode,
   type McpServerEntry,
+  normalizeComposerMode,
   type StreamEvent,
 } from "@agenwork/shared";
 import type { CoreMessage, LanguageModel, ToolSet } from "ai";
@@ -99,10 +100,14 @@ export type AgentMcp = {
   dispose: () => Promise<void>;
 };
 
+/** createAgent 未传 local 时的默认值；cwd 缺省时在 send 侧回退 process.cwd() */
+const DEFAULT_LOCAL: CreateAgentLocalOptions = {};
+
 /**
  * createAgent 配置项。
  *
- * 最简用法只需 provider 与 local.cwd；其余未传时使用内置默认（工作区工具）。
+ * provider 必填；local 可选（默认空对象，cwd 回退 process.cwd()）。
+ * 其余未传时使用内置默认（工作区工具）。
  * 配置 skills.paths 后，默认 tooling 会叠加这些路径下的技能工具。
  * 配置 mcp.configPath 后，agent 会从该文件加载 MCP 并绑定工具。
  *
@@ -117,9 +122,9 @@ export type AgentMcp = {
  * ```
  */
 export type CreateAgentOptions = {
-  /** AI SDK LanguageModel；可选注入，供 tooling 等使用；对话模型由 send 的 provider 传入 */
-  provider?: LanguageModel;
-  /** 本地运行环境 */
+  /** AI SDK LanguageModel；创建时必填，send 未传 provider 时作为本轮对话模型 */
+  provider: LanguageModel;
+  /** 本地运行环境；可选，默认 {}，cwd 缺省时回退 process.cwd() */
   local?: CreateAgentLocalOptions;
   /** Skills 扫描路径；由默认 tooling 加载并叠加技能工具 */
   skills?: CreateAgentSkillsOptions;
@@ -137,11 +142,21 @@ export type CreateAgentOptions = {
  * 工具时间线（ToolTimelineEvent）由宿主在 onTool 中自行映射与收集。
  */
 export type AgentRunInput = {
-  composerMode: AgentComposerMode;
+  /**
+   * 发送模式；可选，默认 build（非法值亦回退 build）。
+   */
+  composerMode?: AgentComposerMode;
   messages: CoreMessage[];
-  /** 本轮已解析的聊天模型（由宿主传入，send 内不再 resolve） */
-  provider: LanguageModel;
-  abortController: AbortController;
+  /**
+   * 本轮已解析的聊天模型。
+   * 可选；未传时回退 createAgent 时注入的 provider。
+   */
+  provider?: LanguageModel;
+  /**
+   * 取消控制器；可选，未传时内部新建 AbortController。
+   * 宿主若需外部取消（如 Stop），应自行传入并持有引用。
+   */
+  abortController?: AbortController;
   /**
    * 本轮工作区根目录绝对路径。
    * 优先于 createAgent local.cwd；均未提供时回退 process.cwd()。
@@ -190,18 +205,21 @@ export type Agent = {
 /**
  * 创建 agent 实例 — packages/agent 的唯一入口工厂。
  *
- * 最简入参为 provider + local.cwd；工具与 prompt 由内置默认 tooling 组装。
+ * 必填 provider；local 可选（默认 {}，cwd 回退 process.cwd()）。
+ * 工具与 prompt 由内置默认 tooling 组装。
  * 可选 skills.paths 提供基础 Skills；mcp.configPath 由 agent 内部实现 MCP。
  * 可 `await createAgent(...)`（函数本身同步，await 无害）。
  *
  * 注意：不直接与外部耦合。同会话「运行中不可再发」由宿主按 session 互斥；
  * 不同会话各自独立 send，互不排队。
  *
- * @param options - 创建配置；均可选，空对象即使用全部默认
+ * @param options - 创建配置；provider 必填，local 有默认值
  * @returns 可 send 的 agent 实例
  */
-export function createAgent(options: CreateAgentOptions = {}): Agent {
-  const defaultCwd = options.local?.cwd?.trim() || undefined;
+export function createAgent(options: CreateAgentOptions): Agent {
+  const local = options.local ?? DEFAULT_LOCAL;
+  const defaultCwd = local.cwd?.trim() || process.cwd();
+  const defaultProvider = options.provider;
   const skillPaths = (options.skills?.paths ?? [])
     .map((p) => p.trim())
     .filter(Boolean);
@@ -275,10 +293,7 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
    */
   async function send(input: AgentRunInput): Promise<AgentRunResult> {
     const {
-      composerMode,
       messages,
-      provider,
-      abortController,
       onTextDelta,
       onTool,
       onEmit,
@@ -286,9 +301,14 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
       invokeTimeoutMs,
     } = input;
 
-    // 工作区路径：本轮 send 入参优先，其次 createAgent local.cwd，最后 process.cwd()
-    const root =
-      input.workspacePath?.trim() || defaultCwd || process.cwd();
+    // 发送模式：未传或非法值时默认 build
+    const composerMode = normalizeComposerMode(input.composerMode);
+    // 本轮模型：send 入参优先，否则使用 createAgent 注入的 provider
+    const provider = input.provider ?? defaultProvider;
+    // 取消控制器：未传时内部新建（外部无法 abort，仅满足信号链路）
+    const abortController = input.abortController ?? new AbortController();
+    // 工作区路径：本轮 send 入参优先，其次 createAgent local.cwd（已含默认）
+    const root = input.workspacePath?.trim() || defaultCwd;
     // Shell 隔离键由宿主提供；agent 不使用 sessionId
     const terminalKey = input.terminalKey?.trim() || "term:default";
     const tavilyApiKey = input.tavily?.apiKey?.trim() || undefined;

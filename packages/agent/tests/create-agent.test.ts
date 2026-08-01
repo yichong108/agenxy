@@ -29,18 +29,17 @@ describe('createAgent', () => {
   })
 
   it('返回含 send 的实例', () => {
-    const agent = createAgent({ local: { cwd: '/tmp/ws' } })
+    const agent = createAgent({ provider: stubModel, local: { cwd: '/tmp/ws' } })
     expect(agent.send).toBeTypeOf('function')
   })
 
   it('send 未传 workspacePath 时回退 local.cwd', async () => {
-    const agent = createAgent({ local: { cwd: '/tmp/ws' } })
+    const agent = createAgent({ provider: stubModel, local: { cwd: '/tmp/ws' } })
     const callbacks = createCallbacks()
 
     const result = await agent.send({
       composerMode: 'ask',
       messages: [],
-      provider: stubModel,
       abortController: new AbortController(),
       terminalKey: 'term:s1',
       ...callbacks,
@@ -49,19 +48,19 @@ describe('createAgent', () => {
     })
 
     expect(runReactLoop).toHaveBeenCalledOnce()
-    const [, runPrompt] = vi.mocked(runReactLoop).mock.calls[0]!
+    const [model, runPrompt] = vi.mocked(runReactLoop).mock.calls[0]!
+    expect(model).toBe(stubModel)
     expect(runPrompt).toContain('工作区根目录：/tmp/ws')
     expect(result.messages).toEqual([{ role: 'assistant', content: 'hello' }])
   })
 
   it('send 优先使用本轮 workspacePath', async () => {
-    const agent = createAgent({ local: { cwd: '/tmp/ws' } })
+    const agent = createAgent({ provider: stubModel, local: { cwd: '/tmp/ws' } })
     const callbacks = createCallbacks()
 
     await agent.send({
       composerMode: 'ask',
       messages: [],
-      provider: stubModel,
       abortController: new AbortController(),
       workspacePath: '/tmp/other',
       terminalKey: 'term:s1',
@@ -72,5 +71,23 @@ describe('createAgent', () => {
 
     const [, runPrompt] = vi.mocked(runReactLoop).mock.calls[0]!
     expect(runPrompt).toContain('工作区根目录：/tmp/other')
+  })
+
+  it('未传 local 时使用默认 cwd（process.cwd）', async () => {
+    const agent = createAgent({ provider: stubModel })
+    const callbacks = createCallbacks()
+
+    await agent.send({
+      composerMode: 'ask',
+      messages: [],
+      abortController: new AbortController(),
+      terminalKey: 'term:s1',
+      ...callbacks,
+      maxSteps: 10,
+      invokeTimeoutMs: 60_000
+    })
+
+    const [, runPrompt] = vi.mocked(runReactLoop).mock.calls[0]!
+    expect(runPrompt).toContain(`工作区根目录：${process.cwd()}`)
   })
 })

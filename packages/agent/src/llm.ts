@@ -59,10 +59,11 @@ export function getChatModel(settings: AppSettings): LanguageModel | null {
 /**
  * 解析本轮应使用的聊天模型。
  *
- * 优先使用 createAgent 注入的 provider；未注入时回退到从 settings 创建。
+ * 优先使用显式传入的 provider（如 createAgent / send 注入）；
+ * 未传入时回退到从 settings 创建。
  *
- * @param settings - 应用设置（provider 未注入时使用）
- * @param provider - createAgent 可选注入的 LanguageModel
+ * @param settings - 应用设置（provider 未传入时使用）
+ * @param provider - 可选的 LanguageModel 覆盖
  * @returns 可用模型；均不可用时为 null
  */
 export function resolveChatModel(
