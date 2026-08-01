@@ -1,27 +1,61 @@
 /**
- * Desktop agent 实例 — 注入 Electron 侧工具组装。
+ * Desktop agent 工厂。
  *
- * 模型仍从每次 send 的 settings 解析（不在此固定 provider），
- * 工作区 root 由 session 注入 runMeta。
- * MCP 通过 mcp.configPath 交给 @agenwork/agent 内部实现。
+ * 每个会话应持有独立的 agent 实例（createSessionAgent）。
+ * MCP 预热 / 探测 / dispose 使用应用级宿主（getMcpHostAgent），不参与会话 send。
  */
-import { createAgent, type CreateAgentOptions } from '@agenwork/agent'
+import { type Agent, createAgent, type CreateAgentOptions } from '@agenwork/agent'
 
-import { buildAgentRunPrompt, prepareAgentTooling } from '@/main/agent/agent-tooling'
 import { getMcpConfigPath } from '@/main/store'
 
-const desktopAgentOptions: CreateAgentOptions = {
-  mcp: { configPath: getMcpConfigPath() },
-  prepareTooling: async ({ composerMode, sessionId, root, settings, runCtx }) => {
-    const bundle = await prepareAgentTooling(composerMode, sessionId, root, settings, runCtx)
-    return {
-      tools: bundle.tools,
-      runPrompt: buildAgentRunPrompt(composerMode, root, settings, bundle)
-    }
+/**
+ * 组装 Desktop 会话用 createAgent 选项。
+ *
+ * @param cwd - 工作区根目录（可选）
+ * @returns CreateAgentOptions
+ */
+function buildSessionAgentOptions(cwd?: string): CreateAgentOptions {
+  return {
+    ...(cwd ? { local: { cwd } } : {}),
+    mcp: { configPath: getMcpConfigPath() }
   }
 }
 
 /**
- * Desktop 宿主环境中的 agent 单例。
+ * 为单个会话创建独立 agent。
+ *
+ * 同会话复用该实例；不同会话互不共享，避免并发 send / 状态串扰。
+ * 勿在会话销毁时调用 agent.mcp.dispose（MCP 连接池为进程级）。
+ *
+ * @param options - cwd 等工作区相关配置
+ * @returns 新的 Agent 实例
  */
-export const desktopAgent = createAgent(desktopAgentOptions)
+export function createSessionAgent(options?: { cwd?: string }): Agent {
+  return createAgent(buildSessionAgentOptions(options?.cwd?.trim() || undefined))
+}
+
+/** 应用级 MCP 宿主（warmup / probe / dispose），不用于会话 send */
+let mcpHostAgent: Agent | undefined
+
+/**
+ * 获取（或惰性创建）应用级 MCP 宿主 agent。
+ *
+ * @returns 带 mcp 能力的 Agent
+ */
+export function getMcpHostAgent(): Agent {
+  if (!mcpHostAgent) {
+    mcpHostAgent = createAgent({ mcp: { configPath: getMcpConfigPath() } })
+  }
+  return mcpHostAgent
+}
+
+/**
+ * 设置变更后重建 MCP 宿主：先释放连接池再新建实例。
+ *
+ * @returns 重建后的宿主 Agent
+ */
+export async function resetMcpHostAgent(): Promise<Agent> {
+  await mcpHostAgent?.mcp?.dispose()
+  mcpHostAgent = createAgent({ mcp: { configPath: getMcpConfigPath() } })
+  return mcpHostAgent
+}

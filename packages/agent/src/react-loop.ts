@@ -17,7 +17,7 @@ import {
 /**
  * 构建仅用于模型声明的 ToolSet（去掉 execute，避免 streamText 自动执行）。
  *
- * ReAct 循环手动调用 Tool.execute，以便控制 timeline、错误与取消语义。
+ * ReAct 循环手动调用 Tool.execute，以便控制工具观察上报、错误与取消语义。
  *
  * @param tools - 完整 ToolSet（含 execute）
  * @returns 仅含 parameters/description 的声明用 ToolSet

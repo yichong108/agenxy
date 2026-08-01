@@ -8,7 +8,7 @@ import '@/main/agent/agent-log'
 import { completeCommandInWorkspace, killCommand, runCommand } from '@agenwork/agent'
 import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron'
 
-import { desktopAgent } from '@/main/agent/agent-instance'
+import { getMcpHostAgent, resetMcpHostAgent } from '@/main/agent/agent-instance'
 import {
   bindAgentIpc,
   cancelRun,
@@ -130,7 +130,7 @@ function getMcpWarmupStatus(): McpWarmupStatus {
 
 async function executeMcpWarmupCycle(): Promise<McpWarmupReport> {
   const gen = ++mcpWarmupGen
-  const servers = (await desktopAgent.mcp?.warmup()) ?? []
+  const servers = (await getMcpHostAgent().mcp?.warmup()) ?? []
   if (gen !== mcpWarmupGen) {
     return lastMcpWarmupReport ?? { atMs: Date.now(), servers: [] }
   }
@@ -478,11 +478,11 @@ function registerIpc(): void {
     if (patch.mcpServers !== undefined) {
       mcpWarmupGen++
       mcpWarmupPromise = null
-      void desktopAgent.mcp?.dispose()
     }
     const next = await setSettings(patch)
     mainWindow?.webContents.send(EVENTS.SETTINGS_SYNC, next)
     if (patch.mcpServers !== undefined) {
+      await resetMcpHostAgent()
       void startMcpWarmup()
     }
     return next
@@ -614,7 +614,9 @@ function registerIpc(): void {
     if (!entry || typeof entry !== 'object') {
       return { ok: false as const, error: '无效配置' }
     }
-    return (await desktopAgent.mcp?.probe(entry)) ?? { ok: false as const, error: 'MCP 未配置' }
+    return (
+      (await getMcpHostAgent().mcp?.probe(entry)) ?? { ok: false as const, error: 'MCP 未配置' }
+    )
   })
   ipcMain.handle(IPC.SKILLS_STATE, async () => gatherSkillsRuntimeState())
   ipcMain.handle(IPC.SKILLS_UNINSTALL, async (_e, payload: SkillsUninstallPayload) => {
@@ -714,7 +716,7 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   applicationIsQuitting = true
-  void desktopAgent.mcp?.dispose()
+  void getMcpHostAgent().mcp?.dispose()
   void shutdownLangfuseTracing()
 })
 

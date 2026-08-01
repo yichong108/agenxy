@@ -1,16 +1,32 @@
-import type { ToolTimelineEvent } from '@agenwork/shared'
 import { tool, type Tool, type ToolSet } from 'ai'
 import type { z } from 'zod'
 
 /**
- * 工具执行上下文：run 标识与 timeline 回调。
+ * 工具执行生命周期观察（start / end）。
+ *
+ * 供宿主映射为产品侧时间线（如 ToolTimelineEvent）；agent 包本身不依赖 UI/IPC 类型。
+ */
+export type ToolObservation = {
+  id: string
+  name: string
+  status: 'start' | 'end'
+  args?: string
+  result?: string
+  runId?: string
+  traceId?: string
+  timestampMs?: number
+  durationMs?: number
+}
+
+/**
+ * 工具执行上下文：run 标识与观察回调。
  *
  * AI SDK 的 ToolExecutionOptions 不含 runId / onTool，故由宿主/工作流注入。
  */
 export type ToolExecutorContext = {
   runId: string
   traceId: string
-  onTool: (e: ToolTimelineEvent) => void
+  onTool: (e: ToolObservation) => void
 }
 
 type ToolDefinition<T extends z.ZodTypeAny> = {
@@ -49,7 +65,7 @@ export function filterToolSet(tools: ToolSet, predicate: (name: string) => boole
 }
 
 /**
- * 将 zod 工具定义包装为单键 AI SDK ToolSet（含 timeline 上报）。
+ * 将 zod 工具定义包装为单键 AI SDK ToolSet（含生命周期观察上报）。
  *
  * 返回 ToolSet 而非自定义结构，可直接传给 streamText / generateText，
  * 或多个结果经 mergeToolSets 合并。
@@ -77,7 +93,6 @@ export function defineTool<T extends z.ZodTypeAny>(
           : String(parsed)
 
       runCtx.onTool({
-        kind: 'tool',
         id,
         name,
         status: 'start',
@@ -92,7 +107,6 @@ export function defineTool<T extends z.ZodTypeAny>(
       const truncated = truncateTo ? resultStr.slice(0, truncateTo) : resultStr
 
       runCtx.onTool({
-        kind: 'tool',
         id,
         name,
         status: 'end',

@@ -8,7 +8,6 @@ import {
   type AppSettings,
   type McpServerEntry,
   type StreamEvent,
-  type ToolTimelineEvent,
 } from "@agenwork/shared";
 import type { CoreMessage, LanguageModel, ToolSet } from "ai";
 
@@ -17,7 +16,7 @@ import type {
   RunMeta,
   WorkflowRunContext,
 } from "./run-types.js";
-import { mergeToolSets } from "./define-tool.js";
+import { mergeToolSets, type ToolObservation } from "./define-tool.js";
 import {
   buildMcpToolsFromConfig,
   disposeMcpConnectionPool,
@@ -47,8 +46,6 @@ export type CreateAgentLocalOptions = {
 
 /**
  * createAgent Skills 配置：仅声明扫描路径，由 agent 实现基础加载。
- *
- * 更复杂的 skills 组装（如按来源合并、市场安装）应由宿主在 prepareTooling 中自行完成。
  */
 export type CreateAgentSkillsOptions = {
   /** 技能根目录绝对路径列表；递归扫描 SKILL.md，同名时靠前路径优先 */
@@ -59,7 +56,7 @@ export type CreateAgentSkillsOptions = {
  * createAgent MCP 配置：传入配置文件路径，由 agent 内部加载并绑定 MCP 工具。
  *
  * 配置文件支持 Cursor 形态与本应用数组形态。
- * 无论是否注入 prepareTooling，只要提供 configPath，agent 都会在 build 模式叠加 MCP 工具。
+ * 提供 configPath 后，agent 会在 build 模式叠加 MCP 工具。
  */
 export type CreateAgentMcpOptions = {
   /** MCP 配置文件绝对路径 */
@@ -85,7 +82,7 @@ export type AgentMcp = {
  *
  * 最简用法只需 provider 与 local.cwd；其余未传时使用内置默认（工作区工具）。
  * 配置 skills.paths 后，默认 tooling 会叠加这些路径下的技能工具。
- * 配置 mcp.configPath 后，agent 会从该文件加载 MCP 并绑定工具（含自定义 prepareTooling 时）。
+ * 配置 mcp.configPath 后，agent 会从该文件加载 MCP 并绑定工具。
  *
  * @example
  * ```ts
@@ -102,26 +99,23 @@ export type CreateAgentOptions = {
   provider?: LanguageModel;
   /** 本地运行环境 */
   local?: CreateAgentLocalOptions;
-  /**
-   * Skills 扫描路径；仅在未注入 prepareTooling 时由默认 tooling 使用。
-   * 宿主注入 prepareTooling 时自行决定如何加载 skills。
-   */
+  /** Skills 扫描路径；由默认 tooling 加载并叠加技能工具 */
   skills?: CreateAgentSkillsOptions;
   /**
-   * MCP 配置文件路径；由 agent 内部实现连接池与工具绑定。
-   * 注入 prepareTooling 时仍会自动叠加 MCP 工具与上下文提示。
+   * MCP 配置文件路径；由 agent 内部实现连接池与工具绑定，
+   * 并自动叠加 MCP 工具与上下文提示。
    */
   mcp?: CreateAgentMcpOptions;
-  /** 工具与 prompt 组装；未传则使用工作区内置工具 + skills.paths（若有） */
-  prepareTooling?: WorkflowDeps["prepareTooling"];
 };
 
 /**
- * 单次 run 的宿主回调：流式输出、timeline 与持久化。
+ * 单次 run 的宿主回调：流式输出、工具观察与持久化。
+ *
+ * 工具时间线（ToolTimelineEvent）由宿主在 onTool 中自行映射与收集。
  */
 export type AgentRunCallbacks = {
   onTextDelta: (text: string) => void;
-  onTool: (event: ToolTimelineEvent) => void;
+  onTool: (event: ToolObservation) => void;
   emit: (event: StreamEvent) => void;
   persistMessages: (messages: CoreMessage[]) => void;
 };
@@ -147,7 +141,6 @@ export type AgentRunInput = {
  */
 export type AgentRunResult = {
   messages: CoreMessage[];
-  toolEvents: ToolTimelineEvent[];
   streamedChars: number;
 };
 
@@ -162,35 +155,6 @@ export type Agent = {
 };
 
 /**
- * 将 MCP 工具与上下文提示合并进已有 prepareTooling 结果。
- *
- * @param base - 宿主或默认 prepareTooling
- * @param mcpConfigPath - MCP 配置文件路径
- * @returns 叠加 MCP 后的 prepareTooling
- */
-function wrapPrepareToolingWithMcp(
-  base: NonNullable<CreateAgentOptions["prepareTooling"]>,
-  mcpConfigPath: string,
-): NonNullable<CreateAgentOptions["prepareTooling"]> {
-  return async (args) => {
-    const prepared = await base(args);
-    if (args.composerMode === "ask") return prepared;
-
-    const mcpResult = await buildMcpToolsFromConfig(mcpConfigPath, args.runCtx);
-    if (!Object.keys(mcpResult.tools).length && !mcpResult.contextHints) {
-      return prepared;
-    }
-
-    return {
-      tools: mergeToolSets(prepared.tools, mcpResult.tools),
-      runPrompt: mcpResult.contextHints
-        ? `${prepared.runPrompt}\n\n${mcpResult.contextHints}`
-        : prepared.runPrompt,
-    };
-  };
-}
-
-/**
  * 创建默认 tooling：工作区内置工具 + 可选 skills.paths + 可选 MCP。
  *
  * @param skillPaths - createAgent 配置的技能路径
@@ -200,7 +164,7 @@ function wrapPrepareToolingWithMcp(
 function createDefaultPrepareTooling(
   skillPaths: string[],
   mcpConfigPath?: string,
-): NonNullable<CreateAgentOptions["prepareTooling"]> {
+): WorkflowDeps["prepareTooling"] {
   return async ({ composerMode, sessionId, root, settings, runCtx }) => {
     const workspaceTools = buildWorkspaceTools({
       sessionId,
@@ -251,7 +215,7 @@ function createDefaultPrepareTooling(
 /**
  * 创建 agent 实例 — packages/agent 的唯一入口工厂。
  *
- * 最简入参为 provider + local.cwd；prepareTooling 等未传时使用默认。
+ * 最简入参为 provider + local.cwd；工具与 prompt 由内置默认 tooling 组装。
  * 可选 skills.paths 提供基础 Skills；mcp.configPath 由 agent 内部实现 MCP。
  * 可 `await createAgent(...)`（函数本身同步，await 无害）。
  *
@@ -268,18 +232,8 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
     .filter(Boolean);
   const mcpConfigPath = options.mcp?.configPath?.trim() || undefined;
 
-  const basePrepare =
-    options.prepareTooling ??
-    createDefaultPrepareTooling(skillPaths, mcpConfigPath);
-
-  // 宿主注入 prepareTooling 时，默认 tooling 不会跑；仍需按 configPath 叠加 MCP
-  const prepareTooling =
-    options.prepareTooling && mcpConfigPath
-      ? wrapPrepareToolingWithMcp(options.prepareTooling, mcpConfigPath)
-      : basePrepare;
-
   const deps: WorkflowDeps = {
-    prepareTooling,
+    prepareTooling: createDefaultPrepareTooling(skillPaths, mcpConfigPath),
     provider: options.provider,
   };
 
@@ -303,7 +257,6 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
     const root = input.runMeta.root?.trim() || defaultCwd || process.cwd();
     const runMeta: RunMeta = { ...input.runMeta, root };
 
-    const runToolEvents: ToolTimelineEvent[] = [];
     const streamedCharsRef = { current: 0 };
 
     const reactBridge: ReactRunBridge = {
@@ -317,12 +270,8 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
     const runContext: WorkflowRunContext = {
       settings,
       signal: abortController.signal,
-      onTool: (e) => {
-        runToolEvents.push(e);
-        callbacks.onTool(e);
-      },
+      onTool: callbacks.onTool,
       emit: callbacks.emit,
-      runToolEvents,
       reactBridge,
       provider: options.provider,
     };
@@ -360,7 +309,6 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
 
     return {
       messages: workflowResult.messages,
-      toolEvents: workflowResult.toolEvents,
       streamedChars: streamedCharsRef.current,
     };
   }

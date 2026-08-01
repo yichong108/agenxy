@@ -4,8 +4,10 @@
  * 供 createAgent 与 runWorkflow 共用；不依赖宿主实现。
  */
 
-import type { AgentComposerMode, AppSettings, StreamEvent, ToolTimelineEvent } from '@agenwork/shared'
+import type { AgentComposerMode, AppSettings, StreamEvent } from '@agenwork/shared'
 import type { CoreMessage, LanguageModel, ToolSet } from 'ai'
+
+import type { ToolObservation } from './define-tool.js'
 
 /**
  * 工具准备阶段产物：ReAct 可用工具与 system prompt。
@@ -48,14 +50,14 @@ export type ReactRunBridge = {
 /**
  * 单次 agent 工作流运行时的可变上下文。
  *
- * 贯穿工具准备与 ReAct 各阶段；宿主可在 prepareTooling 中使用 emit / signal。
+ * 贯穿工具准备与 ReAct 各阶段；tooling 可通过 emit / signal 与宿主协作。
+ * 工具观察仅回调宿主，时间线收集由宿主负责。
  */
 export type WorkflowRunContext = {
   settings: AppSettings
   signal: AbortSignal
-  onTool: (e: ToolTimelineEvent) => void
+  onTool: (e: ToolObservation) => void
   emit: (event: StreamEvent) => void
-  runToolEvents: ToolTimelineEvent[]
   reactBridge: ReactRunBridge
   /** createAgent 注入的模型；未设则各阶段从 settings 解析 */
   provider?: LanguageModel
@@ -69,5 +71,4 @@ export type WorkflowState = {
   composerMode: AgentComposerMode
   runMeta: RunMeta
   tooling: PreparedTooling | null
-  toolEvents: ToolTimelineEvent[]
 }

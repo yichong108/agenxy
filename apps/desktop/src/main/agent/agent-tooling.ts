@@ -10,6 +10,7 @@ import { type AgentComposerMode, type AppSettings } from '@agenwork/shared'
 
 import { buildSkillBundle } from '@/main/agent/skills/index'
 import { userDataPath } from '@/main/store'
+import type { ToolTimelineEvent } from '@/shared/ipc'
 
 export type { ToolExecutorContext, ToolSet } from '@agenwork/agent'
 
@@ -31,7 +32,7 @@ export type AgentTooling = {
  * @param sessionId - 会话 ID（terminal key）
  * @param root - 工作区根目录
  * @param settings - 应用设置
- * @param runCtx - 工具 timeline 回调
+ * @param runCtx - 工具观察回调
  * @returns 工具 ToolSet 与 prompt 片段
  */
 export async function prepareAgentTooling(
@@ -56,12 +57,27 @@ export async function prepareAgentTooling(
   }
 
   const termKey = `term:${sessionId}`
+  /** Desktop skills 使用 ToolTimelineEvent；仅将 tool 调用观察回传给 agent runCtx */
+  const onSkillTool = (e: ToolTimelineEvent) => {
+    if (e.kind !== 'tool') return
+    runCtx.onTool({
+      id: e.id,
+      name: e.name,
+      status: e.status,
+      args: e.args,
+      result: e.result,
+      runId: e.runId,
+      traceId: e.traceId,
+      timestampMs: e.timestampMs,
+      durationMs: e.durationMs
+    })
+  }
   const skillBundle = await buildSkillBundle({
     root,
     termKey,
     settings,
     runCtx,
-    onTool: runCtx.onTool
+    onTool: onSkillTool
   })
   const tools = mergeToolSets(skillBundle.tools, workspaceTools)
   return {

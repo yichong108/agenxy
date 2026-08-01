@@ -28,7 +28,6 @@ export type RunWorkflowInput = {
 
 export type RunWorkflowResult = {
   messages: CoreMessage[]
-  toolEvents: WorkflowState['toolEvents']
 }
 
 /** @deprecated 使用 RunWorkflowInput */
@@ -38,10 +37,10 @@ export type RunAgenworkPipelineInput = RunWorkflowInput
 export type RunAgenworkPipelineResult = RunWorkflowResult
 
 /**
- * 宿主注入的工作流依赖（工具组装等）。
+ * 工作流依赖（工具组装等）。
  *
- * agent 核心只负责调用 prepareTooling 并进入 ReAct 循环；
- * 宿主可在 prepareTooling 内完成自定义工具/skills 组装。
+ * agent 核心调用 prepareTooling 后进入 ReAct 循环；
+ * prepareTooling 由 createAgent 的默认 tooling 注入。
  */
 export type WorkflowDeps = {
   prepareTooling: (args: {
@@ -123,31 +122,26 @@ async function prepareToolingPhase(
  * @param state - 当前状态
  * @param runContext - 运行上下文
  * @param deps - 宿主注入依赖
- * @returns 运行结束后的 messages 与 toolEvents
+ * @returns 运行结束后的 messages
  */
 async function runAgentLoopPhase(
   state: WorkflowState,
   runContext: WorkflowRunContext,
   deps: WorkflowDeps
-): Promise<{ messages: CoreMessage[]; toolEvents: WorkflowState['toolEvents'] }> {
+): Promise<{ messages: CoreMessage[] }> {
   const bridge = runContext.reactBridge
   const prepared = state.tooling
   if (!prepared) {
     throw new Error('[runAgentLoopPhase] tooling not prepared')
   }
 
-  const { composerMode } = state
-  const { settings, runToolEvents } = runContext
+  const { settings } = runContext
   const { tools, runPrompt } = prepared
 
   const model = resolveChatModel(settings, deps.provider ?? runContext.provider)
   if (!model) {
     throw new Error('请先在设置中配置 API Key，或向 createAgent 传入 provider')
   }
-
-  agentLog.info(
-    `[runAgentLoopPhase] mode=${composerMode} runPrompt: ${JSON.stringify(runPrompt, null, 2)}`
-  )
 
   const onStreamToken = (token: string) => {
     bridge.streamedCharsRef.current += token.length
@@ -166,8 +160,7 @@ async function runAgentLoopPhase(
   )
 
   return {
-    messages: runMessages.length > 0 ? runMessages : state.messages,
-    toolEvents: runToolEvents
+    messages: runMessages.length > 0 ? runMessages : state.messages
   }
 }
 
@@ -176,7 +169,7 @@ async function runAgentLoopPhase(
  *
  * @param input - 初始状态与 runContext
  * @param deps - 宿主注入依赖
- * @returns 运行结束后的 messages 与 toolEvents
+ * @returns 运行结束后的 messages
  */
 export async function runWorkflow(
   input: RunWorkflowInput,
@@ -186,8 +179,7 @@ export async function runWorkflow(
     messages: input.messages,
     composerMode: input.composerMode,
     runMeta: input.runMeta,
-    tooling: null,
-    toolEvents: []
+    tooling: null
   }
 
   const { runContext, initRunCallbacks, signal } = input
@@ -197,11 +189,9 @@ export async function runWorkflow(
 
   const agentLoopResult = await runAgentLoopPhase(state, runContext, deps)
   state.messages = agentLoopResult.messages
-  state.toolEvents = [...state.toolEvents, ...agentLoopResult.toolEvents]
 
   return {
-    messages: state.messages,
-    toolEvents: state.toolEvents
+    messages: state.messages
   }
 }
 

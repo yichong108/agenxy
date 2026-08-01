@@ -461,7 +461,7 @@ export type BuildMcpToolsResult = {
  * 为已启用的 MCP 服务器生成 Agent 工具（池化 stdio 连接，空闲自动断开）。
  *
  * @param servers - MCP 服务器列表
- * @param runCtx - 工具 timeline 上下文
+ * @param runCtx - 工具观察回调上下文
  * @returns ToolSet、上下文提示与原始服务器列表
  */
 export async function buildMcpTools(
@@ -504,7 +504,6 @@ export async function buildMcpTools(
               const startedAt = Date.now()
               const argStr = JSON.stringify(args).slice(0, 2_000)
               onTool({
-                kind: 'tool',
                 id,
                 name: lcName,
                 status: 'start',
@@ -522,7 +521,6 @@ export async function buildMcpTools(
                 })
                 const text = formatCallToolResult(result)
                 onTool({
-                  kind: 'tool',
                   id,
                   name: lcName,
                   status: 'end',
@@ -536,7 +534,6 @@ export async function buildMcpTools(
               } catch (err) {
                 const message = err instanceof Error ? err.message : String(err)
                 onTool({
-                  kind: 'tool',
                   id,
                   name: lcName,
                   status: 'end',
@@ -567,7 +564,7 @@ export async function buildMcpTools(
  * 从配置文件加载 MCP 并生成 Agent 工具。
  *
  * @param configPath - MCP 配置文件路径
- * @param runCtx - 工具 timeline 上下文
+ * @param runCtx - 工具观察回调上下文
  * @returns 工具列表、上下文提示与服务器列表
  */
 export async function buildMcpToolsFromConfig(

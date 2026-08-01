@@ -25,6 +25,7 @@ export {
   mergeToolSets,
   type Tool,
   type ToolExecutorContext,
+  type ToolObservation,
   type ToolSet
 } from './define-tool.js'
 
@@ -50,7 +51,7 @@ export { getChatModel, resolveChatModel } from './llm.js'
 
 export { agentLog, type AgentLogger } from './logger.js'
 
-/** 工作区工具组装（宿主 prepareTooling 用） */
+/** 工作区工具组装 */
 export {
   buildWorkspaceRunPrompt,
   buildWorkspaceTools,

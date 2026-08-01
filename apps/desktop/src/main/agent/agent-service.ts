@@ -1,13 +1,15 @@
 import {
+  type Agent,
   assistantMessage,
   contentToText,
   type CoreMessage,
   killCommand,
+  type ToolObservation,
   userMessage
 } from '@agenwork/agent'
 import type { WebContents } from 'electron'
 
-import { desktopAgent } from '@/main/agent/agent-instance'
+import { createSessionAgent } from '@/main/agent/agent-instance'
 import { agentLog } from '@/main/agent/agent-log'
 import { flushLangfuseTracing } from '@/main/langfuse'
 import { getSessionMessages, getSettings, getWorkspaceById, setSessionMessages } from '@/main/store'
@@ -26,11 +28,24 @@ export { agentLog } from '@/main/agent/agent-log'
 
 type SessionRuntime = {
   workspaceId: string
+  /** 该会话独立的 agent 实例（勿跨会话复用） */
+  agent: Agent
   messages: CoreMessage[]
   controller: AbortController | null
   terminalKey: string
   /** 本轮发给 UI 的用户展示文案（与模型侧 content 可能不同） */
   pendingUserDisplayText?: string
+}
+
+/**
+ * 按工作区创建会话级 agent。
+ *
+ * @param workspaceId - 工作区 ID
+ * @returns 新 Agent
+ */
+function createAgentForWorkspace(workspaceId: string): Agent {
+  const cwd = getWorkspaceById(workspaceId)?.path?.trim() || undefined
+  return createSessionAgent({ cwd })
 }
 
 const sessions = new Map<string, SessionRuntime>()
@@ -165,16 +180,32 @@ export function bindAgentIpc(wc: WebContents): void {
   webContents = wc
 }
 
+/**
+ * 初始化或校正会话运行时：每个会话绑定独立 agent。
+ *
+ * 若会话已存在但工作区变更，则重建该会话的 agent（更新 cwd）。
+ *
+ * @param workspaceId - 工作区 ID
+ * @param sessionId - 会话 ID
+ */
 export function initSessionState(workspaceId: string, sessionId: string): void {
-  if (!sessions.has(sessionId)) {
-    const persisted = getSessionMessages(workspaceId, sessionId)
-    sessions.set(sessionId, {
-      workspaceId,
-      messages: fromPersistedMessages(persisted),
-      controller: null,
-      terminalKey: `term:${sessionId}`
-    })
+  const existing = sessions.get(sessionId)
+  if (existing) {
+    if (existing.workspaceId !== workspaceId) {
+      existing.workspaceId = workspaceId
+      existing.agent = createAgentForWorkspace(workspaceId)
+    }
+    return
   }
+
+  const persisted = getSessionMessages(workspaceId, sessionId)
+  sessions.set(sessionId, {
+    workspaceId,
+    agent: createAgentForWorkspace(workspaceId),
+    messages: fromPersistedMessages(persisted),
+    controller: null,
+    terminalKey: `term:${sessionId}`
+  })
 }
 
 /**
@@ -292,12 +323,20 @@ export async function runUserMessage(
       })
     }
 
-    const onTool = (e: ToolTimelineEvent) => {
+    /** agent 仅上报 ToolObservation；宿主映射为 UI/IPC 用的 ToolTimelineEvent */
+    const onTool = (obs: ToolObservation) => {
+      const e: ToolTimelineEvent = {
+        kind: 'tool',
+        ...obs,
+        runId: obs.runId ?? runId,
+        traceId: obs.traceId ?? traceId,
+        timestampMs: obs.timestampMs ?? Date.now()
+      }
       runToolEvents.push(e)
       emitTool(e)
     }
 
-    const graphResult = await desktopAgent.send({
+    const graphResult = await session.agent.send({
       composerMode,
       messages: session.messages,
       abortController: ac,
@@ -334,7 +373,7 @@ export async function runUserMessage(
     latest.messages = graphResult.messages
 
     persistSessionMessages(latest.workspaceId, sessionId, latest.messages, {
-      toolEventsForLastAssistant: graphResult.toolEvents,
+      toolEventsForLastAssistant: runToolEvents.length > 0 ? runToolEvents : undefined,
       userDisplayText: latest.pendingUserDisplayText
     })
     emit({
