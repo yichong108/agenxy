@@ -136,8 +136,10 @@ export type AgentRunInput = {
   settings: AppSettings;
   runMeta: RunMeta;
   callbacks: AgentRunCallbacks;
-  recursionLimit: number;
-  invokeTimeoutMs: number;
+  /** 最大工具调用轮次；缺省时使用 MAX_AGENT_LOOP_STEPS */
+  maxSteps?: number;
+  /** 循环超时（毫秒）；缺省时使用 defaultSettings.agentRunTimeoutMs */
+  invokeTimeoutMs?: number;
 };
 
 /**
@@ -294,7 +296,7 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
       abortController,
       settings,
       callbacks,
-      recursionLimit,
+      maxSteps,
       invokeTimeoutMs,
     } = input;
 
@@ -306,7 +308,7 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
 
     const reactBridge: ReactRunBridge = {
       abortController,
-      recursionLimit,
+      maxSteps,
       invokeTimeoutMs,
       streamedCharsRef,
       pushStreamToken: (token) => callbacks.onTextDelta(token),

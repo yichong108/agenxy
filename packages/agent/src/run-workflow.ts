@@ -161,7 +161,7 @@ async function runAgentLoopPhase(
     tools,
     bridge.abortController,
     onStreamToken,
-    bridge.recursionLimit,
+    bridge.maxSteps,
     bridge.invokeTimeoutMs
   )
 

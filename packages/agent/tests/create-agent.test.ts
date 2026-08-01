@@ -53,7 +53,7 @@ describe('createAgent', () => {
         agentUserText: 'hi'
       },
       callbacks,
-      recursionLimit: 10,
+      maxSteps: 10,
       invokeTimeoutMs: 60_000
     })
 

@@ -2,6 +2,7 @@
  * @file react-loop.ts
  * @description ReAct 循环实现（基于 AI SDK CoreMessage + ToolSet）
  */
+import { defaultSettings, MAX_AGENT_LOOP_STEPS } from '@agenwork/shared'
 import {
   streamText,
   type CoreAssistantMessage,
@@ -12,13 +13,6 @@ import {
   type ToolCallPart,
   type ToolSet
 } from 'ai'
-
-/** 待执行的工具调用（从 assistant 消息的 tool-call parts 提取） */
-type PendingToolCall = {
-  id: string
-  name: string
-  args: Record<string, unknown>
-}
 
 /**
  * 构建仅用于模型声明的 ToolSet（去掉 execute，避免 streamText 自动执行）。
@@ -40,111 +34,76 @@ function buildToolDeclarations(tools: ToolSet): ToolSet {
 }
 
 /**
- * 从 messages 末尾 assistant 消息提取待执行 tool_calls。
+ * 构造单条 tool 结果消息。
+ * 
+ * 如果把完整 tools（含 execute）直接传给 streamText，SDK 在模型返回 tool_calls 后会自动执行（即使默认 maxSteps: 1）。
  *
- * @param messages - AI SDK CoreMessage 列表
- * @returns 待处理工具调用列表
+ * @param tc - 对应的工具调用
+ * @param result - 执行结果文本
+ * @param isError - 是否为错误结果
+ * @returns AI SDK tool 消息
  */
-function extractPendingToolCalls(messages: CoreMessage[]): PendingToolCall[] {
-  const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
-  if (!lastAssistant) return []
-  const content = lastAssistant.content
-  if (typeof content === 'string') return []
-  return content
-    .filter((part): part is ToolCallPart => part.type === 'tool-call')
-    .map((tc, idx) => ({
-      id: tc.toolCallId || `${tc.toolName}-${idx}`,
-      name: tc.toolName,
-      args: (tc.args ?? {}) as Record<string, unknown>
-    }))
+function toolResultMessage(tc: ToolCallPart, result: string, isError?: boolean): CoreToolMessage {
+  return {
+    role: 'tool',
+    content: [
+      {
+        type: 'tool-result',
+        toolCallId: tc.toolCallId,
+        toolName: tc.toolName,
+        result,
+        ...(isError ? { isError: true } : {})
+      }
+    ]
+  }
 }
 
 /**
- * 依次执行待处理工具调用，收集 tool 结果消息。
+ * 依次执行工具调用，收集 tool 结果消息。
  *
- * @param pending - 待执行工具调用
+ * @param toolCalls - streamText 返回的工具调用
  * @param tools - AI SDK ToolSet
  * @param messages - 当前会话（传给 ToolExecutionOptions）
  * @param signal - 可选取消信号
  * @returns AI SDK tool 结果消息列表
  */
-async function executePendingToolCalls(
-  pending: PendingToolCall[],
+async function executeToolCalls(
+  toolCalls: ToolCallPart[],
   tools: ToolSet,
   messages: CoreMessage[],
   signal?: AbortSignal
 ): Promise<CoreToolMessage[]> {
   const out: CoreToolMessage[] = []
-  for (const tc of pending) {
-    const impl = tools[tc.name]
+  for (const tc of toolCalls) {
+    const impl = tools[tc.toolName]
     if (!impl?.execute) {
-      out.push({
-        role: 'tool',
-        content: [
-          {
-            type: 'tool-result',
-            toolCallId: tc.id,
-            toolName: tc.name,
-            result: `Tool not found: ${tc.name}`,
-            isError: true
-          }
-        ]
-      })
+      out.push(toolResultMessage(tc, `Tool not found: ${tc.toolName}`, true))
       continue
     }
     try {
       const result = await impl.execute(tc.args, {
-        toolCallId: tc.id,
+        toolCallId: tc.toolCallId,
         messages,
         abortSignal: signal
       })
       const content = typeof result === 'string' ? result : JSON.stringify(result)
-      out.push({
-        role: 'tool',
-        content: [
-          {
-            type: 'tool-result',
-            toolCallId: tc.id,
-            toolName: tc.name,
-            result: content
-          }
-        ]
-      })
+      out.push(toolResultMessage(tc, content))
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
-      out.push({
-        role: 'tool',
-        content: [
-          {
-            type: 'tool-result',
-            toolCallId: tc.id,
-            toolName: tc.name,
-            result: message,
-            isError: true
-          }
-        ]
-      })
+      out.push(toolResultMessage(tc, message, true))
     }
   }
   return out
 }
 
 /**
- * 根据 streamText 结果构造 assistant CoreMessage。
+ * 根据流式结果构造 assistant CoreMessage。
  *
  * @param text - 助手文本
- * @param toolCalls - AI SDK 返回的工具调用
+ * @param toolCalls - streamText 返回的工具调用
  * @returns assistant 消息
  */
-function buildAssistantMessage(
-  text: string,
-  toolCalls: Array<{
-    toolCallId: string
-    toolName: string
-    args?: unknown
-    input?: unknown
-  }>
-): CoreAssistantMessage {
+function buildAssistantMessage(text: string, toolCalls: ToolCallPart[]): CoreAssistantMessage {
   if (!toolCalls.length) {
     return { role: 'assistant', content: text }
   }
@@ -153,14 +112,7 @@ function buildAssistantMessage(
   if (text) {
     content.push({ type: 'text', text })
   }
-  for (const tc of toolCalls) {
-    content.push({
-      type: 'tool-call',
-      toolCallId: tc.toolCallId,
-      toolName: tc.toolName,
-      args: (tc.args ?? tc.input ?? {}) as Record<string, unknown>
-    })
-  }
+  content.push(...toolCalls)
   return { role: 'assistant', content }
 }
 
@@ -175,8 +127,8 @@ function buildAssistantMessage(
  * @param tools - 可用工具（AI SDK ToolSet）
  * @param ac - 取消控制器
  * @param onToken - 流式 token 回调
- * @param recursionLimit - 最大工具调用轮次
- * @param timeoutMs - 循环超时（毫秒）
+ * @param maxSteps - 最大工具调用轮次；缺省时使用 MAX_AGENT_LOOP_STEPS
+ * @param timeoutMs - 循环超时（毫秒）；缺省时使用 defaultSettings.agentRunTimeoutMs
  * @returns 运行结束后的 CoreMessage 列表（含输入消息与本轮新增）
  */
 export async function runReactLoop(
@@ -186,20 +138,23 @@ export async function runReactLoop(
   tools: ToolSet,
   ac: AbortController,
   onToken: (token: string) => void,
-  recursionLimit: number,
-  timeoutMs: number
+  maxSteps?: number,
+  timeoutMs?: number
 ): Promise<CoreMessage[]> {
+  const resolvedMaxSteps = maxSteps ?? MAX_AGENT_LOOP_STEPS
+  const resolvedTimeoutMs = timeoutMs ?? defaultSettings.agentRunTimeoutMs
+
   const declarations = buildToolDeclarations(tools)
   const working = [...messages]
   let steps = 0
 
-  const deadline = Date.now() + timeoutMs
+  const deadline = Date.now() + resolvedTimeoutMs
 
-  while (steps < recursionLimit) {
+  while (steps < resolvedMaxSteps) {
     if (ac.signal.aborted) throw new Error('Aborted')
     if (Date.now() > deadline) {
       ac.abort()
-      throw new Error(`Model-tool loop timeout (>${timeoutMs}ms), run aborted`)
+      throw new Error(`Model-tool loop timeout (>${resolvedTimeoutMs}ms), run aborted`)
     }
 
     const result = streamText({
@@ -219,16 +174,12 @@ export async function runReactLoop(
     const text = await result.text
     const toolCalls = await result.toolCalls
 
-    working.push(buildAssistantMessage(text, toolCalls ?? []))
+    working.push(buildAssistantMessage(text, toolCalls))
 
-    if (!toolCalls?.length) break
+    if (toolCalls.length === 0) break
     steps += 1
 
-    const pending = extractPendingToolCalls(working)
-    if (pending.length === 0) break
-
-    const results = await executePendingToolCalls(pending, tools, working, ac.signal)
-    working.push(...results)
+    working.push(...(await executeToolCalls(toolCalls, tools, working, ac.signal)))
   }
 
   return working

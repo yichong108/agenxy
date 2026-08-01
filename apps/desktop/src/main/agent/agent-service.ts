@@ -15,6 +15,7 @@ import {
   type AgentSendOptions,
   type ChatMessage,
   EVENTS,
+  MAX_AGENT_LOOP_STEPS,
   normalizeComposerMode,
   type StreamEvent,
   type ToolTimelineEvent
@@ -310,7 +311,7 @@ export async function runUserMessage(
         userDisplayText,
         agentUserText
       },
-      recursionLimit: settings.maxAgentLoopSteps,
+      maxSteps: MAX_AGENT_LOOP_STEPS,
       invokeTimeoutMs: settings.agentRunTimeoutMs,
       callbacks: {
         onTextDelta: (text) => {

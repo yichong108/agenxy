@@ -71,7 +71,7 @@ curl http://127.0.0.1:3100/health
 ```bash
 curl -X PUT http://127.0.0.1:3100/settings \
   -H "Content-Type: application/json" \
-  -d '{"tavilyApiKey":"tvly-xxx","maxAgentLoopSteps":32}'
+  -d '{"tavilyApiKey":"tvly-xxx"}'
 ```
 
 ## 脚本

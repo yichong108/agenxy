@@ -37,8 +37,10 @@ export type RunMeta = {
  */
 export type ReactRunBridge = {
   abortController: AbortController
-  recursionLimit: number
-  invokeTimeoutMs: number
+  /** 最大工具调用轮次；缺省时由 runReactLoop 回落到 MAX_AGENT_LOOP_STEPS */
+  maxSteps?: number
+  /** 循环超时（毫秒）；缺省时由 runReactLoop 回落到 defaultSettings.agentRunTimeoutMs */
+  invokeTimeoutMs?: number
   streamedCharsRef: { current: number }
   pushStreamToken: (token: string) => void
 }

@@ -116,11 +116,13 @@ export type ProviderProfile = {
 export type AppSettings = {
   provider: ModelProviderId
   providerProfiles: Record<ModelProviderId, ProviderProfile>
-  maxAgentLoopSteps: number
   agentRunTimeoutMs: number
   tavilyApiKey: string
   mcpServers: McpServerEntry[]
 }
+
+/** ReAct 最大工具调用轮次（内置常量，不对外暴露为用户设置） */
+export const MAX_AGENT_LOOP_STEPS = 24
 
 export const defaultProviderProfiles = (): Record<ModelProviderId, ProviderProfile> => ({
   deepseek: {
@@ -133,8 +135,7 @@ export const defaultProviderProfiles = (): Record<ModelProviderId, ProviderProfi
 export const defaultSettings: AppSettings = {
   provider: 'deepseek',
   providerProfiles: defaultProviderProfiles(),
-  maxAgentLoopSteps: 24,
-  agentRunTimeoutMs: 120_000,
+  agentRunTimeoutMs: 600_000,
   tavilyApiKey: '',
   mcpServers: []
 }
@@ -144,10 +145,7 @@ export function getActiveProviderProfile(s: AppSettings): ProviderProfile {
   return s.providerProfiles[s.provider]
 }
 
-export type SettingsFormValues = Pick<
-  AppSettings,
-  'maxAgentLoopSteps' | 'agentRunTimeoutMs' | 'tavilyApiKey'
-> & {
+export type SettingsFormValues = Pick<AppSettings, 'agentRunTimeoutMs' | 'tavilyApiKey'> & {
   baseUrl: string
   model: string
   apiKey: string
@@ -159,7 +157,6 @@ export function settingsToFormValues(s: AppSettings): SettingsFormValues {
     baseUrl: p.baseUrl,
     model: p.model,
     apiKey: p.apiKey,
-    maxAgentLoopSteps: s.maxAgentLoopSteps,
     agentRunTimeoutMs: s.agentRunTimeoutMs,
     tavilyApiKey: s.tavilyApiKey ?? ''
   }
@@ -189,7 +186,6 @@ export function applySettingsForm(
     ...prev,
     provider: 'deepseek',
     providerProfiles,
-    maxAgentLoopSteps: form.maxAgentLoopSteps,
     agentRunTimeoutMs: form.agentRunTimeoutMs,
     tavilyApiKey: (form.tavilyApiKey ?? '').trim()
   }
@@ -206,7 +202,7 @@ type LegacyFlatSettings = {
  * 将任意持久化/API 输入规范为完整 AppSettings
  *
  * 合并默认值、迁移旧版顶层 apiKey/baseUrl/model，
- * 并钳制循环步数与超时范围；忽略已废弃字段。
+ * 并钳制超时范围；忽略已废弃字段。
  *
  * @param input - 部分 settings、旧扁平字段或未知 JSON
  * @returns 规范化后的完整 AppSettings
@@ -219,6 +215,7 @@ export function normalizeSettings(
       /** 旧版持久化字段，忽略 */
       maxConcurrentStreams?: unknown
       /** 已改为内置常量，忽略旧持久化 */
+      maxAgentLoopSteps?: unknown
       streamFlushMs?: unknown
       streamFlushChars?: unknown
       maxTerminalOutputChars?: unknown
@@ -233,6 +230,7 @@ export function normalizeSettings(
     skillsMarketCatalogUrl: legacySkillsMarketCatalogUrl,
     skillsMarketCatalogRefreshHours: legacySkillsMarketCatalogRefreshHours,
     maxConcurrentStreams: _legacyMaxConcurrentStreams,
+    maxAgentLoopSteps: _legacyMaxAgentLoopSteps,
     streamFlushMs: _legacyStreamFlushMs,
     streamFlushChars: _legacyStreamFlushChars,
     maxTerminalOutputChars: _legacyMaxTerminalOutputChars,
@@ -241,6 +239,7 @@ export function normalizeSettings(
   void legacySkillsMarketCatalogUrl
   void legacySkillsMarketCatalogRefreshHours
   void _legacyMaxConcurrentStreams
+  void _legacyMaxAgentLoopSteps
   void _legacyStreamFlushMs
   void _legacyStreamFlushChars
   void _legacyMaxTerminalOutputChars
@@ -297,7 +296,6 @@ export function normalizeSettings(
     ...inputWithoutLegacy,
     provider,
     providerProfiles,
-    maxAgentLoopSteps: inputWithoutLegacy.maxAgentLoopSteps ?? defaults.maxAgentLoopSteps,
     agentRunTimeoutMs: inputWithoutLegacy.agentRunTimeoutMs ?? defaults.agentRunTimeoutMs,
     tavilyApiKey:
       typeof inputWithoutLegacy.tavilyApiKey === 'string'
@@ -312,7 +310,6 @@ export function normalizeSettings(
 
   return {
     ...merged,
-    maxAgentLoopSteps: Math.min(64, Math.max(4, Math.floor(merged.maxAgentLoopSteps))),
     agentRunTimeoutMs: Math.min(600_000, Math.max(5_000, Math.floor(merged.agentRunTimeoutMs)))
   }
 }
