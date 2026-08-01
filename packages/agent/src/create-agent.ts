@@ -24,13 +24,48 @@ import {
   warmupMcpServersFromConfig,
 } from "./mcp/mcp-runtime.js";
 import type { McpProbeResult, McpWarmupServerResult } from "./mcp/types.js";
+import { contentToText, findLastAssistantMessage } from "./messages.js";
 import { runReactLoop } from "./react-loop.js";
+import { isAbortError } from "./run-utils.js";
 import { loadSkillsFromPaths } from "./skills/load-skills.js";
 import {
   buildWorkspaceRunPrompt,
   buildWorkspaceTools,
   type WorkspacePromptExtras,
 } from "./tools/workspace-tools.js";
+
+/**
+ * 将捕获的异常映射为 wait 状态。
+ *
+ * 超时归为 error；AbortError / 用户取消归为 cancelled。
+ *
+ * @param error - send 捕获的异常
+ * @param signal - 本轮 AbortSignal
+ * @returns error 或 cancelled
+ */
+function resolveWaitFailureStatus(
+  error: unknown,
+  signal: AbortSignal,
+): "error" | "cancelled" {
+  if (error instanceof Error && /timeout/i.test(error.message)) {
+    return "error";
+  }
+  if (isAbortError(error) || signal.aborted) {
+    return "cancelled";
+  }
+  return "error";
+}
+
+/**
+ * 从 messages 提取最后一条助手文本。
+ *
+ * @param messages - 本轮结束后的 CoreMessage 列表
+ * @returns 助手纯文本；无则空串
+ */
+function extractAssistantText(messages: CoreMessage[]): string {
+  const last = findLastAssistantMessage(messages);
+  return last ? contentToText(last.content) : "";
+}
 
 /**
  * 按模式组装本轮可用工具与 system prompt 的依赖函数。
@@ -193,11 +228,42 @@ export type AgentRunResult = {
 };
 
 /**
+ * agent.wait() 的终态状态。
+ */
+export type AgentWaitStatus = "finished" | "error" | "cancelled";
+
+/**
+ * agent.wait() 的返回值：本轮 run 的摘要终态。
+ *
+ * @example
+ * ```ts
+ * void agent.send({ messages, onTextDelta, onTool, onEmit })
+ * const result = await agent.wait()
+ * console.log(result.status) // "finished" | "error" | "cancelled"
+ * console.log(result.result) // 最终助手文本
+ * console.log(result.error)  // 失败时有
+ * ```
+ */
+export type AgentWaitResult = {
+  /** 本轮终态 */
+  status: AgentWaitStatus;
+  /** 最终助手文本；失败/取消时可能为空 */
+  result: string;
+  /** 失败或取消时的错误；成功时为 undefined */
+  error?: unknown;
+};
+
+/**
  * createAgent 返回的 agent 实例。
  */
 export type Agent = {
   /** 发起一次 run；同会话互斥由宿主保证，不同会话可并行 */
   send: (input: AgentRunInput) => Promise<AgentRunResult>;
+  /**
+   * 等待当前（或最近一次）run 结束，返回摘要终态。
+   * 未调用过 send 时抛出错误。
+   */
+  wait: () => Promise<AgentWaitResult>;
   /** MCP 宿主侧能力；未配置 mcp.configPath 时为 undefined */
   mcp?: AgentMcp;
 };
@@ -224,6 +290,11 @@ export function createAgent(options: CreateAgentOptions): Agent {
     .map((p) => p.trim())
     .filter(Boolean);
   const mcpConfigPath = options.mcp?.configPath?.trim() || undefined;
+
+  /** 当前进行中的 wait Promise；无进行中 run 时为 null */
+  let inflightWait: Promise<AgentWaitResult> | null = null;
+  /** 最近一次已结束 run 的 wait 结果，供重复 wait() */
+  let lastWaitResult: AgentWaitResult | null = null;
 
   /**
    * 组装本轮工具与 system prompt：工作区内置工具 + 可选 skills + 可选 MCP。
@@ -287,9 +358,11 @@ export function createAgent(options: CreateAgentOptions): Agent {
    *
    * 调用方须已将本轮用户消息写入 messages；消息持久化由宿主负责。
    * 工作区路径由 input.workspacePath 提供，缺省回退 local.cwd / process.cwd()。
+   * 同时更新 wait() 可观测的终态；失败时 wait 得 status，send 仍会 rethrow。
    *
    * @param input - 单次 run 的输入（含可选 workspacePath）
    * @returns 运行结束后的 messages
+   * @throws 运行失败或取消时抛出原错误（wait 仍可拿到对应 status）
    */
   async function send(input: AgentRunInput): Promise<AgentRunResult> {
     const {
@@ -313,31 +386,73 @@ export function createAgent(options: CreateAgentOptions): Agent {
     const terminalKey = input.terminalKey?.trim() || "term:default";
     const tavilyApiKey = input.tavily?.apiKey?.trim() || undefined;
 
-    const tooling = await prepareTooling({
-      composerMode,
-      terminalKey,
-      root,
-      tavilyApiKey,
-      onTool,
-      signal: abortController.signal,
-      emit: onEmit,
-      provider,
+    let settleWait!: (value: AgentWaitResult) => void;
+    const waitPromise = new Promise<AgentWaitResult>((resolve) => {
+      settleWait = resolve;
     });
+    inflightWait = waitPromise;
 
-    const runMessages = await runReactLoop(
-      provider,
-      tooling.runPrompt,
-      messages,
-      tooling.tools,
-      abortController,
-      onTextDelta,
-      maxSteps,
-      invokeTimeoutMs,
-    );
+    try {
+      const tooling = await prepareTooling({
+        composerMode,
+        terminalKey,
+        root,
+        tavilyApiKey,
+        onTool,
+        signal: abortController.signal,
+        emit: onEmit,
+        provider,
+      });
 
-    return {
-      messages: runMessages.length > 0 ? runMessages : messages,
-    };
+      const runMessages = await runReactLoop(
+        provider,
+        tooling.runPrompt,
+        messages,
+        tooling.tools,
+        abortController,
+        onTextDelta,
+        maxSteps,
+        invokeTimeoutMs,
+      );
+
+      const finalMessages = runMessages.length > 0 ? runMessages : messages;
+      const waitResult: AgentWaitResult = {
+        status: "finished",
+        result: extractAssistantText(finalMessages),
+      };
+      lastWaitResult = waitResult;
+      settleWait(waitResult);
+      return { messages: finalMessages };
+    } catch (error) {
+      const waitResult: AgentWaitResult = {
+        status: resolveWaitFailureStatus(error, abortController.signal),
+        result: "",
+        error,
+      };
+      lastWaitResult = waitResult;
+      settleWait(waitResult);
+      throw error;
+    } finally {
+      if (inflightWait === waitPromise) {
+        inflightWait = null;
+      }
+    }
+  }
+
+  /**
+   * 等待当前进行中的 run，或返回最近一次 run 的终态。
+   *
+   * @returns 含 status / result / error 的摘要
+   * @throws 尚未调用过 send 时抛出
+   */
+  async function wait(): Promise<AgentWaitResult> {
+    if (inflightWait) {
+      return inflightWait;
+    }
+    if (lastWaitResult) {
+      return lastWaitResult;
+    }
+    throw new Error("No agent run to wait for; call send() first");
   }
 
   const mcp: AgentMcp | undefined = mcpConfigPath
@@ -350,6 +465,7 @@ export function createAgent(options: CreateAgentOptions): Agent {
 
   return {
     send,
+    wait,
     ...(mcp ? { mcp } : {}),
   };
 }

@@ -13,6 +13,8 @@ export {
   type AgentRunInput,
   type AgentRunResult,
   type AgentRunTavilyOptions,
+  type AgentWaitResult,
+  type AgentWaitStatus,
   type CreateAgentLocalOptions,
   type CreateAgentMcpOptions,
   type CreateAgentOptions,

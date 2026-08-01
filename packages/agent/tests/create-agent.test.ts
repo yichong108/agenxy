@@ -90,4 +90,68 @@ describe('createAgent', () => {
     const [, runPrompt] = vi.mocked(runReactLoop).mock.calls[0]!
     expect(runPrompt).toContain(`工作区根目录：${process.cwd()}`)
   })
+
+  it('wait 在 send 成功后返回 finished 与助手文本', async () => {
+    const agent = createAgent({ provider: stubModel, local: { cwd: '/tmp/ws' } })
+    const callbacks = createCallbacks()
+
+    const sendPromise = agent.send({
+      composerMode: 'ask',
+      messages: [],
+      ...callbacks
+    })
+    const waitResult = await agent.wait()
+    await sendPromise
+
+    expect(waitResult).toEqual({
+      status: 'finished',
+      result: 'hello'
+    })
+    // 重复 wait 返回同一终态
+    await expect(agent.wait()).resolves.toEqual(waitResult)
+  })
+
+  it('wait 在取消时返回 cancelled', async () => {
+    const agent = createAgent({ provider: stubModel, local: { cwd: '/tmp/ws' } })
+    const callbacks = createCallbacks()
+    const abortError = new Error('Aborted')
+    abortError.name = 'AbortError'
+    vi.mocked(runReactLoop).mockRejectedValueOnce(abortError)
+
+    const sendPromise = agent.send({
+      composerMode: 'ask',
+      messages: [],
+      ...callbacks
+    })
+    await expect(sendPromise).rejects.toThrow('Aborted')
+
+    const waitResult = await agent.wait()
+    expect(waitResult.status).toBe('cancelled')
+    expect(waitResult.result).toBe('')
+    expect(waitResult.error).toBe(abortError)
+  })
+
+  it('wait 在失败时返回 error', async () => {
+    const agent = createAgent({ provider: stubModel, local: { cwd: '/tmp/ws' } })
+    const callbacks = createCallbacks()
+    const boom = new Error('model failed')
+    vi.mocked(runReactLoop).mockRejectedValueOnce(boom)
+
+    await expect(
+      agent.send({
+        composerMode: 'ask',
+        messages: [],
+        ...callbacks
+      })
+    ).rejects.toThrow('model failed')
+
+    const waitResult = await agent.wait()
+    expect(waitResult.status).toBe('error')
+    expect(waitResult.error).toBe(boom)
+  })
+
+  it('未 send 时 wait 抛错', async () => {
+    const agent = createAgent({ provider: stubModel })
+    await expect(agent.wait()).rejects.toThrow('No agent run to wait for')
+  })
 })
