@@ -63,7 +63,8 @@ function toolResultMessage(tc: ToolCallPart, result: string, isError?: boolean):
  *
  * @param toolCalls - streamText 返回的工具调用
  * @param tools - AI SDK ToolSet
- * @param messages - 当前会话（传给 ToolExecutionOptions）
+ * @param messages - 传给 ToolExecutionOptions.messages：发起本轮 tool call 前的会话快照
+ *   （不含顶层 system，也不含本轮带 tool-call 的 assistant，与 AI SDK 约定一致）
  * @param signal - 可选取消信号
  * @returns AI SDK tool 结果消息列表
  */
@@ -117,7 +118,7 @@ function buildAssistantMessage(text: string, toolCalls: ToolCallPart[]): CoreAss
 }
 
 /**
- * 运行 ReAct 循环：流式生成 + 手动工具执行。
+ * ReAct 循环
  *
  * 入参与返回均为 AI SDK `CoreMessage` / `ToolSet`，可直接对接 streamText。
  *
@@ -157,6 +158,7 @@ export async function runReactLoop(
       throw new Error(`Model-tool loop timeout (>${resolvedTimeoutMs}ms), run aborted`)
     }
 
+    // messages 里尽量不要再塞 role: 'system'，避免和顶层 system 重复
     const result = streamText({
       model,
       system: systemPrompt,
@@ -174,12 +176,17 @@ export async function runReactLoop(
     const text = await result.text
     const toolCalls = await result.toolCalls
 
+    // ToolExecutionOptions.messages：不含 system，也不含本轮带 tool-call 的 assistant
+    const messagesForTool = working.slice()
+
     working.push(buildAssistantMessage(text, toolCalls))
 
+    // 有 tool calls → 继续「执行工具 → 再调用模型」
+    // 没有 tool calls → 任务收尾，返回完整 working
     if (toolCalls.length === 0) break
     steps += 1
 
-    working.push(...(await executeToolCalls(toolCalls, tools, working, ac.signal)))
+    working.push(...(await executeToolCalls(toolCalls, tools, messagesForTool, ac.signal)))
   }
 
   return working
