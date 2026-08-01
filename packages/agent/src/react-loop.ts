@@ -2,12 +2,9 @@
  * @file react-loop.ts
  * @description ReAct 循环实现
  */
-import { type AppSettings } from '@agenwork/shared'
 import { streamText, tool, type LanguageModel, type ToolSet } from 'ai'
 
 import type { NamedTool } from './define-tool.js'
-import { resolveChatModel } from './llm.js'
-import { agentLog } from './logger.js'
 import {
   type AgentMessage,
   type AgentToolCall,
@@ -15,28 +12,6 @@ import {
   toModelMessages,
   toolMessage
 } from './messages.js'
-
-/**
- * ReAct 运行元信息。
- *
- * @property sessionId - 当前会话 ID
- * @property runId - 当前运行 ID
- * @property traceId - 当前链路追踪 ID
- */
-export type ReactRunMeta = {
-  sessionId: string
-  runId: string
-  traceId: string
-}
-
-/**
- * ReAct 循环运行上下文。
- *
- * @property meta - 本次运行的标识信息
- */
-export type ReactAgentRunContext = {
-  meta: ReactRunMeta
-}
 
 /** 待执行的工具调用（从 AI 消息的 toolCalls 提取） */
 type PendingToolCall = {
@@ -118,36 +93,26 @@ async function executePendingToolCalls(
  *
  * 实现 ReAct 循环核心原理。
  *
- * @param settings - 应用设置
+ * @param model - 已解析的 AI SDK LanguageModel
  * @param systemPrompt - system 提示
  * @param messages - 初始会话消息
  * @param tools - 可用工具
  * @param ac - 取消控制器
  * @param onToken - 流式 token 回调
- * @param options - recursionLimit、timeout
- * @param runCtx - ReAct 运行上下文
- * @param provider - createAgent 可选注入的模型；未传则从 settings 解析
+ * @param recursionLimit - 最大工具调用轮次
+ * @param timeoutMs - 循环超时（毫秒）
  * @returns 运行结束后的 messages
  */
 export async function runReactLoop(
-  settings: AppSettings,
+  model: LanguageModel,
   systemPrompt: string,
   messages: AgentMessage[],
   tools: NamedTool[],
   ac: AbortController,
   onToken: (token: string) => void,
-  options: {
-    recursionLimit: number
-    timeoutMs: number
-  },
-  runCtx: ReactAgentRunContext,
-  provider?: LanguageModel | null
+  recursionLimit: number,
+  timeoutMs: number
 ): Promise<AgentMessage[]> {
-  const { recursionLimit, timeoutMs } = options
-  const model = resolveChatModel(settings, provider)
-  if (!model) {
-    throw new Error('请先在设置中配置 API Key，或向 createAgent 传入 provider')
-  }
   const toolsByName = new Map(tools.map((t) => [t.name, t]))
 
   const toolSet = buildToolDeclarations(tools)
@@ -155,8 +120,6 @@ export async function runReactLoop(
   let steps = 0
 
   const deadline = Date.now() + timeoutMs
-
-  agentLog.info(`[runReactLoop] runId=${runCtx.meta.runId} recursionLimit=${recursionLimit}`)
 
   while (steps < recursionLimit) {
     if (ac.signal.aborted) throw new Error('Aborted')

@@ -4,44 +4,18 @@
 
 ## 一句话
 
-
-
-负责提供 Agent 创建的工厂。引擎核心是工具循环与模型；内建工作区工具、可选 Skills，以及可选 MCP（由 `mcp.configPath` 驱动）是基础层。
+负责创建Agent。
+Agent核心是ReAct；
+Agent不负责流程编排；
+Agent可选Skills；
+Agent可选MCP。
 
 
 
 ## 边界与依赖
 
-
-
-**属于本包：**
-
-
-
-- `createAgent` 工厂与 `send` 运行入口
-
-- ReAct 工具循环、消息模型、工具定义（`defineTool`）
-
-- 内建工作区工具：文件系统、grep、shell、可选 Tavily 联网搜索（`buildWorkspaceTools`）
-
-- 可选的基础 Skills：仅通过 `skills.paths` 配置扫描路径，加载 `SKILL.md` 为工具
-
-- 可选 MCP：通过 `mcp.configPath` 读取配置文件，内部实现连接池与工具绑定；宿主侧仅用 `agent.mcp`（probe / warmup / dispose）
-- 宿主可注入 `prepareTooling`；注入时仍会按 `mcp.configPath` 自动叠加 MCP
-
-
-
-**不属于本包（由宿主可选实现）：**
-
-
-
-- Skills 市场安装、Electron 路径、UI 状态
-
-- MCP 配置文件的 UI 编辑与落盘路径选择（宿主负责写入 `mcp.configPath` 指向的文件）
-
-
-
-**依赖：** `@agenwork/shared`、AI SDK、zod、`@vscode/ripgrep`、`@modelcontextprotocol/sdk`。不依赖 Desktop / Electron。
+createAgent的内部不依赖外部，只依赖createAgent的入参。
+send的内部不依赖外部，只依赖send的入参
 
 
 

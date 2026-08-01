@@ -2,6 +2,7 @@ import { type AgentComposerMode, type AppSettings, type StreamEvent } from '@age
 import type { LanguageModel } from 'ai'
 
 import type { ToolExecutorContext } from './define-tool.js'
+import { resolveChatModel } from './llm.js'
 import { agentLog } from './logger.js'
 import { type AgentMessage, humanMessage } from './messages.js'
 import { runReactLoop } from './react-loop.js'
@@ -138,10 +139,14 @@ async function runAgentLoopPhase(
     throw new Error('[runAgentLoopPhase] tooling not prepared')
   }
 
-  const { composerMode, runMeta } = state
+  const { composerMode } = state
   const { settings, runToolEvents } = runContext
   const { tools, runPrompt } = prepared
-  const { sessionId, runId, traceId } = runMeta
+
+  const model = resolveChatModel(settings, deps.provider ?? runContext.provider)
+  if (!model) {
+    throw new Error('请先在设置中配置 API Key，或向 createAgent 传入 provider')
+  }
 
   agentLog.info(
     `[runAgentLoopPhase] mode=${composerMode} runPrompt: ${JSON.stringify(runPrompt, null, 2)}`
@@ -153,24 +158,14 @@ async function runAgentLoopPhase(
   }
 
   const runMessages = await runReactLoop(
-    settings,
+    model,
     runPrompt,
     state.messages,
     tools,
     bridge.abortController,
     onStreamToken,
-    {
-      recursionLimit: bridge.recursionLimit,
-      timeoutMs: bridge.invokeTimeoutMs
-    },
-    {
-      meta: {
-        sessionId,
-        runId,
-        traceId
-      }
-    },
-    deps.provider ?? runContext.provider
+    bridge.recursionLimit,
+    bridge.invokeTimeoutMs
   )
 
   return {
