@@ -6,20 +6,18 @@ import { defaultSettings } from '@agenwork/shared'
 import type { LanguageModel } from 'ai'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../src/run-workflow.js', () => ({
-  runWorkflow: vi.fn(async () => ({
-    messages: [{ role: 'assistant' as const, content: 'hello' }]
-  }))
+vi.mock('../src/react-loop.js', () => ({
+  runReactLoop: vi.fn(async () => [{ role: 'assistant' as const, content: 'hello' }])
 }))
 
 import { createAgent } from '../src/create-agent.js'
-import { runWorkflow } from '../src/run-workflow.js'
+import { runReactLoop } from '../src/react-loop.js'
 
 function createCallbacks() {
   return {
     onTextDelta: vi.fn(),
     onTool: vi.fn(),
-    emit: vi.fn()
+    onEmit: vi.fn()
   }
 }
 
@@ -28,7 +26,7 @@ const stubModel = { modelId: 'test-model' } as LanguageModel
 
 describe('createAgent', () => {
   beforeEach(() => {
-    vi.mocked(runWorkflow).mockClear()
+    vi.mocked(runReactLoop).mockClear()
   })
 
   it('返回含 send 的实例', () => {
@@ -36,7 +34,7 @@ describe('createAgent', () => {
     expect(agent.send).toBeTypeOf('function')
   })
 
-  it('send 将 local.cwd 写入 runMeta.root 并调用 workflow', async () => {
+  it('send 未传 workspacePath 时回退 local.cwd', async () => {
     const agent = createAgent({ local: { cwd: '/tmp/ws' } })
     const callbacks = createCallbacks()
 
@@ -51,18 +49,43 @@ describe('createAgent', () => {
         runId: 'r1',
         traceId: 't1',
         workspaceId: 'w1',
-        root: '',
-        userDisplayText: 'hi',
         agentUserText: 'hi'
       },
-      callbacks,
+      ...callbacks,
       maxSteps: 10,
       invokeTimeoutMs: 60_000
     })
 
-    expect(runWorkflow).toHaveBeenCalledOnce()
-    const [, runMeta] = vi.mocked(runWorkflow).mock.calls[0]!
-    expect(runMeta.root).toBe('/tmp/ws')
+    expect(runReactLoop).toHaveBeenCalledOnce()
+    const [, runPrompt] = vi.mocked(runReactLoop).mock.calls[0]!
+    expect(runPrompt).toContain('工作区根目录：/tmp/ws')
     expect(result.messages).toEqual([{ role: 'assistant', content: 'hello' }])
+  })
+
+  it('send 优先使用本轮 workspacePath', async () => {
+    const agent = createAgent({ local: { cwd: '/tmp/ws' } })
+    const callbacks = createCallbacks()
+
+    await agent.send({
+      composerMode: 'ask',
+      messages: [],
+      provider: stubModel,
+      abortController: new AbortController(),
+      settings: defaultSettings,
+      workspacePath: '/tmp/other',
+      runMeta: {
+        sessionId: 's1',
+        runId: 'r1',
+        traceId: 't1',
+        workspaceId: 'w1',
+        agentUserText: 'hi'
+      },
+      ...callbacks,
+      maxSteps: 10,
+      invokeTimeoutMs: 60_000
+    })
+
+    const [, runPrompt] = vi.mocked(runReactLoop).mock.calls[0]!
+    expect(runPrompt).toContain('工作区根目录：/tmp/other')
   })
 })

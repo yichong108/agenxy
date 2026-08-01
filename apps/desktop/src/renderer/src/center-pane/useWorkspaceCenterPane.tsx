@@ -22,7 +22,6 @@ import { useUiStore } from '@/renderer/src/store/ui-store'
 import { useWorkspaceStore } from '@/renderer/src/store/workspace-store'
 import {
   type AgentComposerMode,
-  type AgentSendOptions,
   type ChatMessage,
   HOME_WORKSPACE_ID,
   type SessionInfo,
@@ -470,10 +469,9 @@ export function useWorkspaceCenterPane({
   }, [composerSelectedWorkspaceId, supportsMultiWorkspaceApi, workspacesWithComposerHomeStub])
 
   const sendAgentText = useCallback(
-    async (text: string, mode: AgentComposerMode, sendOpts?: AgentSendOptions) => {
+    async (text: string, mode: AgentComposerMode) => {
       const t = text.trim()
       if (!t) return
-      const displayContent = sendOpts?.userDisplayText?.trim() || t
       const activeWorkspace = workspacesWithComposerHomeStub.find(
         (x) => x.id === composerSelectedWorkspaceId
       )
@@ -503,13 +501,13 @@ export function useWorkspaceCenterPane({
         const cur = m[sessionId] ?? []
         return {
           ...m,
-          [sessionId]: [...cur, { id: randomId(), role: 'user' as const, content: displayContent }]
+          [sessionId]: [...cur, { id: randomId(), role: 'user' as const, content: t }]
         }
       })
       try {
         const r = await bridge.sendAgentMessage(sessionId, t, {
           mode,
-          ...(sendOpts?.userDisplayText ? { userDisplayText: displayContent } : {})
+          workspacePath: activeWorkspace.path
         })
         if (!r.ok) {
           msgApi.error('发送失败: ' + r.error)

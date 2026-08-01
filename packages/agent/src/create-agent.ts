@@ -11,8 +11,12 @@ import {
 } from "@agenwork/shared";
 import type { CoreMessage, LanguageModel, ToolSet } from "ai";
 
-import type { RunMeta } from "./run-types.js";
-import { mergeToolSets, type ToolObservation } from "./define-tool.js";
+import type { PreparedTooling, RunMeta } from "./run-types.js";
+import {
+  mergeToolSets,
+  type ToolExecutorContext,
+  type ToolObservation,
+} from "./define-tool.js";
 import {
   buildMcpToolsFromConfig,
   disposeMcpConnectionPool,
@@ -20,7 +24,7 @@ import {
   warmupMcpServersFromConfig,
 } from "./mcp/mcp-runtime.js";
 import type { McpProbeResult, McpWarmupServerResult } from "./mcp/types.js";
-import { runWorkflow, type PrepareToolingFn } from "./run-workflow.js";
+import { runReactLoop } from "./react-loop.js";
 import { loadSkillsFromPaths } from "./skills/load-skills.js";
 import {
   buildWorkspaceRunPrompt,
@@ -29,10 +33,26 @@ import {
 } from "./tools/workspace-tools.js";
 
 /**
+ * 按模式组装本轮可用工具与 system prompt 的依赖函数。
+ */
+type PrepareToolingFn = (args: {
+  composerMode: AgentComposerMode;
+  sessionId: string;
+  root: string;
+  settings: AppSettings;
+  runCtx: ToolExecutorContext;
+  /** 本轮用户文案，供 tooling 按需使用 */
+  userText: string;
+  signal?: AbortSignal;
+  emit: (event: StreamEvent) => void;
+  provider?: LanguageModel;
+}) => Promise<PreparedTooling>;
+
+/**
  * createAgent 本地运行环境配置。
  */
 export type CreateAgentLocalOptions = {
-  /** 工作区根目录；send 时若未指定 runMeta.root 则使用此值 */
+  /** 工作区根目录；send 时若未指定 workspacePath 则使用此值 */
   cwd?: string;
 };
 
@@ -101,18 +121,10 @@ export type CreateAgentOptions = {
 };
 
 /**
- * 单次 run 的宿主回调：流式输出、工具观察与持久化。
- *
- * 工具时间线（ToolTimelineEvent）由宿主在 onTool 中自行映射与收集。
- */
-export type AgentRunCallbacks = {
-  onTextDelta: (text: string) => void;
-  onTool: (event: ToolObservation) => void;
-  emit: (event: StreamEvent) => void;
-};
-
-/**
  * 单次 agent run 的输入。
+ *
+ * 宿主回调（onTextDelta / onTool / onEmit）直接挂在入参上，不再嵌套 callbacks。
+ * 工具时间线（ToolTimelineEvent）由宿主在 onTool 中自行映射与收集。
  */
 export type AgentRunInput = {
   composerMode: AgentComposerMode;
@@ -122,7 +134,17 @@ export type AgentRunInput = {
   abortController: AbortController;
   settings: AppSettings;
   runMeta: RunMeta;
-  callbacks: AgentRunCallbacks;
+  /**
+   * 本轮工作区根目录绝对路径。
+   * 优先于 createAgent local.cwd；均未提供时回退 process.cwd()。
+   */
+  workspacePath?: string;
+  /** 流式文本增量回调 */
+  onTextDelta: (text: string) => void;
+  /** 工具观察回调；宿主可在此映射与收集工具时间线 */
+  onTool: (event: ToolObservation) => void;
+  /** 向宿主推送 StreamEvent（如错误、状态） */
+  onEmit: (event: StreamEvent) => void;
   /** 最大工具调用轮次；缺省时使用 MAX_AGENT_LOOP_STEPS */
   maxSteps?: number;
   /** 循环超时（毫秒）；缺省时使用 defaultSettings.agentRunTimeoutMs */
@@ -227,10 +249,13 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
   const prepareTooling = createDefaultPrepareTooling(skillPaths, mcpConfigPath);
 
   /**
-   * 发起一次 agent run
+   * 发起一次 agent run：组装本轮工具与 prompt，再执行 ReAct 循环。
    *
-   * @param input - 单次 run 的输入
-   * @returns 单次 run 的结果
+   * 调用方须已将本轮用户消息写入 messages；消息持久化由宿主负责。
+   * 工作区路径由 input.workspacePath 提供，缺省回退 local.cwd / process.cwd()。
+   *
+   * @param input - 单次 run 的输入（含可选 workspacePath）
+   * @returns 运行结束后的 messages
    */
   async function send(input: AgentRunInput): Promise<AgentRunResult> {
     const {
@@ -239,31 +264,43 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
       provider,
       abortController,
       settings,
-      callbacks,
+      onTextDelta,
+      onTool,
+      onEmit,
       maxSteps,
       invokeTimeoutMs,
     } = input;
 
-    const root = input.runMeta.root?.trim() || defaultCwd || process.cwd();
-    const runMeta: RunMeta = { ...input.runMeta, root };
+    // 工作区路径：本轮 send 入参优先，其次 createAgent local.cwd，最后 process.cwd()
+    const root =
+      input.workspacePath?.trim() || defaultCwd || process.cwd();
+    const { sessionId, runId, traceId, agentUserText } = input.runMeta;
 
-    const workflowResult = await runWorkflow(
+    const tooling = await prepareTooling({
       composerMode,
-      runMeta,
-      messages,
+      sessionId,
+      root,
       settings,
-      callbacks.onTool,
-      callbacks.emit,
-      abortController,
-      (token) => callbacks.onTextDelta(token),
-      prepareTooling,
+      runCtx: { runId, traceId, onTool },
+      userText: agentUserText,
+      signal: abortController.signal,
+      emit: onEmit,
       provider,
+    });
+
+    const runMessages = await runReactLoop(
+      provider,
+      tooling.runPrompt,
+      messages,
+      tooling.tools,
+      abortController,
+      onTextDelta,
       maxSteps,
       invokeTimeoutMs,
     );
 
     return {
-      messages: workflowResult.messages,
+      messages: runMessages.length > 0 ? runMessages : messages,
     };
   }
 

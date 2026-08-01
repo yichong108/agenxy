@@ -16,7 +16,11 @@ export function normalizeComposerMode(mode?: AgentComposerMode): AgentComposerMo
   return 'build'
 }
 
+/**
+ * 发送智能体消息时的可选参数（IPC / 宿主 send 共用）。
+ */
 export type AgentSendOptions = {
   mode?: AgentComposerMode
-  userDisplayText?: string
+  /** 本轮工作区根目录绝对路径；宿主可据此覆盖会话默认路径 */
+  workspacePath?: string
 }

@@ -34,8 +34,6 @@ type SessionRuntime = {
   messages: CoreMessage[]
   controller: AbortController | null
   terminalKey: string
-  /** 本轮发给 UI 的用户展示文案（与模型侧 content 可能不同） */
-  pendingUserDisplayText?: string
 }
 
 /**
@@ -75,13 +73,11 @@ function trimPersistedMessages(messages: ChatMessage[]): ChatMessage[] {
  * 将内存中的 CoreMessage 转为可持久化的 ChatMessage。
  *
  * 仅保留 user 与最后一条有文本的 assistant；tool 轮次靠 toolEvents 承载。
- * 最后一个 user 消息优先使用 pendingUserDisplayText（UI 展示文案）。
  *
  * @param coreMessages - AI SDK CoreMessage 列表
- * @param userDisplayText - 本轮用户展示文案（可选）
  * @returns ChatMessage 列表
  */
-function toPersistedMessages(coreMessages: CoreMessage[], userDisplayText?: string): ChatMessage[] {
+function toPersistedMessages(coreMessages: CoreMessage[]): ChatMessage[] {
   const visible = coreMessages.filter((msg) => msg.role === 'user' || msg.role === 'assistant')
 
   let lastAssistantIndex = -1
@@ -92,26 +88,14 @@ function toPersistedMessages(coreMessages: CoreMessage[], userDisplayText?: stri
     }
   }
 
-  let lastUserIndex = -1
-  for (let i = visible.length - 1; i >= 0; i -= 1) {
-    if (visible[i]?.role === 'user') {
-      lastUserIndex = i
-      break
-    }
-  }
-
   const out: ChatMessage[] = []
   for (let i = 0; i < visible.length; i += 1) {
     const msg = visible[i]!
     if (msg.role === 'user') {
-      const content =
-        i === lastUserIndex && userDisplayText?.trim()
-          ? userDisplayText
-          : contentToText(msg.content)
       out.push({
         id: `u-${Date.now()}-${Math.random().toString(16).slice(2)}`,
         role: 'user',
-        content
+        content: contentToText(msg.content)
       })
       continue
     }
@@ -160,10 +144,9 @@ function persistSessionMessages(
   coreMessages: CoreMessage[],
   opts?: {
     toolEventsForLastAssistant?: ToolTimelineEvent[]
-    userDisplayText?: string
   }
 ): void {
-  const list = toPersistedMessages(coreMessages, opts?.userDisplayText)
+  const list = toPersistedMessages(coreMessages)
   const toolEvents = opts?.toolEventsForLastAssistant
   if (toolEvents && toolEvents.length > 0) {
     for (let i = list.length - 1; i >= 0; i -= 1) {
@@ -254,7 +237,7 @@ export function isSessionRunning(sessionId: string): boolean {
  *
  * @param sessionId - 会话 ID
  * @param userText - 用户输入文本
- * @param options - 发送选项（模式等）
+ * @param options - 发送选项（模式、工作区路径等）
  */
 export async function runUserMessage(
   sessionId: string,
@@ -263,7 +246,6 @@ export async function runUserMessage(
 ): Promise<void> {
   const composerMode = normalizeComposerMode(options?.mode)
   const agentUserText = userText.trim()
-  const userDisplayText = options?.userDisplayText?.trim() || agentUserText
   if (!agentUserText) {
     emit({ type: 'error', sessionId, message: '消息为空' })
     return
@@ -281,10 +263,13 @@ export async function runUserMessage(
   }
 
   const workspace = getWorkspaceById(session.workspaceId)
-  agentLog.info(`[runUserMessage] workspace: ${workspace?.path}`)
+  // 本轮 send 可显式传入路径；未传时回退会话绑定工作区
+  const workspacePath = options?.workspacePath?.trim() || workspace?.path?.trim() || ''
+  agentLog.info(
+    `[runUserMessage] workspacePath: ${workspacePath}, sessionWorkspace: ${workspace?.path}`
+  )
 
-  const root = workspace?.path?.trim() || ''
-  if (!root) {
+  if (!workspacePath) {
     emit({
       type: 'error',
       sessionId,
@@ -296,7 +281,6 @@ export async function runUserMessage(
   const ac = new AbortController()
   // 在任意 await 之前占住会话，避免同会话并发进入
   session.controller = ac
-  session.pendingUserDisplayText = userDisplayText
 
   const runId = makeRunId()
   const traceId = makeTraceId(sessionId, runId)
@@ -339,9 +323,7 @@ export async function runUserMessage(
 
     // 用户消息的追加与持久化由宿主完成；agent 只消费已含本轮用户消息的列表
     session.messages = [...session.messages, userMessage(agentUserText)]
-    persistSessionMessages(session.workspaceId, sessionId, session.messages, {
-      userDisplayText: session.pendingUserDisplayText
-    })
+    persistSessionMessages(session.workspaceId, sessionId, session.messages)
 
     const provider = resolveChatModel(settings)
     if (!provider) {
@@ -354,24 +336,21 @@ export async function runUserMessage(
       provider,
       abortController: ac,
       settings,
+      workspacePath,
       runMeta: {
         sessionId,
         runId,
         traceId,
         workspaceId: session.workspaceId,
-        root,
-        userDisplayText,
         agentUserText
       },
       maxSteps: MAX_AGENT_LOOP_STEPS,
       invokeTimeoutMs: settings.agentRunTimeoutMs,
-      callbacks: {
-        onTextDelta: (text) => {
-          emit({ type: 'text-delta', sessionId, text, runId, traceId })
-        },
-        onTool,
-        emit
-      }
+      onTextDelta: (text) => {
+        emit({ type: 'text-delta', sessionId, text, runId, traceId })
+      },
+      onTool,
+      onEmit: emit
     })
 
     const latest = sessions.get(sessionId)
@@ -380,8 +359,7 @@ export async function runUserMessage(
     latest.messages = graphResult.messages
 
     persistSessionMessages(latest.workspaceId, sessionId, latest.messages, {
-      toolEventsForLastAssistant: runToolEvents.length > 0 ? runToolEvents : undefined,
-      userDisplayText: latest.pendingUserDisplayText
+      toolEventsForLastAssistant: runToolEvents.length > 0 ? runToolEvents : undefined
     })
     emit({
       type: 'done',
@@ -421,15 +399,13 @@ export async function runUserMessage(
         }
       })
       persistSessionMessages(latest.workspaceId, sessionId, latest.messages, {
-        toolEventsForLastAssistant: runToolEvents.length > 0 ? runToolEvents : undefined,
-        userDisplayText: latest.pendingUserDisplayText
+        toolEventsForLastAssistant: runToolEvents.length > 0 ? runToolEvents : undefined
       })
     }
   } finally {
     const latest = sessions.get(sessionId)
     if (latest) {
       latest.controller = null
-      latest.pendingUserDisplayText = undefined
     }
     void flushLangfuseTracing()
   }
