@@ -43,7 +43,7 @@ describe('createAgent', () => {
     const result = await agent.send({
       composerMode: 'ask',
       messages: [],
-      model: stubModel,
+      provider: stubModel,
       abortController: new AbortController(),
       settings: defaultSettings,
       runMeta: {
@@ -64,7 +64,5 @@ describe('createAgent', () => {
     const [, runMeta] = vi.mocked(runWorkflow).mock.calls[0]!
     expect(runMeta.root).toBe('/tmp/ws')
     expect(result.messages).toEqual([{ role: 'assistant', content: 'hello' }])
-    // 无流式输出时 fallback 到最后一条 AI 消息
-    expect(callbacks.onTextDelta).toHaveBeenCalledWith('hello')
   })
 })

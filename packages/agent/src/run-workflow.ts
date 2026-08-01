@@ -42,15 +42,14 @@ export type RunWorkflowInput = {
   composerMode: AgentComposerMode
   runMeta: RunMeta
   messages: CoreMessage[]
-  model: LanguageModel
   settings: AppSettings
   onTool: (e: ToolObservation) => void
   emit: (event: StreamEvent) => void
   abortController: AbortController
-  streamedCharsRef: { current: number }
   pushStreamToken: (token: string) => void
   prepareTooling: PrepareToolingFn
-  provider?: LanguageModel
+  /** 本轮聊天模型；同时供 tooling 与 Agent Loop 使用 */
+  provider: LanguageModel
   maxSteps?: number
   invokeTimeoutMs?: number
 }
@@ -104,55 +103,6 @@ async function prepareToolingPhase(
 }
 
 /**
- * 运行 Agent Loop 阶段（流式生成与工具调用）。
- *
- * @param state - 当前状态
- * @param model - 本轮已解析的聊天模型
- * @param abortController - 取消控制器
- * @param streamedCharsRef - 已流式推送字符计数
- * @param pushStreamToken - 流式 token 回调
- * @param maxSteps - 最大工具调用轮次
- * @param invokeTimeoutMs - 循环超时（毫秒）
- * @returns 运行结束后的 messages
- */
-async function runAgentLoopPhase(
-  state: WorkflowState,
-  model: LanguageModel,
-  abortController: AbortController,
-  streamedCharsRef: { current: number },
-  pushStreamToken: (token: string) => void,
-  maxSteps?: number,
-  invokeTimeoutMs?: number
-): Promise<{ messages: CoreMessage[] }> {
-  const prepared = state.tooling
-  if (!prepared) {
-    throw new Error('[runAgentLoopPhase] tooling not prepared')
-  }
-
-  const { tools, runPrompt } = prepared
-
-  const onStreamToken = (token: string) => {
-    streamedCharsRef.current += token.length
-    pushStreamToken(token)
-  }
-
-  const runMessages = await runReactLoop(
-    model,
-    runPrompt,
-    state.messages,
-    tools,
-    abortController,
-    onStreamToken,
-    maxSteps,
-    invokeTimeoutMs
-  )
-
-  return {
-    messages: runMessages.length > 0 ? runMessages : state.messages
-  }
-}
-
-/**
  * 执行完整 agent 工作流（按阶段编排：工具准备、Agent Loop）。
  *
  * 调用方须已将本轮用户消息写入 messages；消息持久化由宿主负责。
@@ -160,15 +110,13 @@ async function runAgentLoopPhase(
  * @param composerMode - 编排模式（ask / build 等）
  * @param runMeta - 本轮 run 元数据
  * @param messages - 会话消息（须已含本轮用户消息）
- * @param model - 本轮已解析的聊天模型（由调用方传入，工作流内不再 resolve）
  * @param settings - 应用设置
  * @param onTool - 工具观察回调
  * @param emit - 流式事件回调
  * @param abortController - 取消控制器
- * @param streamedCharsRef - 已流式推送字符计数
  * @param pushStreamToken - 流式 token 回调
  * @param prepareTooling - 工具组装函数
- * @param provider - 可选模型（供 tooling 使用）
+ * @param provider - 本轮已解析的聊天模型（供 tooling 与 Agent Loop 使用）
  * @param maxSteps - 最大工具调用轮次
  * @param invokeTimeoutMs - 循环超时（毫秒）
  * @returns 运行结束后的 messages
@@ -177,15 +125,13 @@ export async function runWorkflow(
   composerMode: AgentComposerMode,
   runMeta: RunMeta,
   messages: CoreMessage[],
-  model: LanguageModel,
   settings: AppSettings,
   onTool: (e: ToolObservation) => void,
   emit: (event: StreamEvent) => void,
   abortController: AbortController,
-  streamedCharsRef: { current: number },
   pushStreamToken: (token: string) => void,
   prepareTooling: PrepareToolingFn,
-  provider?: LanguageModel,
+  provider: LanguageModel,
   maxSteps?: number,
   invokeTimeoutMs?: number
 ): Promise<RunWorkflowResult> {
@@ -209,19 +155,26 @@ export async function runWorkflow(
     )
   )
 
-  const agentLoopResult = await runAgentLoopPhase(
-    state,
-    model,
+  const prepared = state.tooling
+  if (!prepared) {
+    throw new Error('[runWorkflow] tooling not prepared')
+  }
+
+  const { tools, runPrompt } = prepared
+
+  const runMessages = await runReactLoop(
+    provider,
+    runPrompt,
+    state.messages,
+    tools,
     abortController,
-    streamedCharsRef,
     pushStreamToken,
     maxSteps,
     invokeTimeoutMs
   )
-  state.messages = agentLoopResult.messages
 
   return {
-    messages: state.messages
+    messages: runMessages.length > 0 ? runMessages : state.messages
   }
 }
 

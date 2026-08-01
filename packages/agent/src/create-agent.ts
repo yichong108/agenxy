@@ -20,10 +20,6 @@ import {
   warmupMcpServersFromConfig,
 } from "./mcp/mcp-runtime.js";
 import type { McpProbeResult, McpWarmupServerResult } from "./mcp/types.js";
-import {
-  contentToText,
-  findLastAssistantMessage,
-} from "./messages.js";
 import { runWorkflow, type PrepareToolingFn } from "./run-workflow.js";
 import { loadSkillsFromPaths } from "./skills/load-skills.js";
 import {
@@ -91,7 +87,7 @@ export type AgentMcp = {
  * ```
  */
 export type CreateAgentOptions = {
-  /** AI SDK LanguageModel；可选注入，供 tooling 等使用；对话模型由 send 的 model 传入 */
+  /** AI SDK LanguageModel；可选注入，供 tooling 等使用；对话模型由 send 的 provider 传入 */
   provider?: LanguageModel;
   /** 本地运行环境 */
   local?: CreateAgentLocalOptions;
@@ -122,7 +118,7 @@ export type AgentRunInput = {
   composerMode: AgentComposerMode;
   messages: CoreMessage[];
   /** 本轮已解析的聊天模型（由宿主传入，send 内不再 resolve） */
-  model: LanguageModel;
+  provider: LanguageModel;
   abortController: AbortController;
   settings: AppSettings;
   runMeta: RunMeta;
@@ -138,7 +134,6 @@ export type AgentRunInput = {
  */
 export type AgentRunResult = {
   messages: CoreMessage[];
-  streamedChars: number;
 };
 
 /**
@@ -241,7 +236,7 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
     const {
       composerMode,
       messages,
-      model,
+      provider,
       abortController,
       settings,
       callbacks,
@@ -252,45 +247,23 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
     const root = input.runMeta.root?.trim() || defaultCwd || process.cwd();
     const runMeta: RunMeta = { ...input.runMeta, root };
 
-    const streamedCharsRef = { current: 0 };
-
     const workflowResult = await runWorkflow(
       composerMode,
       runMeta,
       messages,
-      model,
       settings,
       callbacks.onTool,
       callbacks.emit,
       abortController,
-      streamedCharsRef,
       (token) => callbacks.onTextDelta(token),
       prepareTooling,
-      options.provider,
+      provider,
       maxSteps,
       invokeTimeoutMs,
     );
 
-    // 如果流式文本为空，则尝试 fallback 到最后一轮 AI 消息。
-    // 因为流式文本为空，说明用户没有输入，或者输入了但是没有触发流式输出。
-    // 这时候尝试 fallback 到最后一轮 AI 消息，可能能得到一些有价值的内容。
-    // 当然，如果流式文本不为空，则不进行 fallback。
-    // 这里 fallback 到最后一轮 AI 消息，而不是第一轮 AI 消息，是因为第一轮 AI 消息可能是系统提示词，不是用户输入。
-    // 当然，如果最后一轮 AI 消息也没有内容，则不进行 fallback。
-    // fallback是为了什么？避免用户输入了但是没有触发流式输出，导致用户没有收到任何内容。
-    if (streamedCharsRef.current === 0) {
-      const lastAssistant = findLastAssistantMessage(workflowResult.messages);
-      const fallback = lastAssistant
-        ? contentToText(lastAssistant.content)
-        : "";
-      if (fallback) {
-        callbacks.onTextDelta(fallback);
-      }
-    }
-
     return {
       messages: workflowResult.messages,
-      streamedChars: streamedCharsRef.current,
     };
   }
 

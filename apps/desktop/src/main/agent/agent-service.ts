@@ -343,15 +343,15 @@ export async function runUserMessage(
       userDisplayText: session.pendingUserDisplayText
     })
 
-    const model = resolveChatModel(settings)
-    if (!model) {
+    const provider = resolveChatModel(settings)
+    if (!provider) {
       throw new Error('请先在设置中配置 API Key')
     }
 
     const graphResult = await session.agent.send({
       composerMode,
       messages: session.messages,
-      model,
+      provider,
       abortController: ac,
       settings,
       runMeta: {
