@@ -24,7 +24,11 @@ import {
   warmupMcpServersFromConfig,
 } from "./mcp/mcp-runtime.js";
 import type { McpProbeResult, McpWarmupServerResult } from "./mcp/types.js";
-import { contentToText, findLastAssistantMessage } from "./messages.js";
+import {
+  contentToText,
+  findLastAssistantMessage,
+  userMessage,
+} from "./messages.js";
 import { runReactLoop } from "./react-loop.js";
 import { isAbortError } from "./run-utils.js";
 import { loadSkillsFromPaths } from "./skills/load-skills.js";
@@ -141,15 +145,16 @@ const DEFAULT_LOCAL: CreateAgentLocalOptions = {};
 /**
  * createAgent 配置项。
  *
- * provider 必填；local 可选（默认空对象，cwd 回退 process.cwd()）。
+ * provider 必填；messages / local 可选（messages 默认 []，cwd 回退 process.cwd()）。
  * 其余未传时使用内置默认（工作区工具）。
  * 配置 skills.paths 后，默认 tooling 会叠加这些路径下的技能工具。
  * 配置 mcp.configPath 后，agent 会从该文件加载 MCP 并绑定工具。
  *
  * @example
  * ```ts
- * const agent = await createAgent({
+ * const agent = createAgent({
  *   provider: model,
+ *   messages: history,
  *   local: { cwd: process.cwd() },
  *   skills: { paths: ['/path/to/skills'] },
  *   mcp: { configPath: '/path/to/mcp.json' }
@@ -159,6 +164,11 @@ const DEFAULT_LOCAL: CreateAgentLocalOptions = {};
 export type CreateAgentOptions = {
   /** AI SDK LanguageModel；创建时必填，send 未传 provider 时作为本轮对话模型 */
   provider: LanguageModel;
+  /**
+   * 会话消息初始值；由 agent 持有。
+   * 可选，默认 []。send 会追加本轮用户消息并在结束后写回完整轨迹，以支持连续 send。
+   */
+  messages?: CoreMessage[];
   /** 本地运行环境；可选，默认 {}，cwd 缺省时回退 process.cwd() */
   local?: CreateAgentLocalOptions;
   /** Skills 扫描路径；由默认 tooling 加载并叠加技能工具 */
@@ -171,9 +181,11 @@ export type CreateAgentOptions = {
 };
 
 /**
- * 单次 agent run 的输入。
+ * 单次 agent run 的可选参数（send 的第二参）。
  *
- * 宿主回调（onTextDelta / onTool / onEmit）直接挂在入参上，不再嵌套 callbacks。
+ * 调用形态：`send(userText, options?)`。
+ * 会话历史由 createAgent / agent.messages 持有；send 内部追加 userText 并写回。
+ * 回调均为可选，未传时使用空操作。
  * 工具时间线（ToolTimelineEvent）由宿主在 onTool 中自行映射与收集。
  */
 export type AgentRunInput = {
@@ -181,7 +193,6 @@ export type AgentRunInput = {
    * 发送模式；可选，默认 build（非法值亦回退 build）。
    */
   composerMode?: AgentComposerMode;
-  messages: CoreMessage[];
   /**
    * 本轮已解析的聊天模型。
    * 可选；未传时回退 createAgent 时注入的 provider。
@@ -208,12 +219,12 @@ export type AgentRunInput = {
    * 由宿主注入；未配置有效 key 且无环境变量时不注册 web_search。
    */
   tavily?: AgentRunTavilyOptions;
-  /** 流式文本增量回调 */
-  onTextDelta: (text: string) => void;
-  /** 工具观察回调；宿主可在此映射与收集工具时间线 */
-  onTool: (event: ToolObservation) => void;
-  /** 向宿主推送 StreamEvent（如错误、状态） */
-  onEmit: (event: StreamEvent) => void;
+  /** 流式文本增量回调；可选 */
+  onTextDelta?: (text: string) => void;
+  /** 工具观察回调；可选，宿主可在此映射与收集工具时间线 */
+  onTool?: (event: ToolObservation) => void;
+  /** 向宿主推送 StreamEvent（如错误、状态）；可选 */
+  onEmit?: (event: StreamEvent) => void;
   /** 最大工具调用轮次；缺省时使用 MAX_AGENT_LOOP_STEPS */
   maxSteps?: number;
   /** 循环超时（毫秒）；缺省时使用 defaultSettings.agentRunTimeoutMs */
@@ -237,11 +248,13 @@ export type AgentWaitStatus = "finished" | "error" | "cancelled";
  *
  * @example
  * ```ts
- * void agent.send({ messages, onTextDelta, onTool, onEmit })
+ * void agent.send('hi', { onTextDelta, onTool, onEmit })
  * const result = await agent.wait()
  * console.log(result.status) // "finished" | "error" | "cancelled"
  * console.log(result.result) // 最终助手文本
  * console.log(result.error)  // 失败时有
+ * // 连续 send：历史已在 agent.messages 中
+ * await agent.send('继续', {})
  * ```
  */
 export type AgentWaitResult = {
@@ -257,8 +270,16 @@ export type AgentWaitResult = {
  * createAgent 返回的 agent 实例。
  */
 export type Agent = {
-  /** 发起一次 run；同会话互斥由宿主保证，不同会话可并行 */
-  send: (input: AgentRunInput) => Promise<AgentRunResult>;
+  /**
+   * 当前会话消息；创建时来自 CreateAgentOptions.messages。
+   * send 会追加本轮用户消息，成功后写回含助手回复的完整轨迹，可直接再 send。
+   */
+  messages: CoreMessage[];
+  /**
+   * 发起一次 run：`send(userText, options?)`。
+   * 内部更新 messages；同会话互斥由宿主保证，不同会话可并行。
+   */
+  send: (userText: string, input?: AgentRunInput) => Promise<AgentRunResult>;
   /**
    * 等待当前（或最近一次）run 结束，返回摘要终态。
    * 未调用过 send 时抛出错误。
@@ -271,7 +292,7 @@ export type Agent = {
 /**
  * 创建 agent 实例 — packages/agent 的唯一入口工厂。
  *
- * 必填 provider；local 可选（默认 {}，cwd 回退 process.cwd()）。
+ * 必填 provider；messages / local 可选（messages 默认 []，cwd 回退 process.cwd()）。
  * 工具与 prompt 由内置默认 tooling 组装。
  * 可选 skills.paths 提供基础 Skills；mcp.configPath 由 agent 内部实现 MCP。
  * 可 `await createAgent(...)`（函数本身同步，await 无害）。
@@ -279,13 +300,15 @@ export type Agent = {
  * 注意：不直接与外部耦合。同会话「运行中不可再发」由宿主按 session 互斥；
  * 不同会话各自独立 send，互不排队。
  *
- * @param options - 创建配置；provider 必填，local 有默认值
- * @returns 可 send 的 agent 实例
+ * @param options - 创建配置；provider 必填，messages / local 有默认值
+ * @returns 可 send / wait 的 agent 实例
  */
 export function createAgent(options: CreateAgentOptions): Agent {
   const local = options.local ?? DEFAULT_LOCAL;
   const defaultCwd = local.cwd?.trim() || process.cwd();
   const defaultProvider = options.provider;
+  /** 会话消息由 agent 持有；初始值来自 options.messages */
+  let messages: CoreMessage[] = [...(options.messages ?? [])];
   const skillPaths = (options.skills?.paths ?? [])
     .map((p) => p.trim())
     .filter(Boolean);
@@ -354,25 +377,35 @@ export function createAgent(options: CreateAgentOptions): Agent {
   };
 
   /**
-   * 发起一次 agent run：组装本轮工具与 prompt，再执行 ReAct 循环。
+   * 发起一次 agent run：追加用户消息 → 组装工具与 prompt → ReAct 循环。
    *
-   * 调用方须已将本轮用户消息写入 messages；消息持久化由宿主负责。
-   * 工作区路径由 input.workspacePath 提供，缺省回退 local.cwd / process.cwd()。
-   * 同时更新 wait() 可观测的终态；失败时 wait 得 status，send 仍会 rethrow。
+   * 调用：`send(userText, options?)`。内部将 userText 追加到 agent.messages，
+   * 成功后写回完整轨迹，因此可连续多次 send。
+   * 消息持久化仍由宿主负责。失败时 wait 得 status，send 仍会 rethrow；
+   * 已追加的用户消息会保留在 agent.messages（便于重试或展示）。
    *
-   * @param input - 单次 run 的输入（含可选 workspacePath）
+   * @param userText - 本轮用户文本
+   * @param input - 可选 run 参数（回调、模式、超时等）
    * @returns 运行结束后的 messages
-   * @throws 运行失败或取消时抛出原错误（wait 仍可拿到对应 status）
+   * @throws 消息为空、运行失败或取消时抛出（wait 仍可拿到对应 status）
    */
-  async function send(input: AgentRunInput): Promise<AgentRunResult> {
-    const {
-      messages,
-      onTextDelta,
-      onTool,
-      onEmit,
-      maxSteps,
-      invokeTimeoutMs,
-    } = input;
+  async function send(
+    userText: string,
+    input: AgentRunInput = {},
+  ): Promise<AgentRunResult> {
+    const trimmed = userText.trim();
+    if (!trimmed) {
+      throw new Error("userText is empty");
+    }
+
+    const onTextDelta = input.onTextDelta ?? (() => {});
+    const onTool = input.onTool ?? (() => {});
+    const onEmit = input.onEmit ?? (() => {});
+    const { maxSteps, invokeTimeoutMs } = input;
+
+    // 追加本轮用户消息并立即写回，保证连续 send / 失败重试时历史连贯
+    const inputMessages = [...messages, userMessage(trimmed)];
+    messages = inputMessages;
 
     // 发送模式：未传或非法值时默认 build
     const composerMode = normalizeComposerMode(input.composerMode);
@@ -407,7 +440,7 @@ export function createAgent(options: CreateAgentOptions): Agent {
       const runMessages = await runReactLoop(
         provider,
         tooling.runPrompt,
-        messages,
+        inputMessages,
         tooling.tools,
         abortController,
         onTextDelta,
@@ -415,7 +448,10 @@ export function createAgent(options: CreateAgentOptions): Agent {
         invokeTimeoutMs,
       );
 
-      const finalMessages = runMessages.length > 0 ? runMessages : messages;
+      const finalMessages =
+        runMessages.length > 0 ? runMessages : inputMessages;
+      // 写回完整轨迹，供下一次 send 直接续聊
+      messages = finalMessages;
       const waitResult: AgentWaitResult = {
         status: "finished",
         result: extractAssistantText(finalMessages),
@@ -464,6 +500,12 @@ export function createAgent(options: CreateAgentOptions): Agent {
     : undefined;
 
   return {
+    get messages() {
+      return messages;
+    },
+    set messages(next: CoreMessage[]) {
+      messages = [...next];
+    },
     send,
     wait,
     ...(mcp ? { mcp } : {}),

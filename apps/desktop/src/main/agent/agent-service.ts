@@ -40,11 +40,12 @@ type SessionRuntime = {
  * 按工作区创建会话级 agent。
  *
  * @param workspaceId - 工作区 ID
+ * @param messages - 会话初始消息（可选）
  * @returns 新 Agent
  */
-function createAgentForWorkspace(workspaceId: string): Agent {
+function createAgentForWorkspace(workspaceId: string, messages?: CoreMessage[]): Agent {
   const cwd = getWorkspaceById(workspaceId)?.path?.trim() || undefined
-  return createSessionAgent({ cwd })
+  return createSessionAgent({ cwd, messages })
 }
 
 const sessions = new Map<string, SessionRuntime>()
@@ -177,16 +178,18 @@ export function initSessionState(workspaceId: string, sessionId: string): void {
   if (existing) {
     if (existing.workspaceId !== workspaceId) {
       existing.workspaceId = workspaceId
-      existing.agent = createAgentForWorkspace(workspaceId)
+      // 工作区变更时重建 agent，保留已有会话消息
+      existing.agent = createAgentForWorkspace(workspaceId, existing.messages)
     }
     return
   }
 
   const persisted = getSessionMessages(workspaceId, sessionId)
+  const messages = fromPersistedMessages(persisted)
   sessions.set(sessionId, {
     workspaceId,
-    agent: createAgentForWorkspace(workspaceId),
-    messages: fromPersistedMessages(persisted),
+    agent: createAgentForWorkspace(workspaceId, messages),
+    messages,
     controller: null,
     terminalKey: `term:${sessionId}`
   })
@@ -321,18 +324,14 @@ export async function runUserMessage(
       emitTool(e)
     }
 
-    // 用户消息的追加与持久化由宿主完成；agent 只消费已含本轮用户消息的列表
-    session.messages = [...session.messages, userMessage(agentUserText)]
-    persistSessionMessages(session.workspaceId, sessionId, session.messages)
-
+    // 用户消息由 agent.send 内部追加到 messages；宿主只负责持久化与会话镜像
     const provider = resolveChatModel(settings)
     if (!provider) {
       throw new Error('请先在设置中配置 API Key')
     }
 
-    const graphResult = await session.agent.send({
+    const graphResult = await session.agent.send(agentUserText, {
       composerMode,
-      messages: session.messages,
       provider,
       abortController: ac,
       workspacePath,
@@ -351,6 +350,7 @@ export async function runUserMessage(
     const latest = sessions.get(sessionId)
     if (!latest) return
 
+    // agent.messages 已含本轮完整轨迹，镜像到会话运行时
     latest.messages = graphResult.messages
 
     persistSessionMessages(latest.workspaceId, sessionId, latest.messages, {

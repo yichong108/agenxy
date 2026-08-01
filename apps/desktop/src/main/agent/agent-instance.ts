@@ -4,7 +4,7 @@
  * 每个会话应持有独立的 agent 实例（createSessionAgent）。
  * MCP 预热 / 探测 / dispose 使用应用级宿主（getMcpHostAgent），不参与会话 send。
  */
-import { type Agent, createAgent, type CreateAgentOptions } from '@agenwork/agent'
+import { type Agent, type CoreMessage, createAgent, type CreateAgentOptions } from '@agenwork/agent'
 import type { LanguageModel } from 'ai'
 
 import { getMcpConfigPath } from '@/main/store'
@@ -19,11 +19,13 @@ const PLACEHOLDER_PROVIDER = { modelId: 'desktop-placeholder' } as LanguageModel
  * 组装 Desktop 会话用 createAgent 选项。
  *
  * @param cwd - 工作区根目录（可选）
+ * @param messages - 会话初始消息（可选）
  * @returns CreateAgentOptions
  */
-function buildSessionAgentOptions(cwd?: string): CreateAgentOptions {
+function buildSessionAgentOptions(cwd?: string, messages?: CoreMessage[]): CreateAgentOptions {
   return {
     provider: PLACEHOLDER_PROVIDER,
+    ...(messages ? { messages } : {}),
     ...(cwd ? { local: { cwd } } : {}),
     mcp: { configPath: getMcpConfigPath() }
   }
@@ -35,11 +37,11 @@ function buildSessionAgentOptions(cwd?: string): CreateAgentOptions {
  * 同会话复用该实例；不同会话互不共享，避免并发 send / 状态串扰。
  * 勿在会话销毁时调用 agent.mcp.dispose（MCP 连接池为进程级）。
  *
- * @param options - cwd 等工作区相关配置
+ * @param options - cwd / messages 等工作区与会话相关配置
  * @returns 新的 Agent 实例
  */
-export function createSessionAgent(options?: { cwd?: string }): Agent {
-  return createAgent(buildSessionAgentOptions(options?.cwd?.trim() || undefined))
+export function createSessionAgent(options?: { cwd?: string; messages?: CoreMessage[] }): Agent {
+  return createAgent(buildSessionAgentOptions(options?.cwd?.trim() || undefined, options?.messages))
 }
 
 /** 应用级 MCP 宿主（warmup / probe / dispose），不用于会话 send */
