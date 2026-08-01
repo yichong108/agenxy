@@ -1,33 +1,58 @@
 import { type AgentComposerMode, type AppSettings, type StreamEvent } from '@agenwork/shared'
 import type { CoreMessage, LanguageModel } from 'ai'
 
-import type { ToolExecutorContext } from './define-tool.js'
-import { resolveChatModel } from './llm.js'
+import type { ToolExecutorContext, ToolObservation } from './define-tool.js'
 import { agentLog } from './logger.js'
-import { userMessage } from './messages.js'
 import { runReactLoop } from './react-loop.js'
-import type {
-  PreparedTooling,
-  RunMeta,
-  WorkflowRunContext,
-  WorkflowState
-} from './run-types.js'
+import type { PreparedTooling, RunMeta, WorkflowState } from './run-types.js'
 
-export type InitRunCallbacks = {
-  persistMessages: (messages: CoreMessage[]) => void
-}
-
-export type RunWorkflowInput = {
+/**
+ * 按模式组装本轮可用工具与 system prompt 的依赖函数。
+ */
+export type PrepareToolingFn = (args: {
   composerMode: AgentComposerMode
-  runMeta: RunMeta
-  messages: CoreMessage[]
-  runContext: WorkflowRunContext
-  initRunCallbacks: InitRunCallbacks
+  sessionId: string
+  root: string
+  settings: AppSettings
+  runCtx: ToolExecutorContext
+  /** 本轮用户可见/代理文本，供宿主按需使用 */
+  userText: string
   signal?: AbortSignal
+  emit: (event: StreamEvent) => void
+  provider?: LanguageModel
+}) => Promise<PreparedTooling>
+
+/**
+ * 工作流依赖（工具组装等）。
+ *
+ * @deprecated 使用 PrepareToolingFn 与 runWorkflow 位置参数
+ */
+export type WorkflowDeps = {
+  prepareTooling: PrepareToolingFn
+  /** createAgent 注入的模型；未设则各阶段从 settings 解析 */
+  provider?: LanguageModel
 }
 
 export type RunWorkflowResult = {
   messages: CoreMessage[]
+}
+
+/** @deprecated 工作流已改为位置参数，不再使用对象入参 */
+export type RunWorkflowInput = {
+  composerMode: AgentComposerMode
+  runMeta: RunMeta
+  messages: CoreMessage[]
+  model: LanguageModel
+  settings: AppSettings
+  onTool: (e: ToolObservation) => void
+  emit: (event: StreamEvent) => void
+  abortController: AbortController
+  streamedCharsRef: { current: number }
+  pushStreamToken: (token: string) => void
+  prepareTooling: PrepareToolingFn
+  provider?: LanguageModel
+  maxSteps?: number
+  invokeTimeoutMs?: number
 }
 
 /** @deprecated 使用 RunWorkflowInput */
@@ -37,68 +62,30 @@ export type RunAgenworkPipelineInput = RunWorkflowInput
 export type RunAgenworkPipelineResult = RunWorkflowResult
 
 /**
- * 工作流依赖（工具组装等）。
- *
- * agent 核心调用 prepareTooling 后进入 ReAct 循环；
- * prepareTooling 由 createAgent 的默认 tooling 注入。
- */
-export type WorkflowDeps = {
-  prepareTooling: (args: {
-    composerMode: AgentComposerMode
-    sessionId: string
-    root: string
-    settings: AppSettings
-    runCtx: ToolExecutorContext
-    /** 本轮用户可见/代理文本，供宿主按需使用 */
-    userText: string
-    signal?: AbortSignal
-    emit: (event: StreamEvent) => void
-    provider?: LanguageModel
-  }) => Promise<PreparedTooling>
-
-  /** createAgent 注入的模型；未设则各阶段从 settings 解析 */
-  provider?: LanguageModel
-}
-
-/**
- * 追加本轮用户消息并持久化。
- *
- * 模型侧使用 agentUserText；UI 展示文案由宿主凭 RunMeta.userDisplayText 处理。
- *
- * @param state - 当前流水线状态
- * @param callbacks - 初始化回调（如消息持久化）
- * @returns 更新后的 messages 片段
- */
-function appendUserMessagePhase(
-  state: WorkflowState,
-  callbacks: InitRunCallbacks
-): Partial<WorkflowState> {
-  const { runMeta } = state
-  const messages = [...state.messages, userMessage(runMeta.agentUserText)]
-  callbacks.persistMessages(messages)
-  return { messages }
-}
-
-/**
  * 按模式组装本轮可用工具与 system prompt。
  *
  * @param state - 当前流水线状态
- * @param runContext - 运行上下文
- * @param deps - 宿主注入依赖
+ * @param settings - 应用设置
+ * @param onTool - 工具观察回调
+ * @param emit - 流式事件回调
+ * @param prepareTooling - 工具组装函数
+ * @param provider - 可选模型（供 tooling 使用）
  * @param signal - 可选取消信号
  * @returns tooling 产物
  */
 async function prepareToolingPhase(
   state: WorkflowState,
-  runContext: WorkflowRunContext,
-  deps: WorkflowDeps,
+  settings: AppSettings,
+  onTool: (e: ToolObservation) => void,
+  emit: (event: StreamEvent) => void,
+  prepareTooling: PrepareToolingFn,
+  provider?: LanguageModel,
   signal?: AbortSignal
 ): Promise<Partial<WorkflowState>> {
   const { composerMode, runMeta } = state
-  const { settings, onTool, emit, provider } = runContext
   const { sessionId, root, runId, traceId, userDisplayText, agentUserText } = runMeta
 
-  const toolingBundle = await deps.prepareTooling({
+  const toolingBundle = await prepareTooling({
     composerMode,
     sessionId,
     root,
@@ -107,7 +94,7 @@ async function prepareToolingPhase(
     userText: userDisplayText || agentUserText,
     signal,
     emit,
-    provider: deps.provider ?? provider
+    provider
   })
 
   const toolCount = Object.keys(toolingBundle.tools).length
@@ -120,32 +107,33 @@ async function prepareToolingPhase(
  * 运行 Agent Loop 阶段（流式生成与工具调用）。
  *
  * @param state - 当前状态
- * @param runContext - 运行上下文
- * @param deps - 宿主注入依赖
+ * @param model - 本轮已解析的聊天模型
+ * @param abortController - 取消控制器
+ * @param streamedCharsRef - 已流式推送字符计数
+ * @param pushStreamToken - 流式 token 回调
+ * @param maxSteps - 最大工具调用轮次
+ * @param invokeTimeoutMs - 循环超时（毫秒）
  * @returns 运行结束后的 messages
  */
 async function runAgentLoopPhase(
   state: WorkflowState,
-  runContext: WorkflowRunContext,
-  deps: WorkflowDeps
+  model: LanguageModel,
+  abortController: AbortController,
+  streamedCharsRef: { current: number },
+  pushStreamToken: (token: string) => void,
+  maxSteps?: number,
+  invokeTimeoutMs?: number
 ): Promise<{ messages: CoreMessage[] }> {
-  const bridge = runContext.reactBridge
   const prepared = state.tooling
   if (!prepared) {
     throw new Error('[runAgentLoopPhase] tooling not prepared')
   }
 
-  const { settings } = runContext
   const { tools, runPrompt } = prepared
 
-  const model = resolveChatModel(settings, deps.provider ?? runContext.provider)
-  if (!model) {
-    throw new Error('请先在设置中配置 API Key，或向 createAgent 传入 provider')
-  }
-
   const onStreamToken = (token: string) => {
-    bridge.streamedCharsRef.current += token.length
-    bridge.pushStreamToken(token)
+    streamedCharsRef.current += token.length
+    pushStreamToken(token)
   }
 
   const runMessages = await runReactLoop(
@@ -153,10 +141,10 @@ async function runAgentLoopPhase(
     runPrompt,
     state.messages,
     tools,
-    bridge.abortController,
+    abortController,
     onStreamToken,
-    bridge.maxSteps,
-    bridge.invokeTimeoutMs
+    maxSteps,
+    invokeTimeoutMs
   )
 
   return {
@@ -165,29 +153,71 @@ async function runAgentLoopPhase(
 }
 
 /**
- * 执行完整 agent 工作流（按阶段编排：消息、工具、Agent Loop）。
+ * 执行完整 agent 工作流（按阶段编排：工具准备、Agent Loop）。
  *
- * @param input - 初始状态与 runContext
- * @param deps - 宿主注入依赖
+ * 调用方须已将本轮用户消息写入 messages；消息持久化由宿主负责。
+ *
+ * @param composerMode - 编排模式（ask / build 等）
+ * @param runMeta - 本轮 run 元数据
+ * @param messages - 会话消息（须已含本轮用户消息）
+ * @param model - 本轮已解析的聊天模型（由调用方传入，工作流内不再 resolve）
+ * @param settings - 应用设置
+ * @param onTool - 工具观察回调
+ * @param emit - 流式事件回调
+ * @param abortController - 取消控制器
+ * @param streamedCharsRef - 已流式推送字符计数
+ * @param pushStreamToken - 流式 token 回调
+ * @param prepareTooling - 工具组装函数
+ * @param provider - 可选模型（供 tooling 使用）
+ * @param maxSteps - 最大工具调用轮次
+ * @param invokeTimeoutMs - 循环超时（毫秒）
  * @returns 运行结束后的 messages
  */
 export async function runWorkflow(
-  input: RunWorkflowInput,
-  deps: WorkflowDeps
+  composerMode: AgentComposerMode,
+  runMeta: RunMeta,
+  messages: CoreMessage[],
+  model: LanguageModel,
+  settings: AppSettings,
+  onTool: (e: ToolObservation) => void,
+  emit: (event: StreamEvent) => void,
+  abortController: AbortController,
+  streamedCharsRef: { current: number },
+  pushStreamToken: (token: string) => void,
+  prepareTooling: PrepareToolingFn,
+  provider?: LanguageModel,
+  maxSteps?: number,
+  invokeTimeoutMs?: number
 ): Promise<RunWorkflowResult> {
   const state: WorkflowState = {
-    messages: input.messages,
-    composerMode: input.composerMode,
-    runMeta: input.runMeta,
+    messages,
+    composerMode,
+    runMeta,
     tooling: null
   }
 
-  const { runContext, initRunCallbacks, signal } = input
+  Object.assign(
+    state,
+    await prepareToolingPhase(
+      state,
+      settings,
+      onTool,
+      emit,
+      prepareTooling,
+      provider,
+      abortController.signal
+    )
+  )
 
-  Object.assign(state, appendUserMessagePhase(state, initRunCallbacks))
-  Object.assign(state, await prepareToolingPhase(state, runContext, deps, signal))
-
-  const agentLoopResult = await runAgentLoopPhase(state, runContext, deps)
+  const agentLoopResult = await runAgentLoopPhase(
+    state,
+    model,
+    abortController,
+    streamedCharsRef,
+    pushStreamToken,
+    maxSteps,
+    invokeTimeoutMs
+  )
   state.messages = agentLoopResult.messages
 
   return {

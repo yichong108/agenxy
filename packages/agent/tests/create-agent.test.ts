@@ -3,6 +3,7 @@
  */
 
 import { defaultSettings } from '@agenwork/shared'
+import type { LanguageModel } from 'ai'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../src/run-workflow.js', () => ({
@@ -18,10 +19,12 @@ function createCallbacks() {
   return {
     onTextDelta: vi.fn(),
     onTool: vi.fn(),
-    emit: vi.fn(),
-    persistMessages: vi.fn()
+    emit: vi.fn()
   }
 }
+
+/** 测试用占位模型（send 不再内部 resolve） */
+const stubModel = { modelId: 'test-model' } as LanguageModel
 
 describe('createAgent', () => {
   beforeEach(() => {
@@ -40,6 +43,7 @@ describe('createAgent', () => {
     const result = await agent.send({
       composerMode: 'ask',
       messages: [],
+      model: stubModel,
       abortController: new AbortController(),
       settings: defaultSettings,
       runMeta: {
@@ -57,8 +61,8 @@ describe('createAgent', () => {
     })
 
     expect(runWorkflow).toHaveBeenCalledOnce()
-    const [input] = vi.mocked(runWorkflow).mock.calls[0]!
-    expect(input.runMeta.root).toBe('/tmp/ws')
+    const [, runMeta] = vi.mocked(runWorkflow).mock.calls[0]!
+    expect(runMeta.root).toBe('/tmp/ws')
     expect(result.messages).toEqual([{ role: 'assistant', content: 'hello' }])
     // 无流式输出时 fallback 到最后一条 AI 消息
     expect(callbacks.onTextDelta).toHaveBeenCalledWith('hello')

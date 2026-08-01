@@ -4,6 +4,7 @@ import {
   contentToText,
   type CoreMessage,
   killCommand,
+  resolveChatModel,
   type ToolObservation,
   userMessage
 } from '@agenwork/agent'
@@ -336,9 +337,21 @@ export async function runUserMessage(
       emitTool(e)
     }
 
+    // 用户消息的追加与持久化由宿主完成；agent 只消费已含本轮用户消息的列表
+    session.messages = [...session.messages, userMessage(agentUserText)]
+    persistSessionMessages(session.workspaceId, sessionId, session.messages, {
+      userDisplayText: session.pendingUserDisplayText
+    })
+
+    const model = resolveChatModel(settings)
+    if (!model) {
+      throw new Error('请先在设置中配置 API Key')
+    }
+
     const graphResult = await session.agent.send({
       composerMode,
       messages: session.messages,
+      model,
       abortController: ac,
       settings,
       runMeta: {
@@ -357,13 +370,7 @@ export async function runUserMessage(
           emit({ type: 'text-delta', sessionId, text, runId, traceId })
         },
         onTool,
-        emit,
-        persistMessages: (messages) => {
-          session.messages = messages
-          persistSessionMessages(session.workspaceId, sessionId, messages, {
-            userDisplayText: session.pendingUserDisplayText
-          })
-        }
+        emit
       }
     })
 
