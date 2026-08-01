@@ -301,20 +301,20 @@ export async function runUserMessage(
         traceId,
         event: {
           ...e,
-          runId: e.runId ?? runId,
-          traceId: e.traceId ?? traceId,
+          runId,
+          traceId,
           timestampMs: e.timestampMs ?? Date.now()
         }
       })
     }
 
-    /** agent 仅上报 ToolObservation；宿主映射为 UI/IPC 用的 ToolTimelineEvent */
+    /** agent 仅上报 ToolObservation；宿主附加 runId/traceId 并映射为 ToolTimelineEvent */
     const onTool = (obs: ToolObservation) => {
       const e: ToolTimelineEvent = {
         kind: 'tool',
         ...obs,
-        runId: obs.runId ?? runId,
-        traceId: obs.traceId ?? traceId,
+        runId,
+        traceId,
         timestampMs: obs.timestampMs ?? Date.now()
       }
       runToolEvents.push(e)
@@ -335,15 +335,10 @@ export async function runUserMessage(
       messages: session.messages,
       provider,
       abortController: ac,
-      settings,
       workspacePath,
-      runMeta: {
-        sessionId,
-        runId,
-        traceId,
-        workspaceId: session.workspaceId,
-        agentUserText
-      },
+      // sessionId / runId / traceId 仅在宿主侧使用；agent 只收 terminalKey
+      terminalKey: session.terminalKey,
+      tavily: { apiKey: settings.tavilyApiKey },
       maxSteps: MAX_AGENT_LOOP_STEPS,
       invokeTimeoutMs: settings.agentRunTimeoutMs,
       onTextDelta: (text) => {

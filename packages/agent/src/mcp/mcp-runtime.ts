@@ -13,7 +13,7 @@ import type { McpServerEntry } from '@agenwork/shared'
 import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
 
-import { type ToolExecutorContext } from '../define-tool.js'
+import { type ToolOnTool } from '../define-tool.js'
 import { agentLog } from '../logger.js'
 import { loadMcpServersFromConfig } from './load-config.js'
 import type { McpProbeResult, McpWarmupServerResult } from './types.js'
@@ -461,17 +461,16 @@ export type BuildMcpToolsResult = {
  * 为已启用的 MCP 服务器生成 Agent 工具（池化 stdio 连接，空闲自动断开）。
  *
  * @param servers - MCP 服务器列表
- * @param runCtx - 工具观察回调上下文
+ * @param onTool - 工具生命周期观察回调
  * @returns ToolSet、上下文提示与原始服务器列表
  */
 export async function buildMcpTools(
   servers: McpServerEntry[],
-  runCtx: ToolExecutorContext
+  onTool: ToolOnTool
 ): Promise<BuildMcpToolsResult> {
   const enabled = servers.filter((s) => s.enabled && s.command.trim())
   const out: ToolSet = {}
   const hintBlocks: string[] = []
-  const onTool = runCtx.onTool
 
   for (const srv of enabled) {
     try {
@@ -508,8 +507,6 @@ export async function buildMcpTools(
                 name: lcName,
                 status: 'start',
                 args: argStr,
-                runId: runCtx.runId,
-                traceId: runCtx.traceId,
                 timestampMs: startedAt
               })
               try {
@@ -525,8 +522,6 @@ export async function buildMcpTools(
                   name: lcName,
                   status: 'end',
                   result: text.slice(0, 12_000),
-                  runId: runCtx.runId,
-                  traceId: runCtx.traceId,
                   timestampMs: Date.now(),
                   durationMs: Date.now() - startedAt
                 })
@@ -538,8 +533,6 @@ export async function buildMcpTools(
                   name: lcName,
                   status: 'end',
                   result: message,
-                  runId: runCtx.runId,
-                  traceId: runCtx.traceId,
                   timestampMs: Date.now(),
                   durationMs: Date.now() - startedAt
                 })
@@ -564,15 +557,15 @@ export async function buildMcpTools(
  * 从配置文件加载 MCP 并生成 Agent 工具。
  *
  * @param configPath - MCP 配置文件路径
- * @param runCtx - 工具观察回调上下文
+ * @param onTool - 工具生命周期观察回调
  * @returns 工具列表、上下文提示与服务器列表
  */
 export async function buildMcpToolsFromConfig(
   configPath: string,
-  runCtx: ToolExecutorContext
+  onTool: ToolOnTool
 ): Promise<BuildMcpToolsResult> {
   const servers = await loadMcpServersFromConfig(configPath)
-  return buildMcpTools(servers, runCtx)
+  return buildMcpTools(servers, onTool)
 }
 
 /** @deprecated 使用 buildMcpTools */

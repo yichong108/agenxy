@@ -12,7 +12,7 @@ import path from 'node:path'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import { defineTool, mergeToolSets, type ToolExecutorContext } from '../define-tool.js'
+import { defineTool, mergeToolSets, type ToolOnTool } from '../define-tool.js'
 import { agentLog } from '../logger.js'
 
 /** 单次 run 最多加载的技能数 */
@@ -187,12 +187,12 @@ async function appendDefsFromRoot(absRoot: string, defs: SkillDefinition[]): Pro
  * 宿主若需按意图过滤，应在外部筛选 paths 或过滤返回的 tools。
  *
  * @param paths - 技能根目录绝对路径列表
- * @param runCtx - 工具执行上下文（观察回调）
+ * @param onTool - 工具生命周期观察回调
  * @returns 工具 ToolSet 与 prompt hint
  */
 export async function loadSkillsFromPaths(
   paths: string[],
-  runCtx: ToolExecutorContext
+  onTool: ToolOnTool
 ): Promise<LoadedSkillsBundle> {
   const cleaned = paths.map((p) => p.trim()).filter(Boolean)
   if (!cleaned.length) {
@@ -222,7 +222,7 @@ export async function loadSkillsFromPaths(
           },
           truncateTo: 8_000
         },
-        runCtx
+        onTool
       )
     )
   )

@@ -12,6 +12,7 @@ export {
   type AgentMcp,
   type AgentRunInput,
   type AgentRunResult,
+  type AgentRunTavilyOptions,
   type CreateAgentLocalOptions,
   type CreateAgentMcpOptions,
   type CreateAgentOptions,
@@ -23,8 +24,8 @@ export {
   filterToolSet,
   mergeToolSets,
   type Tool,
-  type ToolExecutorContext,
   type ToolObservation,
+  type ToolOnTool,
   type ToolSet
 } from './define-tool.js'
 

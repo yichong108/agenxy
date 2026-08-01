@@ -5,17 +5,16 @@
 
 import {
   type AgentComposerMode,
-  type AppSettings,
   type McpServerEntry,
   type StreamEvent,
 } from "@agenwork/shared";
 import type { CoreMessage, LanguageModel, ToolSet } from "ai";
 
-import type { PreparedTooling, RunMeta } from "./run-types.js";
+import type { PreparedTooling } from "./run-types.js";
 import {
   mergeToolSets,
-  type ToolExecutorContext,
   type ToolObservation,
+  type ToolOnTool,
 } from "./define-tool.js";
 import {
   buildMcpToolsFromConfig,
@@ -37,12 +36,13 @@ import {
  */
 type PrepareToolingFn = (args: {
   composerMode: AgentComposerMode;
-  sessionId: string;
+  /** Shell 命令隔离键（宿主提供） */
+  terminalKey: string;
   root: string;
-  settings: AppSettings;
-  runCtx: ToolExecutorContext;
-  /** 本轮用户文案，供 tooling 按需使用 */
-  userText: string;
+  /** Tavily API Key（可选） */
+  tavilyApiKey?: string;
+  /** 工具生命周期观察回调 */
+  onTool: ToolOnTool;
   signal?: AbortSignal;
   emit: (event: StreamEvent) => void;
   provider?: LanguageModel;
@@ -73,6 +73,16 @@ export type CreateAgentSkillsOptions = {
 export type CreateAgentMcpOptions = {
   /** MCP 配置文件绝对路径 */
   configPath: string;
+};
+
+/**
+ * 单次 run 的 Tavily 联网搜索配置。
+ *
+ * 由宿主从应用设置等注入；未传或无有效 key 时，仍可读环境变量 TAVILY_API_KEY。
+ */
+export type AgentRunTavilyOptions = {
+  /** Tavily API Key */
+  apiKey?: string;
 };
 
 /**
@@ -132,13 +142,22 @@ export type AgentRunInput = {
   /** 本轮已解析的聊天模型（由宿主传入，send 内不再 resolve） */
   provider: LanguageModel;
   abortController: AbortController;
-  settings: AppSettings;
-  runMeta: RunMeta;
   /**
    * 本轮工作区根目录绝对路径。
    * 优先于 createAgent local.cwd；均未提供时回退 process.cwd()。
    */
   workspacePath?: string;
+  /**
+   * Shell 命令隔离键。
+   * 由宿主派生（如 `term:${sessionId}`）；缺省为 `term:default`。
+   * sessionId / runId / traceId 不进入 agent，由宿主在回调外维护。
+   */
+  terminalKey?: string;
+  /**
+   * Tavily 联网搜索配置。
+   * 由宿主注入；未配置有效 key 且无环境变量时不注册 web_search。
+   */
+  tavily?: AgentRunTavilyOptions;
   /** 流式文本增量回调 */
   onTextDelta: (text: string) => void;
   /** 工具观察回调；宿主可在此映射与收集工具时间线 */
@@ -179,30 +198,30 @@ function createDefaultPrepareTooling(
   skillPaths: string[],
   mcpConfigPath?: string,
 ): PrepareToolingFn {
-  return async ({ composerMode, sessionId, root, settings, runCtx }) => {
+  return async ({ composerMode, terminalKey, root, tavilyApiKey, onTool }) => {
     const workspaceTools = buildWorkspaceTools({
-      sessionId,
+      terminalKey,
       root,
-      settings,
-      runCtx,
+      tavilyApiKey,
+      onTool,
       mode: composerMode,
     });
 
     if (composerMode === "ask") {
       return {
         tools: workspaceTools,
-        runPrompt: buildWorkspaceRunPrompt(composerMode, root, settings),
+        runPrompt: buildWorkspaceRunPrompt(composerMode, root, tavilyApiKey),
       };
     }
 
     const skillBundle = skillPaths.length
-      ? await loadSkillsFromPaths(skillPaths, runCtx)
+      ? await loadSkillsFromPaths(skillPaths, onTool)
       : { tools: {}, hint: "" };
 
     let mcpExtras: WorkspacePromptExtras = {};
     let mcpTools: ToolSet = {};
     if (mcpConfigPath) {
-      const mcpResult = await buildMcpToolsFromConfig(mcpConfigPath, runCtx);
+      const mcpResult = await buildMcpToolsFromConfig(mcpConfigPath, onTool);
       mcpTools = mcpResult.tools;
       const enabled = mcpResult.servers.filter(
         (s) => s.enabled && s.command.trim(),
@@ -218,7 +237,7 @@ function createDefaultPrepareTooling(
 
     return {
       tools: mergeToolSets(skillBundle.tools, workspaceTools, mcpTools),
-      runPrompt: buildWorkspaceRunPrompt(composerMode, root, settings, {
+      runPrompt: buildWorkspaceRunPrompt(composerMode, root, tavilyApiKey, {
         skillHint: skillBundle.hint,
         ...mcpExtras,
       }),
@@ -263,7 +282,6 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
       messages,
       provider,
       abortController,
-      settings,
       onTextDelta,
       onTool,
       onEmit,
@@ -274,15 +292,16 @@ export function createAgent(options: CreateAgentOptions = {}): Agent {
     // 工作区路径：本轮 send 入参优先，其次 createAgent local.cwd，最后 process.cwd()
     const root =
       input.workspacePath?.trim() || defaultCwd || process.cwd();
-    const { sessionId, runId, traceId, agentUserText } = input.runMeta;
+    // Shell 隔离键由宿主提供；agent 不使用 sessionId
+    const terminalKey = input.terminalKey?.trim() || "term:default";
+    const tavilyApiKey = input.tavily?.apiKey?.trim() || undefined;
 
     const tooling = await prepareTooling({
       composerMode,
-      sessionId,
+      terminalKey,
       root,
-      settings,
-      runCtx: { runId, traceId, onTool },
-      userText: agentUserText,
+      tavilyApiKey,
+      onTool,
       signal: abortController.signal,
       emit: onEmit,
       provider,

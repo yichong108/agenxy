@@ -39,9 +39,10 @@ type MarkdownCollectOpts = {
   skipDirNamesAtRoot: Set<string>
 }
 
+/** 可选追踪字段；宿主可在 onTool 外附加 runId/traceId */
 type RunContext = {
-  runId: string
-  traceId: string
+  runId?: string
+  traceId?: string
 }
 
 type SkillToolContext = {

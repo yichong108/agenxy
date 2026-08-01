@@ -2,7 +2,6 @@
  * @file create-agent.ts 单元测试
  */
 
-import { defaultSettings } from '@agenwork/shared'
 import type { LanguageModel } from 'ai'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -43,14 +42,7 @@ describe('createAgent', () => {
       messages: [],
       provider: stubModel,
       abortController: new AbortController(),
-      settings: defaultSettings,
-      runMeta: {
-        sessionId: 's1',
-        runId: 'r1',
-        traceId: 't1',
-        workspaceId: 'w1',
-        agentUserText: 'hi'
-      },
+      terminalKey: 'term:s1',
       ...callbacks,
       maxSteps: 10,
       invokeTimeoutMs: 60_000
@@ -71,15 +63,8 @@ describe('createAgent', () => {
       messages: [],
       provider: stubModel,
       abortController: new AbortController(),
-      settings: defaultSettings,
       workspacePath: '/tmp/other',
-      runMeta: {
-        sessionId: 's1',
-        runId: 'r1',
-        traceId: 't1',
-        workspaceId: 'w1',
-        agentUserText: 'hi'
-      },
+      terminalKey: 'term:s1',
       ...callbacks,
       maxSteps: 10,
       invokeTimeoutMs: 60_000

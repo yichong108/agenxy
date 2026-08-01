@@ -2,7 +2,7 @@ import {
   buildWorkspaceRunPrompt,
   buildWorkspaceTools,
   mergeToolSets,
-  type ToolExecutorContext,
+  type ToolOnTool,
   type ToolSet,
   type WorkspacePromptExtras
 } from '@agenwork/agent'
@@ -12,7 +12,7 @@ import { buildSkillBundle } from '@/main/agent/skills/index'
 import { userDataPath } from '@/main/store'
 import type { ToolTimelineEvent } from '@/shared/ipc'
 
-export type { ToolExecutorContext, ToolSet } from '@agenwork/agent'
+export type { ToolOnTool, ToolSet } from '@agenwork/agent'
 
 /**
  * Agent 工具集与 prompt 片段（skills；MCP 由 createAgent.mcp.configPath 叠加）。
@@ -29,25 +29,26 @@ export type AgentTooling = {
  * MCP 由 createAgent 根据 mcp.configPath 在 agent 内部叠加，勿在此重复绑定。
  *
  * @param mode - ask / build
- * @param sessionId - 会话 ID（terminal key）
+ * @param terminalKey - Shell 隔离键（由宿主从 session 派生）
  * @param root - 工作区根目录
  * @param settings - 应用设置
- * @param runCtx - 工具观察回调
+ * @param onTool - 工具生命周期观察回调
  * @returns 工具 ToolSet 与 prompt 片段
  */
 export async function prepareAgentTooling(
   mode: AgentComposerMode,
-  sessionId: string,
+  terminalKey: string,
   root: string,
   settings: AppSettings,
-  runCtx: ToolExecutorContext
+  onTool: ToolOnTool
 ): Promise<AgentTooling> {
   const userDataRoot = userDataPath()
+  const termKey = terminalKey.trim() || 'term:default'
   const workspaceTools = buildWorkspaceTools({
-    sessionId,
+    terminalKey: termKey,
     root,
-    settings,
-    runCtx,
+    tavilyApiKey: settings.tavilyApiKey,
+    onTool,
     userDataRoot,
     mode
   })
@@ -56,18 +57,15 @@ export async function prepareAgentTooling(
     return { tools: workspaceTools, skillHint: '' }
   }
 
-  const termKey = `term:${sessionId}`
-  /** Desktop skills 使用 ToolTimelineEvent；仅将 tool 调用观察回传给 agent runCtx */
+  /** Desktop skills 使用 ToolTimelineEvent；仅将 tool 调用观察回传给 agent onTool */
   const onSkillTool = (e: ToolTimelineEvent) => {
     if (e.kind !== 'tool') return
-    runCtx.onTool({
+    onTool({
       id: e.id,
       name: e.name,
       status: e.status,
       args: e.args,
       result: e.result,
-      runId: e.runId,
-      traceId: e.traceId,
       timestampMs: e.timestampMs,
       durationMs: e.durationMs
     })
@@ -76,7 +74,7 @@ export async function prepareAgentTooling(
     root,
     termKey,
     settings,
-    runCtx,
+    runCtx: {},
     onTool: onSkillTool
   })
   const tools = mergeToolSets(skillBundle.tools, workspaceTools)
@@ -112,5 +110,5 @@ export function buildAgentRunPrompt(
     hasDisabledMcpEntries: (settings.mcpServers?.length ?? 0) > 0 && mcpEnabled.length === 0,
     hasUserDataGlob: true
   }
-  return buildWorkspaceRunPrompt(mode, root, settings, extras)
+  return buildWorkspaceRunPrompt(mode, root, settings.tavilyApiKey, extras)
 }

@@ -5,6 +5,7 @@ import type { z } from 'zod'
  * 工具执行生命周期观察（start / end）。
  *
  * 供宿主映射为产品侧时间线（如 ToolTimelineEvent）；agent 包本身不依赖 UI/IPC 类型。
+ * runId / traceId 由宿主在 onTool 回调中自行附加，不在此结构中携带。
  */
 export type ToolObservation = {
   id: string
@@ -12,29 +13,24 @@ export type ToolObservation = {
   status: 'start' | 'end'
   args?: string
   result?: string
-  runId?: string
-  traceId?: string
   timestampMs?: number
   durationMs?: number
 }
 
 /**
- * 工具执行上下文：run 标识与观察回调。
+ * 工具生命周期观察回调。
  *
- * AI SDK 的 ToolExecutionOptions 不含 runId / onTool，故由宿主/工作流注入。
+ * AI SDK 的 ToolExecutionOptions 不含 onTool，故由宿主/工作流注入。
+ * 会话与追踪 ID 由宿主在回调外维护，不注入本回调参数。
  */
-export type ToolExecutorContext = {
-  runId: string
-  traceId: string
-  onTool: (e: ToolObservation) => void
-}
+export type ToolOnTool = (e: ToolObservation) => void
 
 type ToolDefinition<T extends z.ZodTypeAny> = {
   name: string
   description: string
   /** Zod schema，对应 AI SDK Tool.parameters */
   parameters: T
-  execute: (input: z.infer<T>, ctx: ToolExecutorContext) => Promise<unknown>
+  execute: (input: z.infer<T>, onTool: ToolOnTool) => Promise<unknown>
   formatResult?: (result: unknown) => string
   truncateTo?: number
 }
@@ -71,12 +67,12 @@ export function filterToolSet(tools: ToolSet, predicate: (name: string) => boole
  * 或多个结果经 mergeToolSets 合并。
  *
  * @param def - 工具定义（name、parameters、execute）
- * @param runCtx - 运行上下文（onTool）
+ * @param onTool - 工具生命周期观察回调
  * @returns 仅含该工具一项的 ToolSet
  */
 export function defineTool<T extends z.ZodTypeAny>(
   def: ToolDefinition<T>,
-  runCtx: ToolExecutorContext
+  onTool: ToolOnTool
 ): ToolSet {
   const { name, description, parameters, execute, formatResult, truncateTo } = def
 
@@ -92,27 +88,23 @@ export function defineTool<T extends z.ZodTypeAny>(
           ? Object.values(parsed as Record<string, unknown>).join(', ')
           : String(parsed)
 
-      runCtx.onTool({
+      onTool({
         id,
         name,
         status: 'start',
         args,
-        runId: runCtx.runId,
-        traceId: runCtx.traceId,
         timestampMs: startedAt
       })
 
-      const result = await execute(parsed, runCtx)
+      const result = await execute(parsed, onTool)
       const resultStr = formatResult ? formatResult(result) : String(result)
       const truncated = truncateTo ? resultStr.slice(0, truncateTo) : resultStr
 
-      runCtx.onTool({
+      onTool({
         id,
         name,
         status: 'end',
         result: truncated,
-        runId: runCtx.runId,
-        traceId: runCtx.traceId,
         timestampMs: Date.now(),
         durationMs: Date.now() - startedAt
       })

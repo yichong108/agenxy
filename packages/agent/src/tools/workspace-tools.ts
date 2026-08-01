@@ -1,8 +1,4 @@
-import {
-  type AgentComposerMode,
-  type AppSettings,
-  MAX_TERMINAL_OUTPUT_CHARS
-} from '@agenwork/shared'
+import { type AgentComposerMode, MAX_TERMINAL_OUTPUT_CHARS } from '@agenwork/shared'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
@@ -10,7 +6,7 @@ import {
   defineTool,
   filterToolSet,
   mergeToolSets,
-  type ToolExecutorContext
+  type ToolOnTool
 } from '../define-tool.js'
 import {
   deleteFileTool,
@@ -38,7 +34,7 @@ type ToolDefinition<T extends z.ZodTypeAny> = {
   name: string
   description: string
   parameters: T
-  execute: (input: z.infer<T>, ctx: ToolExecutorContext) => Promise<unknown>
+  execute: (input: z.infer<T>, onTool: ToolOnTool) => Promise<unknown>
   formatResult?: (result: unknown) => string
   truncateTo?: number
 }
@@ -47,10 +43,13 @@ type ToolDefinition<T extends z.ZodTypeAny> = {
  * 组装工作区基础工具（fs / grep / shell / 可选 web_search）的选项。
  */
 export type BuildWorkspaceToolsOptions = {
-  sessionId: string
+  /** Shell 命令隔离键（由宿主提供；agent 不感知 sessionId） */
+  terminalKey: string
   root: string
-  settings: AppSettings
-  runCtx: ToolExecutorContext
+  /** Tavily API Key；未配置时不注册 web_search（仍可读环境变量） */
+  tavilyApiKey?: string
+  /** 工具生命周期观察回调 */
+  onTool: ToolOnTool
   /** 可选第二根目录（如 Electron userData），供 glob 搜索 */
   userDataRoot?: string | null
   /**
@@ -66,12 +65,12 @@ export type BuildWorkspaceToolsOptions = {
  * 这是 agent 内建能力：读写文件、搜索、shell、可选联网搜索。
  * MCP 由 createAgent 的 mcp.configPath 在 tooling 层叠加；意图筛选由宿主增强。
  *
- * @param options - 会话、工作区、设置与运行上下文
+ * @param options - 终端键、工作区、Tavily 与观察回调
  * @returns AI SDK ToolSet
  */
 export function buildWorkspaceTools(options: BuildWorkspaceToolsOptions): ToolSet {
-  const { sessionId, root, settings, runCtx, userDataRoot, mode } = options
-  const termKey = `term:${sessionId}`
+  const { terminalKey, root, tavilyApiKey, onTool, userDataRoot, mode } = options
+  const termKey = terminalKey.trim() || 'term:default'
 
   const baseToolDefs: ToolDefinition<z.ZodTypeAny>[] = [
     {
@@ -156,9 +155,9 @@ export function buildWorkspaceTools(options: BuildWorkspaceToolsOptions): ToolSe
     }
   ]
 
-  const baseTools = mergeToolSets(...baseToolDefs.map((def) => defineTool(def, runCtx)))
+  const baseTools = mergeToolSets(...baseToolDefs.map((def) => defineTool(def, onTool)))
 
-  const webSearchTools: ToolSet = isTavilyConfigured(settings.tavilyApiKey)
+  const webSearchTools: ToolSet = isTavilyConfigured(tavilyApiKey)
     ? defineTool(
         {
           name: 'web_search',
@@ -169,11 +168,11 @@ export function buildWorkspaceTools(options: BuildWorkspaceToolsOptions): ToolSe
             max_results: z.number().int().min(1).max(20).optional()
           }),
           execute: ({ query, max_results }) =>
-            tavilyWebSearch(query, { maxResults: max_results, apiKey: settings.tavilyApiKey }),
+            tavilyWebSearch(query, { maxResults: max_results, apiKey: tavilyApiKey }),
           formatResult: (r) => (typeof r === 'string' ? r : String(r)),
           truncateTo: 12_000
         },
-        runCtx
+        onTool
       )
     : {}
 
@@ -207,22 +206,22 @@ export type WorkspacePromptExtras = {
  *
  * @param mode - ask / build
  * @param root - 工作区根目录
- * @param settings - 应用设置
+ * @param tavilyApiKey - 可选 Tavily API Key（影响 web_search 相关提示）
  * @param extras - 宿主增强片段（skills / MCP）
  * @returns 完整 system prompt
  */
 export function buildWorkspaceRunPrompt(
   mode: AgentComposerMode,
   root: string,
-  settings: AppSettings,
+  tavilyApiKey?: string,
   extras?: WorkspacePromptExtras
 ): string {
   const common = `当前日期时间（UTC）：${new Date().toLocaleString()}；`
   if (mode === 'ask') {
-    return [buildAskSystemPrompt(root, settings), common].filter(Boolean).join('\n\n')
+    return [buildAskSystemPrompt(root, tavilyApiKey), common].filter(Boolean).join('\n\n')
   }
   return [
-    buildBuildSystemPrompt(root, settings, extras),
+    buildBuildSystemPrompt(root, tavilyApiKey, extras),
     extras?.skillHint,
     extras?.mcpContextHints,
     common
@@ -233,10 +232,10 @@ export function buildWorkspaceRunPrompt(
 
 function buildBuildSystemPrompt(
   root: string,
-  settings: AppSettings,
+  tavilyApiKey?: string,
   extras?: WorkspacePromptExtras
 ): string {
-  const web = isTavilyConfigured(settings.tavilyApiKey)
+  const web = isTavilyConfigured(tavilyApiKey)
   const includeMcp = Boolean(extras?.includeMcpMeta)
   const mcpMeta = includeMcp
     ? '\n- **MCP 管理（元工具）**：`mcp_list_servers` 列出已配置的 MCP（环境变量已脱敏）；`mcp_inspect_server` 探测指定 MCP 暴露的工具。需要连接信息或工具名时优先使用；不要向用户索要应用中已保存的密码。'
@@ -288,8 +287,8 @@ ${webRule}
 - 先理解任务 → 必要时复述目标 → 再选工具。`
 }
 
-function buildAskSystemPrompt(root: string, settings: AppSettings): string {
-  const web = isTavilyConfigured(settings.tavilyApiKey)
+function buildAskSystemPrompt(root: string, tavilyApiKey?: string): string {
+  const web = isTavilyConfigured(tavilyApiKey)
   const toolLine = web
     ? 'read_file、list_dir、glob、grep、search_workspace、web_search（Tavily）'
     : 'read_file、list_dir、glob、grep、search_workspace（未配置 Tavily 时无 web_search）'

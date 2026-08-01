@@ -1,13 +1,13 @@
 const TAVILY_SEARCH_URL = 'https://api.tavily.com/search'
 
 /**
- * 判断 Tavily 是否已配置（设置项或环境变量 TAVILY_API_KEY）。
+ * 判断 Tavily 是否已配置（入参 apiKey 或环境变量 TAVILY_API_KEY）。
  *
- * @param tavilyApiKeyFromSettings - 应用设置中的 API Key
+ * @param tavilyApiKey - 宿主注入的 API Key（如 AgentRunInput.tavily.apiKey）
  * @returns 是否可用
  */
-export function isTavilyConfigured(tavilyApiKeyFromSettings?: string): boolean {
-  return Boolean(tavilyApiKeyFromSettings?.trim() || process.env.TAVILY_API_KEY?.trim())
+export function isTavilyConfigured(tavilyApiKey?: string): boolean {
+  return Boolean(tavilyApiKey?.trim() || process.env.TAVILY_API_KEY?.trim())
 }
 
 type TavilyResult = {
