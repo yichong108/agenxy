@@ -188,17 +188,37 @@ export type Agent = {
 };
 
 /**
- * 创建默认 tooling：工作区内置工具 + 可选 skills.paths + 可选 MCP。
+ * 创建 agent 实例 — packages/agent 的唯一入口工厂。
  *
- * @param skillPaths - createAgent 配置的技能路径
- * @param mcpConfigPath - 可选 MCP 配置文件路径
- * @returns prepareTooling 实现
+ * 最简入参为 provider + local.cwd；工具与 prompt 由内置默认 tooling 组装。
+ * 可选 skills.paths 提供基础 Skills；mcp.configPath 由 agent 内部实现 MCP。
+ * 可 `await createAgent(...)`（函数本身同步，await 无害）。
+ *
+ * 注意：不直接与外部耦合。同会话「运行中不可再发」由宿主按 session 互斥；
+ * 不同会话各自独立 send，互不排队。
+ *
+ * @param options - 创建配置；均可选，空对象即使用全部默认
+ * @returns 可 send 的 agent 实例
  */
-function createDefaultPrepareTooling(
-  skillPaths: string[],
-  mcpConfigPath?: string,
-): PrepareToolingFn {
-  return async ({ composerMode, terminalKey, root, tavilyApiKey, onTool }) => {
+export function createAgent(options: CreateAgentOptions = {}): Agent {
+  const defaultCwd = options.local?.cwd?.trim() || undefined;
+  const skillPaths = (options.skills?.paths ?? [])
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const mcpConfigPath = options.mcp?.configPath?.trim() || undefined;
+
+  /**
+   * 组装本轮工具与 system prompt：工作区内置工具 + 可选 skills + 可选 MCP。
+   *
+   * 闭包捕获 createAgent 时的 skillPaths / mcpConfigPath，避免额外工厂函数。
+   */
+  const prepareTooling: PrepareToolingFn = async ({
+    composerMode,
+    terminalKey,
+    root,
+    tavilyApiKey,
+    onTool,
+  }) => {
     const workspaceTools = buildWorkspaceTools({
       terminalKey,
       root,
@@ -243,29 +263,6 @@ function createDefaultPrepareTooling(
       }),
     };
   };
-}
-
-/**
- * 创建 agent 实例 — packages/agent 的唯一入口工厂。
- *
- * 最简入参为 provider + local.cwd；工具与 prompt 由内置默认 tooling 组装。
- * 可选 skills.paths 提供基础 Skills；mcp.configPath 由 agent 内部实现 MCP。
- * 可 `await createAgent(...)`（函数本身同步，await 无害）。
- *
- * 注意：不直接与外部耦合。同会话「运行中不可再发」由宿主按 session 互斥；
- * 不同会话各自独立 send，互不排队。
- *
- * @param options - 创建配置；均可选，空对象即使用全部默认
- * @returns 可 send 的 agent 实例
- */
-export function createAgent(options: CreateAgentOptions = {}): Agent {
-  const defaultCwd = options.local?.cwd?.trim() || undefined;
-  const skillPaths = (options.skills?.paths ?? [])
-    .map((p) => p.trim())
-    .filter(Boolean);
-  const mcpConfigPath = options.mcp?.configPath?.trim() || undefined;
-
-  const prepareTooling = createDefaultPrepareTooling(skillPaths, mcpConfigPath);
 
   /**
    * 发起一次 agent run：组装本轮工具与 prompt，再执行 ReAct 循环。
