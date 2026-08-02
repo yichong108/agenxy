@@ -112,10 +112,11 @@ class SessionManager {
 # 架构
 
 
-## 模块心智文档
-- [@agenwork/agent](packages/agent/ARCHITECTURE.md) 智能体
-- [@agenwork/shared](packages/shared/ARCHITECTURE.md) 公用工具
-- [@agenwork/api](services/api/ARCHITECTURE.md) 后端API服务
-- [@agenwork/desktop](apps/desktop/ARCHITECTURE.md) 桌面客户端
-- [@agenwork/command](apps/command/ARCHITECTURE.md) 命令行客户端
-- [@agenwork/landing](apps/landing/ARCHITECTURE.md) 文档项目
+## 模块文档
+- [@agenwork/agent](packages/agent/README.md) 智能体
+- [@agenwork/shared](packages/shared/README.md) 公用工具
+- [@agenwork/api](services/api/README.md) 后端API服务
+- [@agenwork/desktop](apps/desktop/README.md) 桌面客户端
+- [@agenwork/command](apps/command/README.md) 命令行客户端
+- [@agenwork/landing](apps/landing/README.md) 文档项目
+- [@agenwork/langfuse-local](services/langfuse-local/README.md) 本地 Langfuse
