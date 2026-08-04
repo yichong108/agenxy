@@ -26,3 +26,5 @@
 *.ttf binary
 *.woff binary
 *.woff2 binary
+
+apps/desktop/src/extensions/** linguist-vendored
