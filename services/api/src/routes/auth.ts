@@ -1,18 +1,18 @@
-import { Router } from 'express';
-import type { LoginRequest } from '@luneto/shared';
+import { Router } from 'express'
+import type { LoginRequest } from '@luneto/shared'
 
 import {
   getUserFromAccessToken,
   InvalidCredentialsError,
   loginWithPassword
-} from '../services/auth-service.js';
+} from '../services/auth-service.js'
 
 /** 与桌面端 `request.ts` 对齐的统一响应 envelope */
 type ApiEnvelope<T> = {
-  code: number;
-  message: string;
-  data: T | null;
-};
+  code: number
+  message: string
+  data: T | null
+}
 
 /**
  * 构造成功响应（HTTP 200 + code 0）
@@ -21,7 +21,7 @@ type ApiEnvelope<T> = {
  * @param message - 可选提示文案
  */
 function ok<T>(data: T, message = 'ok'): ApiEnvelope<T> {
-  return { code: 0, message, data };
+  return { code: 0, message, data }
 }
 
 /**
@@ -31,7 +31,7 @@ function ok<T>(data: T, message = 'ok'): ApiEnvelope<T> {
  * @param message - 错误说明
  */
 function fail(code: number, message: string): ApiEnvelope<null> {
-  return { code, message, data: null };
+  return { code, message, data: null }
 }
 
 /**
@@ -42,58 +42,54 @@ function fail(code: number, message: string): ApiEnvelope<null> {
  *
  * 当前不提供注册接口。响应统一为 `{ code, message, data }`。
  */
-export const authRouter = Router();
+export const authRouter = Router()
 
 authRouter.post('/auth/login', async (req, res) => {
   try {
-    const body = (req.body ?? {}) as Partial<LoginRequest>;
-    const username = typeof body.username === 'string' ? body.username : '';
-    const password = typeof body.password === 'string' ? body.password : '';
+    const body = (req.body ?? {}) as Partial<LoginRequest>
+    const username = typeof body.username === 'string' ? body.username : ''
+    const password = typeof body.password === 'string' ? body.password : ''
 
     if (!username.trim() || !password) {
-      res.status(200).json(fail(40001, 'username and password are required'));
-      return;
+      res.status(200).json(fail(40001, 'username and password are required'))
+      return
     }
 
-    const data = await loginWithPassword(username, password);
-    res.status(200).json(ok(data));
+    const data = await loginWithPassword(username, password)
+    res.status(200).json(ok(data))
   } catch (error) {
     if (error instanceof InvalidCredentialsError) {
-      res.status(200).json(fail(40101, error.message));
-      return;
+      res.status(200).json(fail(40101, error.message))
+      return
     }
-    console.error('[api] POST /auth/login failed', error);
-    res.status(200).json(
-      fail(50001, error instanceof Error ? error.message : String(error))
-    );
+    console.error('[api] POST /auth/login failed', error)
+    res.status(200).json(fail(50001, error instanceof Error ? error.message : String(error)))
   }
-});
+})
 
 authRouter.get('/auth/me', async (req, res) => {
   try {
-    const header = req.headers.authorization;
+    const header = req.headers.authorization
     if (!header || !header.startsWith('Bearer ')) {
-      res.status(200).json(fail(40102, 'Missing or invalid Authorization header'));
-      return;
+      res.status(200).json(fail(40102, 'Missing or invalid Authorization header'))
+      return
     }
 
-    const token = header.slice('Bearer '.length).trim();
+    const token = header.slice('Bearer '.length).trim()
     if (!token) {
-      res.status(200).json(fail(40102, 'Missing access token'));
-      return;
+      res.status(200).json(fail(40102, 'Missing access token'))
+      return
     }
 
-    const user = await getUserFromAccessToken(token);
+    const user = await getUserFromAccessToken(token)
     if (!user) {
-      res.status(200).json(fail(40102, 'Invalid or expired token'));
-      return;
+      res.status(200).json(fail(40102, 'Invalid or expired token'))
+      return
     }
 
-    res.status(200).json(ok({ user }));
+    res.status(200).json(ok({ user }))
   } catch (error) {
-    console.error('[api] GET /auth/me failed', error);
-    res.status(200).json(
-      fail(50002, error instanceof Error ? error.message : String(error))
-    );
+    console.error('[api] GET /auth/me failed', error)
+    res.status(200).json(fail(50002, error instanceof Error ? error.message : String(error)))
   }
-});
+})

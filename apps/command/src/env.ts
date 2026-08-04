@@ -6,11 +6,7 @@ import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import {
-  type AppSettings,
-  defaultSettings,
-  normalizeSettings
-} from '@luneto/shared'
+import { type AppSettings, defaultSettings, normalizeSettings } from '@luneto/shared'
 import { config as loadDotenv } from 'dotenv'
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -38,16 +34,10 @@ export function loadCommandEnv(): void {
  * @returns 规范化后的 AppSettings
  */
 export function settingsFromEnv(): AppSettings {
-  const apiKey =
-    process.env.LUNETO_API_KEY?.trim() ||
-    process.env.OPENAI_API_KEY?.trim() ||
-    ''
+  const apiKey = process.env.LUNETO_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim() || ''
   const baseUrl =
-    process.env.LUNETO_BASE_URL?.trim() ||
-    defaultSettings.providerProfiles.deepseek.baseUrl
-  const model =
-    process.env.LUNETO_MODEL?.trim() ||
-    defaultSettings.providerProfiles.deepseek.model
+    process.env.LUNETO_BASE_URL?.trim() || defaultSettings.providerProfiles.deepseek.baseUrl
+  const model = process.env.LUNETO_MODEL?.trim() || defaultSettings.providerProfiles.deepseek.model
   const tavilyApiKey = process.env.TAVILY_API_KEY?.trim() || ''
 
   return normalizeSettings({

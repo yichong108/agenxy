@@ -2,12 +2,7 @@ import { type AgentComposerMode, MAX_TERMINAL_OUTPUT_CHARS } from '@luneto/share
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 
-import {
-  defineTool,
-  filterToolSet,
-  mergeToolSets,
-  type ToolOnTool
-} from '../define-tool.js'
+import { defineTool, filterToolSet, mergeToolSets, type ToolOnTool } from '../define-tool.js'
 import {
   deleteFileTool,
   globFilesTool,
@@ -126,8 +121,7 @@ export function buildWorkspaceTools(options: BuildWorkspaceToolsOptions): ToolSe
     },
     {
       name: 'search_workspace',
-      description:
-        '在文本文件中做简单子串搜索（无正则）。需要正则、glob 或匹配上下文时用 grep。',
+      description: '在文本文件中做简单子串搜索（无正则）。需要正则、glob 或匹配上下文时用 grep。',
       parameters: z.object({ query: z.string() }),
       execute: ({ query }) => searchWorkspace(root, query, { maxFiles: 50 }),
       truncateTo: 8_000

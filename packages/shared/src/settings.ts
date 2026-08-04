@@ -286,9 +286,10 @@ export function normalizeSettings(
   const provider: ModelProviderId = 'deepseek'
 
   // 忽略已废弃的 toolApprovalInBuild（HITL 已移除）
-  const { toolApprovalInBuild: _legacyToolApprovalInBuild, ...inputWithoutLegacy } = inputRest as typeof inputRest & {
-    toolApprovalInBuild?: unknown
-  }
+  const { toolApprovalInBuild: _legacyToolApprovalInBuild, ...inputWithoutLegacy } =
+    inputRest as typeof inputRest & {
+      toolApprovalInBuild?: unknown
+    }
   void _legacyToolApprovalInBuild
 
   const merged: AppSettings = {

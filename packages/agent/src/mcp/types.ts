@@ -9,9 +9,7 @@ export type McpProbeToolInfo = {
 }
 
 /** 单次 MCP 服务器探测结果（一次性连接，不入池） */
-export type McpProbeResult =
-  | { ok: true; tools: McpProbeToolInfo[] }
-  | { ok: false; error: string }
+export type McpProbeResult = { ok: true; tools: McpProbeToolInfo[] } | { ok: false; error: string }
 
 /** 单台 MCP 池化预热成功 */
 export type McpWarmupServerOk = {

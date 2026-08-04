@@ -34,12 +34,12 @@ luneto/
 
 Desktop source layout:
 
-| Path | Role |
-| --- | --- |
-| `apps/desktop/src/main/` | Electron main process: agents, MCP, tools, storage |
-| `apps/desktop/src/renderer/` | React UI |
-| `apps/desktop/src/preload/` | Preload and IPC bridge |
-| `apps/desktop/src/shared/` | Shared types and logic across processes |
+| Path                         | Role                                               |
+| ---------------------------- | -------------------------------------------------- |
+| `apps/desktop/src/main/`     | Electron main process: agents, MCP, tools, storage |
+| `apps/desktop/src/renderer/` | React UI                                           |
+| `apps/desktop/src/preload/`  | Preload and IPC bridge                             |
+| `apps/desktop/src/shared/`   | Shared types and logic across processes            |
 
 ## Prerequisites
 
@@ -92,21 +92,21 @@ To send traces from the **desktop app** to that stack, copy `apps/desktop/.env.e
 
 ## Common scripts (root)
 
-| Command | Description |
-| --- | --- |
-| `pnpm dev` | Dev servers for all packages that define `dev` |
-| `pnpm build` | Production build via Turbo |
-| `pnpm lint` | ESLint across the workspace |
-| `pnpm typecheck` | TypeScript checks across the workspace |
-| `pnpm format` / `pnpm format:check` | Prettier (all); or `pnpm format:desktop` / `pnpm format:landing` for a single app |
+| Command                             | Description                                             |
+| ----------------------------------- | ------------------------------------------------------- |
+| `pnpm dev`                          | Dev servers for all packages that define `dev`          |
+| `pnpm build`                        | Production build via Turbo                              |
+| `pnpm lint` / `pnpm lint:fix`       | Oxlint across the workspace (root `.oxlintrc.json`)     |
+| `pnpm typecheck`                    | TypeScript checks across the workspace                  |
+| `pnpm format` / `pnpm format:check` | Prettier across the workspace (root `.prettierrc.json`) |
 
 ### Desktop-only (from root)
 
-| Command | Description |
-| --- | --- |
-| `pnpm desktop:build` | `electron-vite build` + `electron-builder` |
-| `pnpm desktop:build:app` | Build only (no installer) |
-| `pnpm desktop:preview` | Preview the built renderer bundle |
+| Command                  | Description                                |
+| ------------------------ | ------------------------------------------ |
+| `pnpm desktop:build`     | `electron-vite build` + `electron-builder` |
+| `pnpm desktop:build:app` | Build only (no installer)                  |
+| `pnpm desktop:preview`   | Preview the built renderer bundle          |
 
 ## Contributing
 

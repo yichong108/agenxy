@@ -108,7 +108,10 @@ describe('createAgent', () => {
   it('send(userText, {}) 形态可用且支持连续 send', async () => {
     const agent = createAgent({
       provider: stubModel,
-      messages: [{ role: 'user', content: 'old' }, { role: 'assistant', content: 'ack' }]
+      messages: [
+        { role: 'user', content: 'old' },
+        { role: 'assistant', content: 'ack' }
+      ]
     })
 
     await agent.send('ping', { composerMode: 'ask' })

@@ -1,5 +1,5 @@
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar'
+import { StyleSheet, Text, View } from 'react-native'
 
 /**
  * 应用根组件 — 展示 Hello World 起始页
@@ -15,7 +15,7 @@ export default function App() {
       <Text style={styles.title}>Hello World</Text>
       <StatusBar style="auto" />
     </View>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -23,10 +23,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'center'
   },
   title: {
     fontSize: 28,
-    fontWeight: '600',
-  },
-});
+    fontWeight: '600'
+  }
+})

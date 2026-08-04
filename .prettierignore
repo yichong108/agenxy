@@ -1,0 +1,14 @@
+**/dist/**
+**/out/**
+**/release/**
+**/node_modules/**
+**/.turbo/**
+**/.next/**
+**/.expo/**
+**/.vscode/**
+.git/**
+pnpm-lock.yaml
+pnpm-workspace.yaml
+**/public/**
+apps/desktop/src/skills/**
+apps/desktop/src/extensions/**

@@ -3,7 +3,7 @@
  */
 
 import { defaultSettings } from '@luneto/shared'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { getChatModel } from '../src/llm.js'
 
 describe('getChatModel', () => {

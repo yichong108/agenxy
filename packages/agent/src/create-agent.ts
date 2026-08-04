@@ -7,36 +7,28 @@ import {
   type AgentComposerMode,
   type McpServerEntry,
   normalizeComposerMode,
-  type StreamEvent,
-} from "@luneto/shared";
-import type { CoreMessage, LanguageModel, ToolSet } from "ai";
+  type StreamEvent
+} from '@luneto/shared'
+import type { CoreMessage, LanguageModel, ToolSet } from 'ai'
 
-import type { PreparedTooling } from "./run-types.js";
-import {
-  mergeToolSets,
-  type ToolObservation,
-  type ToolOnTool,
-} from "./define-tool.js";
+import type { PreparedTooling } from './run-types.js'
+import { mergeToolSets, type ToolObservation, type ToolOnTool } from './define-tool.js'
 import {
   buildMcpToolsFromConfig,
   disposeMcpConnectionPool,
   probeMcpServer,
-  warmupMcpServersFromConfig,
-} from "./mcp/mcp-runtime.js";
-import type { McpProbeResult, McpWarmupServerResult } from "./mcp/types.js";
-import {
-  contentToText,
-  findLastAssistantMessage,
-  userMessage,
-} from "./messages.js";
-import { runReactLoop } from "./react-loop.js";
-import { isAbortError } from "./run-utils.js";
-import { loadSkillsFromPaths } from "./skills/load-skills.js";
+  warmupMcpServersFromConfig
+} from './mcp/mcp-runtime.js'
+import type { McpProbeResult, McpWarmupServerResult } from './mcp/types.js'
+import { contentToText, findLastAssistantMessage, userMessage } from './messages.js'
+import { runReactLoop } from './react-loop.js'
+import { isAbortError } from './run-utils.js'
+import { loadSkillsFromPaths } from './skills/load-skills.js'
 import {
   buildWorkspaceRunPrompt,
   buildWorkspaceTools,
-  type WorkspacePromptExtras,
-} from "./tools/workspace-tools.js";
+  type WorkspacePromptExtras
+} from './tools/workspace-tools.js'
 
 /**
  * 将捕获的异常映射为 wait 状态。
@@ -47,17 +39,14 @@ import {
  * @param signal - 本轮 AbortSignal
  * @returns error 或 cancelled
  */
-function resolveWaitFailureStatus(
-  error: unknown,
-  signal: AbortSignal,
-): "error" | "cancelled" {
+function resolveWaitFailureStatus(error: unknown, signal: AbortSignal): 'error' | 'cancelled' {
   if (error instanceof Error && /timeout/i.test(error.message)) {
-    return "error";
+    return 'error'
   }
   if (isAbortError(error) || signal.aborted) {
-    return "cancelled";
+    return 'cancelled'
   }
-  return "error";
+  return 'error'
 }
 
 /**
@@ -67,42 +56,42 @@ function resolveWaitFailureStatus(
  * @returns 助手纯文本；无则空串
  */
 function extractAssistantText(messages: CoreMessage[]): string {
-  const last = findLastAssistantMessage(messages);
-  return last ? contentToText(last.content) : "";
+  const last = findLastAssistantMessage(messages)
+  return last ? contentToText(last.content) : ''
 }
 
 /**
  * 按模式组装本轮可用工具与 system prompt 的依赖函数。
  */
 type PrepareToolingFn = (args: {
-  composerMode: AgentComposerMode;
+  composerMode: AgentComposerMode
   /** Shell 命令隔离键（宿主提供） */
-  terminalKey: string;
-  root: string;
+  terminalKey: string
+  root: string
   /** Tavily API Key（可选） */
-  tavilyApiKey?: string;
+  tavilyApiKey?: string
   /** 工具生命周期观察回调 */
-  onTool: ToolOnTool;
-  signal?: AbortSignal;
-  emit: (event: StreamEvent) => void;
-  provider?: LanguageModel;
-}) => Promise<PreparedTooling>;
+  onTool: ToolOnTool
+  signal?: AbortSignal
+  emit: (event: StreamEvent) => void
+  provider?: LanguageModel
+}) => Promise<PreparedTooling>
 
 /**
  * createAgent 本地运行环境配置。
  */
 export type CreateAgentLocalOptions = {
   /** 工作区根目录；send 时若未指定 workspacePath 则使用此值 */
-  cwd?: string;
-};
+  cwd?: string
+}
 
 /**
  * createAgent Skills 配置：仅声明扫描路径，由 agent 实现基础加载。
  */
 export type CreateAgentSkillsOptions = {
   /** 技能根目录绝对路径列表；递归扫描 SKILL.md，同名时靠前路径优先 */
-  paths: string[];
-};
+  paths: string[]
+}
 
 /**
  * createAgent MCP 配置：传入配置文件路径，由 agent 内部加载并绑定 MCP 工具。
@@ -112,8 +101,8 @@ export type CreateAgentSkillsOptions = {
  */
 export type CreateAgentMcpOptions = {
   /** MCP 配置文件绝对路径 */
-  configPath: string;
-};
+  configPath: string
+}
 
 /**
  * 单次 run 的 Tavily 联网搜索配置。
@@ -122,8 +111,8 @@ export type CreateAgentMcpOptions = {
  */
 export type AgentRunTavilyOptions = {
   /** Tavily API Key */
-  apiKey?: string;
-};
+  apiKey?: string
+}
 
 /**
  * Agent 上的 MCP 宿主能力（探测 / 预热 / 释放连接池）。
@@ -132,15 +121,15 @@ export type AgentRunTavilyOptions = {
  */
 export type AgentMcp = {
   /** 一次性探测单个 MCP 服务器（不入池） */
-  probe: (entry: McpServerEntry) => Promise<McpProbeResult>;
+  probe: (entry: McpServerEntry) => Promise<McpProbeResult>
   /** 按 configPath 预热已启用的 MCP（池化建连） */
-  warmup: () => Promise<McpWarmupServerResult[]>;
+  warmup: () => Promise<McpWarmupServerResult[]>
   /** 关闭所有池化 MCP 子进程（设置变更或应用退出时调用） */
-  dispose: () => Promise<void>;
-};
+  dispose: () => Promise<void>
+}
 
 /** createAgent 未传 local 时的默认值；cwd 缺省时在 send 侧回退 process.cwd() */
-const DEFAULT_LOCAL: CreateAgentLocalOptions = {};
+const DEFAULT_LOCAL: CreateAgentLocalOptions = {}
 
 /**
  * createAgent 配置项。
@@ -163,22 +152,22 @@ const DEFAULT_LOCAL: CreateAgentLocalOptions = {};
  */
 export type CreateAgentOptions = {
   /** AI SDK LanguageModel；创建时必填，send 未传 provider 时作为本轮对话模型 */
-  provider: LanguageModel;
+  provider: LanguageModel
   /**
    * 会话消息初始值；由 agent 持有。
    * 可选，默认 []。send 会追加本轮用户消息并在结束后写回完整轨迹，以支持连续 send。
    */
-  messages?: CoreMessage[];
+  messages?: CoreMessage[]
   /** 本地运行环境；可选，默认 {}，cwd 缺省时回退 process.cwd() */
-  local?: CreateAgentLocalOptions;
+  local?: CreateAgentLocalOptions
   /** Skills 扫描路径；由默认 tooling 加载并叠加技能工具 */
-  skills?: CreateAgentSkillsOptions;
+  skills?: CreateAgentSkillsOptions
   /**
    * MCP 配置文件路径；由 agent 内部实现连接池与工具绑定，
    * 并自动叠加 MCP 工具与上下文提示。
    */
-  mcp?: CreateAgentMcpOptions;
-};
+  mcp?: CreateAgentMcpOptions
+}
 
 /**
  * 单次 agent run 的可选参数（send 的第二参）。
@@ -192,56 +181,56 @@ export type AgentRunInput = {
   /**
    * 发送模式；可选，默认 build（非法值亦回退 build）。
    */
-  composerMode?: AgentComposerMode;
+  composerMode?: AgentComposerMode
   /**
    * 本轮已解析的聊天模型。
    * 可选；未传时回退 createAgent 时注入的 provider。
    */
-  provider?: LanguageModel;
+  provider?: LanguageModel
   /**
    * 取消控制器；可选，未传时内部新建 AbortController。
    * 宿主若需外部取消（如 Stop），应自行传入并持有引用。
    */
-  abortController?: AbortController;
+  abortController?: AbortController
   /**
    * 本轮工作区根目录绝对路径。
    * 优先于 createAgent local.cwd；均未提供时回退 process.cwd()。
    */
-  workspacePath?: string;
+  workspacePath?: string
   /**
    * Shell 命令隔离键。
    * 由宿主派生（如 `term:${sessionId}`）；缺省为 `term:default`。
    * sessionId / runId / traceId 不进入 agent，由宿主在回调外维护。
    */
-  terminalKey?: string;
+  terminalKey?: string
   /**
    * Tavily 联网搜索配置。
    * 由宿主注入；未配置有效 key 且无环境变量时不注册 web_search。
    */
-  tavily?: AgentRunTavilyOptions;
+  tavily?: AgentRunTavilyOptions
   /** 流式文本增量回调；可选 */
-  onTextDelta?: (text: string) => void;
+  onTextDelta?: (text: string) => void
   /** 工具观察回调；可选，宿主可在此映射与收集工具时间线 */
-  onTool?: (event: ToolObservation) => void;
+  onTool?: (event: ToolObservation) => void
   /** 向宿主推送 StreamEvent（如错误、状态）；可选 */
-  onEmit?: (event: StreamEvent) => void;
+  onEmit?: (event: StreamEvent) => void
   /** 最大工具调用轮次；缺省时使用 MAX_AGENT_LOOP_STEPS */
-  maxSteps?: number;
+  maxSteps?: number
   /** 循环超时（毫秒）；缺省时使用 defaultSettings.agentRunTimeoutMs */
-  invokeTimeoutMs?: number;
-};
+  invokeTimeoutMs?: number
+}
 
 /**
  * 单次 agent run 的结果。
  */
 export type AgentRunResult = {
-  messages: CoreMessage[];
-};
+  messages: CoreMessage[]
+}
 
 /**
  * agent.wait() 的终态状态。
  */
-export type AgentWaitStatus = "finished" | "error" | "cancelled";
+export type AgentWaitStatus = 'finished' | 'error' | 'cancelled'
 
 /**
  * agent.wait() 的返回值：本轮 run 的摘要终态。
@@ -259,12 +248,12 @@ export type AgentWaitStatus = "finished" | "error" | "cancelled";
  */
 export type AgentWaitResult = {
   /** 本轮终态 */
-  status: AgentWaitStatus;
+  status: AgentWaitStatus
   /** 最终助手文本；失败/取消时可能为空 */
-  result: string;
+  result: string
   /** 失败或取消时的错误；成功时为 undefined */
-  error?: unknown;
-};
+  error?: unknown
+}
 
 /**
  * createAgent 返回的 agent 实例。
@@ -274,20 +263,20 @@ export type Agent = {
    * 当前会话消息；创建时来自 CreateAgentOptions.messages。
    * send 会追加本轮用户消息，成功后写回含助手回复的完整轨迹，可直接再 send。
    */
-  messages: CoreMessage[];
+  messages: CoreMessage[]
   /**
    * 发起一次 run：`send(userText, options?)`。
    * 内部更新 messages；同会话互斥由宿主保证，不同会话可并行。
    */
-  send: (userText: string, input?: AgentRunInput) => Promise<AgentRunResult>;
+  send: (userText: string, input?: AgentRunInput) => Promise<AgentRunResult>
   /**
    * 等待当前（或最近一次）run 结束，返回摘要终态。
    * 未调用过 send 时抛出错误。
    */
-  wait: () => Promise<AgentWaitResult>;
+  wait: () => Promise<AgentWaitResult>
   /** MCP 宿主侧能力；未配置 mcp.configPath 时为 undefined */
-  mcp?: AgentMcp;
-};
+  mcp?: AgentMcp
+}
 
 /**
  * 创建 agent 实例 — packages/agent 的唯一入口工厂。
@@ -304,20 +293,18 @@ export type Agent = {
  * @returns 可 send / wait 的 agent 实例
  */
 export function createAgent(options: CreateAgentOptions): Agent {
-  const local = options.local ?? DEFAULT_LOCAL;
-  const defaultCwd = local.cwd?.trim() || process.cwd();
-  const defaultProvider = options.provider;
+  const local = options.local ?? DEFAULT_LOCAL
+  const defaultCwd = local.cwd?.trim() || process.cwd()
+  const defaultProvider = options.provider
   /** 会话消息由 agent 持有；初始值来自 options.messages */
-  let messages: CoreMessage[] = [...(options.messages ?? [])];
-  const skillPaths = (options.skills?.paths ?? [])
-    .map((p) => p.trim())
-    .filter(Boolean);
-  const mcpConfigPath = options.mcp?.configPath?.trim() || undefined;
+  let messages: CoreMessage[] = [...(options.messages ?? [])]
+  const skillPaths = (options.skills?.paths ?? []).map((p) => p.trim()).filter(Boolean)
+  const mcpConfigPath = options.mcp?.configPath?.trim() || undefined
 
   /** 当前进行中的 wait Promise；无进行中 run 时为 null */
-  let inflightWait: Promise<AgentWaitResult> | null = null;
+  let inflightWait: Promise<AgentWaitResult> | null = null
   /** 最近一次已结束 run 的 wait 结果，供重复 wait() */
-  let lastWaitResult: AgentWaitResult | null = null;
+  let lastWaitResult: AgentWaitResult | null = null
 
   /**
    * 组装本轮工具与 system prompt：工作区内置工具 + 可选 skills + 可选 MCP。
@@ -329,52 +316,49 @@ export function createAgent(options: CreateAgentOptions): Agent {
     terminalKey,
     root,
     tavilyApiKey,
-    onTool,
+    onTool
   }) => {
     const workspaceTools = buildWorkspaceTools({
       terminalKey,
       root,
       tavilyApiKey,
       onTool,
-      mode: composerMode,
-    });
+      mode: composerMode
+    })
 
-    if (composerMode === "ask") {
+    if (composerMode === 'ask') {
       return {
         tools: workspaceTools,
-        runPrompt: buildWorkspaceRunPrompt(composerMode, root, tavilyApiKey),
-      };
+        runPrompt: buildWorkspaceRunPrompt(composerMode, root, tavilyApiKey)
+      }
     }
 
     const skillBundle = skillPaths.length
       ? await loadSkillsFromPaths(skillPaths, onTool)
-      : { tools: {}, hint: "" };
+      : { tools: {}, hint: '' }
 
-    let mcpExtras: WorkspacePromptExtras = {};
-    let mcpTools: ToolSet = {};
+    let mcpExtras: WorkspacePromptExtras = {}
+    let mcpTools: ToolSet = {}
     if (mcpConfigPath) {
-      const mcpResult = await buildMcpToolsFromConfig(mcpConfigPath, onTool);
-      mcpTools = mcpResult.tools;
-      const enabled = mcpResult.servers.filter(
-        (s) => s.enabled && s.command.trim(),
-      );
+      const mcpResult = await buildMcpToolsFromConfig(mcpConfigPath, onTool)
+      mcpTools = mcpResult.tools
+      const enabled = mcpResult.servers.filter((s) => s.enabled && s.command.trim())
       mcpExtras = {
         mcpContextHints: mcpResult.contextHints,
         includeMcpMeta: true,
         enabledMcpNames: enabled.map((s) => s.name || s.id),
-        hasDisabledMcpEntries:
-          mcpResult.servers.length > 0 && enabled.length === 0,
-      };
+        hasDisabledMcpEntries: mcpResult.servers.length > 0 && enabled.length === 0
+      }
     }
 
     return {
       tools: mergeToolSets(skillBundle.tools, workspaceTools, mcpTools),
       runPrompt: buildWorkspaceRunPrompt(composerMode, root, tavilyApiKey, {
         skillHint: skillBundle.hint,
-        ...mcpExtras,
-      }),
-    };
-  };
+        ...mcpExtras
+      })
+    }
+  }
 
   /**
    * 发起一次 agent run：追加用户消息 → 组装工具与 prompt → ReAct 循环。
@@ -389,41 +373,38 @@ export function createAgent(options: CreateAgentOptions): Agent {
    * @returns 运行结束后的 messages
    * @throws 消息为空、运行失败或取消时抛出（wait 仍可拿到对应 status）
    */
-  async function send(
-    userText: string,
-    input: AgentRunInput = {},
-  ): Promise<AgentRunResult> {
-    const trimmed = userText.trim();
+  async function send(userText: string, input: AgentRunInput = {}): Promise<AgentRunResult> {
+    const trimmed = userText.trim()
     if (!trimmed) {
-      throw new Error("userText is empty");
+      throw new Error('userText is empty')
     }
 
-    const onTextDelta = input.onTextDelta ?? (() => {});
-    const onTool = input.onTool ?? (() => {});
-    const onEmit = input.onEmit ?? (() => {});
-    const { maxSteps, invokeTimeoutMs } = input;
+    const onTextDelta = input.onTextDelta ?? (() => {})
+    const onTool = input.onTool ?? (() => {})
+    const onEmit = input.onEmit ?? (() => {})
+    const { maxSteps, invokeTimeoutMs } = input
 
     // 追加本轮用户消息并立即写回，保证连续 send / 失败重试时历史连贯
-    const inputMessages = [...messages, userMessage(trimmed)];
-    messages = inputMessages;
+    const inputMessages = [...messages, userMessage(trimmed)]
+    messages = inputMessages
 
     // 发送模式：未传或非法值时默认 build
-    const composerMode = normalizeComposerMode(input.composerMode);
+    const composerMode = normalizeComposerMode(input.composerMode)
     // 本轮模型：send 入参优先，否则使用 createAgent 注入的 provider
-    const provider = input.provider ?? defaultProvider;
+    const provider = input.provider ?? defaultProvider
     // 取消控制器：未传时内部新建（外部无法 abort，仅满足信号链路）
-    const abortController = input.abortController ?? new AbortController();
+    const abortController = input.abortController ?? new AbortController()
     // 工作区路径：本轮 send 入参优先，其次 createAgent local.cwd（已含默认）
-    const root = input.workspacePath?.trim() || defaultCwd;
+    const root = input.workspacePath?.trim() || defaultCwd
     // Shell 隔离键由宿主提供；agent 不使用 sessionId
-    const terminalKey = input.terminalKey?.trim() || "term:default";
-    const tavilyApiKey = input.tavily?.apiKey?.trim() || undefined;
+    const terminalKey = input.terminalKey?.trim() || 'term:default'
+    const tavilyApiKey = input.tavily?.apiKey?.trim() || undefined
 
-    let settleWait!: (value: AgentWaitResult) => void;
+    let settleWait!: (value: AgentWaitResult) => void
     const waitPromise = new Promise<AgentWaitResult>((resolve) => {
-      settleWait = resolve;
-    });
-    inflightWait = waitPromise;
+      settleWait = resolve
+    })
+    inflightWait = waitPromise
 
     try {
       const tooling = await prepareTooling({
@@ -434,8 +415,8 @@ export function createAgent(options: CreateAgentOptions): Agent {
         onTool,
         signal: abortController.signal,
         emit: onEmit,
-        provider,
-      });
+        provider
+      })
 
       const runMessages = await runReactLoop(
         provider,
@@ -445,32 +426,31 @@ export function createAgent(options: CreateAgentOptions): Agent {
         abortController,
         onTextDelta,
         maxSteps,
-        invokeTimeoutMs,
-      );
+        invokeTimeoutMs
+      )
 
-      const finalMessages =
-        runMessages.length > 0 ? runMessages : inputMessages;
+      const finalMessages = runMessages.length > 0 ? runMessages : inputMessages
       // 写回完整轨迹，供下一次 send 直接续聊
-      messages = finalMessages;
+      messages = finalMessages
       const waitResult: AgentWaitResult = {
-        status: "finished",
-        result: extractAssistantText(finalMessages),
-      };
-      lastWaitResult = waitResult;
-      settleWait(waitResult);
-      return { messages: finalMessages };
+        status: 'finished',
+        result: extractAssistantText(finalMessages)
+      }
+      lastWaitResult = waitResult
+      settleWait(waitResult)
+      return { messages: finalMessages }
     } catch (error) {
       const waitResult: AgentWaitResult = {
         status: resolveWaitFailureStatus(error, abortController.signal),
-        result: "",
-        error,
-      };
-      lastWaitResult = waitResult;
-      settleWait(waitResult);
-      throw error;
+        result: '',
+        error
+      }
+      lastWaitResult = waitResult
+      settleWait(waitResult)
+      throw error
     } finally {
       if (inflightWait === waitPromise) {
-        inflightWait = null;
+        inflightWait = null
       }
     }
   }
@@ -483,31 +463,31 @@ export function createAgent(options: CreateAgentOptions): Agent {
    */
   async function wait(): Promise<AgentWaitResult> {
     if (inflightWait) {
-      return inflightWait;
+      return inflightWait
     }
     if (lastWaitResult) {
-      return lastWaitResult;
+      return lastWaitResult
     }
-    throw new Error("No agent run to wait for; call send() first");
+    throw new Error('No agent run to wait for; call send() first')
   }
 
   const mcp: AgentMcp | undefined = mcpConfigPath
     ? {
         probe: (entry) => probeMcpServer(entry),
         warmup: () => warmupMcpServersFromConfig(mcpConfigPath),
-        dispose: () => disposeMcpConnectionPool(),
+        dispose: () => disposeMcpConnectionPool()
       }
-    : undefined;
+    : undefined
 
   return {
     get messages() {
-      return messages;
+      return messages
     },
     set messages(next: CoreMessage[]) {
-      messages = [...next];
+      messages = [...next]
     },
     send,
     wait,
-    ...(mcp ? { mcp } : {}),
-  };
+    ...(mcp ? { mcp } : {})
+  }
 }

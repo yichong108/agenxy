@@ -24,10 +24,10 @@ pnpm api:dev
 
 `docker-compose.yml` 仅编排 API 所需的 MySQL 与 Redis，容器名为 `luneto-mysql` / `luneto-redis`，与 `services/langfuse-local` 互不共用。
 
-| 服务 | 默认端口 | 默认凭证 |
-| --- | --- | --- |
-| MySQL 8.4 | `3306` | root / `password`，库名 `luneto` |
-| Redis 7 | `6379` | 无密码（可用 `REDIS_PASSWORD` 开启） |
+| 服务      | 默认端口 | 默认凭证                             |
+| --------- | -------- | ------------------------------------ |
+| MySQL 8.4 | `3306`   | root / `password`，库名 `luneto`     |
+| Redis 7   | `6379`   | 无密码（可用 `REDIS_PASSWORD` 开启） |
 
 端口与凭证读取本目录 `.env`（与 `.env.example` 对齐）。若与本机其它服务冲突，修改 `.env` 中的 `MYSQL_PORT` / `REDIS_PORT` 后重新 `docker:up`。
 
@@ -56,11 +56,11 @@ curl http://127.0.0.1:3100/health
 
 账号密码登录（暂无注册）。启动时 `ensureSchema()` 会创建 `users` 表，并在不存在时种子写入默认管理员：
 
-| 字段 | 值 |
-| --- | --- |
+| 字段     | 值      |
+| -------- | ------- |
 | username | `admin` |
 | password | `admin` |
-| role | `admin` |
+| role     | `admin` |
 
 密码以 bcrypt 哈希存储。JWT 相关配置见 `JWT_SECRET` / `JWT_EXPIRES_IN`。
 
@@ -98,7 +98,11 @@ curl http://127.0.0.1:3100/health
 成功返回：
 
 ```json
-{ "code": 0, "message": "ok", "data": { "user": { "id": "...", "username": "admin", "role": "admin" } } }
+{
+  "code": 0,
+  "message": "ok",
+  "data": { "user": { "id": "...", "username": "admin", "role": "admin" } }
+}
 ```
 
 ## Users API
@@ -150,13 +154,13 @@ curl -X PUT http://127.0.0.1:3100/settings \
 
 ## 脚本
 
-| 命令 | 说明 |
-| --- | --- |
-| `pnpm --filter @luneto/api dev` | 开发模式（tsx watch） |
-| `pnpm --filter @luneto/api build` | 编译到 `dist/` |
-| `pnpm --filter @luneto/api start` | 运行编译产物 |
-| `pnpm --filter @luneto/api typecheck` | TypeScript 类型检查 |
-| `pnpm --filter @luneto/api docker:up` | 启动 MySQL + Redis |
-| `pnpm --filter @luneto/api docker:down` | 停止并移除容器 |
-| `pnpm --filter @luneto/api docker:logs` | 跟踪容器日志 |
-| `pnpm --filter @luneto/api docker:reset` | 停止并删除数据卷 |
+| 命令                                     | 说明                  |
+| ---------------------------------------- | --------------------- |
+| `pnpm --filter @luneto/api dev`          | 开发模式（tsx watch） |
+| `pnpm --filter @luneto/api build`        | 编译到 `dist/`        |
+| `pnpm --filter @luneto/api start`        | 运行编译产物          |
+| `pnpm --filter @luneto/api typecheck`    | TypeScript 类型检查   |
+| `pnpm --filter @luneto/api docker:up`    | 启动 MySQL + Redis    |
+| `pnpm --filter @luneto/api docker:down`  | 停止并移除容器        |
+| `pnpm --filter @luneto/api docker:logs`  | 跟踪容器日志          |
+| `pnpm --filter @luneto/api docker:reset` | 停止并删除数据卷      |

@@ -1,15 +1,15 @@
-import bcrypt from 'bcryptjs';
-import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
-import { randomUUID } from 'node:crypto';
+import bcrypt from 'bcryptjs'
+import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
+import { randomUUID } from 'node:crypto'
 
-import { mysqlPool } from './mysql.js';
+import { mysqlPool } from './mysql.js'
 
 /** 默认管理员账号（仅在 users 表无该用户时写入） */
-const DEFAULT_ADMIN_USERNAME = 'admin';
+const DEFAULT_ADMIN_USERNAME = 'admin'
 /** 默认管理员明文密码；生产环境应尽快修改 */
-const DEFAULT_ADMIN_PASSWORD = 'admin';
+const DEFAULT_ADMIN_PASSWORD = 'admin'
 /** bcrypt 计算成本 */
-const BCRYPT_ROUNDS = 10;
+const BCRYPT_ROUNDS = 10
 
 /**
  * 确保业务所需的 MySQL 表存在，并写入默认管理员账号
@@ -24,7 +24,7 @@ export async function ensureSchema(): Promise<void> {
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
+  `)
 
   await mysqlPool.query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -36,9 +36,9 @@ export async function ensureSchema(): Promise<void> {
       PRIMARY KEY (id),
       UNIQUE KEY uk_users_username (username)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
+  `)
 
-  await seedDefaultAdmin();
+  await seedDefaultAdmin()
 }
 
 /**
@@ -50,16 +50,16 @@ async function seedDefaultAdmin(): Promise<void> {
   const [rows] = await mysqlPool.query<RowDataPacket[]>(
     'SELECT id FROM users WHERE username = ? LIMIT 1',
     [DEFAULT_ADMIN_USERNAME]
-  );
-  if (rows.length > 0) return;
+  )
+  if (rows.length > 0) return
 
-  const passwordHash = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, BCRYPT_ROUNDS);
+  const passwordHash = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, BCRYPT_ROUNDS)
   await mysqlPool.query<ResultSetHeader>(
     `INSERT INTO users (id, username, password_hash, role)
      VALUES (?, ?, ?, ?)`,
     [randomUUID(), DEFAULT_ADMIN_USERNAME, passwordHash, 'admin']
-  );
+  )
   console.log(
     `[api] seeded default admin user: ${DEFAULT_ADMIN_USERNAME} / ${DEFAULT_ADMIN_PASSWORD}`
-  );
+  )
 }

@@ -10,8 +10,7 @@
     "start": "tsx src/index.ts",
     "build": "node esbuild.config.mjs",
     "start:dist": "node dist/index.js",
-    "typecheck": "tsc --noEmit",
-    "lint": "tsc --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@luneto/agent": "workspace:*",

@@ -1,14 +1,14 @@
-import type { AuthUserListItem } from '@luneto/shared';
-import type { RowDataPacket } from 'mysql2/promise';
+import type { AuthUserListItem } from '@luneto/shared'
+import type { RowDataPacket } from 'mysql2/promise'
 
-import { mysqlPool } from '../db/mysql.js';
+import { mysqlPool } from '../db/mysql.js'
 
 type UserListRow = RowDataPacket & {
-  id: string;
-  username: string;
-  role: string;
-  created_at: Date | string;
-};
+  id: string
+  username: string
+  role: string
+  created_at: Date | string
+}
 
 /**
  * 将数据库时间字段规范为 ISO 8601 字符串
@@ -20,10 +20,10 @@ type UserListRow = RowDataPacket & {
  */
 function toIsoString(value: Date | string): string {
   if (value instanceof Date) {
-    return value.toISOString();
+    return value.toISOString()
   }
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toISOString();
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toISOString()
 }
 
 /**
@@ -38,12 +38,12 @@ export async function listUsers(): Promise<AuthUserListItem[]> {
     `SELECT id, username, role, created_at
      FROM users
      ORDER BY created_at DESC`
-  );
+  )
 
   return rows.map((row) => ({
     id: row.id,
     username: row.username,
     role: row.role,
     createdAt: toIsoString(row.created_at)
-  }));
+  }))
 }

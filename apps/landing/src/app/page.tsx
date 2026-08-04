@@ -1,3 +1,5 @@
+import Link from 'next/link'
+
 export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-24">
@@ -18,12 +20,12 @@ export default function Home() {
           >
             下载应用
           </a>
-          <a
+          <Link
             href="/docs"
             className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-100 transition"
           >
             查看文档
-          </a>
+          </Link>
           <a
             href="https://github.com/your-org/luneto"
             className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-100 transition"

@@ -1,5 +1,5 @@
-import mysql from 'mysql2/promise';
-import { env } from '../config/env.js';
+import mysql from 'mysql2/promise'
+import { env } from '../config/env.js'
 
 /**
  * MySQL 连接池
@@ -16,7 +16,7 @@ export const mysqlPool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   enableKeepAlive: true
-});
+})
 
 /**
  * 探测 MySQL 是否可连通
@@ -28,14 +28,14 @@ export const mysqlPool = mysql.createPool({
  */
 export async function pingMysql(): Promise<boolean> {
   try {
-    const connection = await mysqlPool.getConnection();
+    const connection = await mysqlPool.getConnection()
     try {
-      await connection.query('SELECT 1');
-      return true;
+      await connection.query('SELECT 1')
+      return true
     } finally {
-      connection.release();
+      connection.release()
     }
   } catch {
-    return false;
+    return false
   }
 }

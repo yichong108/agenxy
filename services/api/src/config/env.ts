@@ -1,6 +1,6 @@
-import { config as loadEnv } from 'dotenv';
+import { config as loadEnv } from 'dotenv'
 
-loadEnv();
+loadEnv()
 
 /**
  * API 服务运行时配置
@@ -34,4 +34,4 @@ export const env = {
     password: process.env.REDIS_PASSWORD || undefined,
     db: Number(process.env.REDIS_DB ?? 0)
   }
-} as const;
+} as const

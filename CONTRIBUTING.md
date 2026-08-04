@@ -15,15 +15,15 @@ npm install
 
 ## Local development and checks
 
-| Command                | Purpose                             |
-| ---------------------- | ----------------------------------- |
-| `npm run dev`          | Development mode with HMR           |
-| `npm run dev:debug`    | Development mode with debug ports   |
-| `npm run typecheck`    | TypeScript check                    |
-| `npm run lint`         | ESLint                              |
-| `npm run lint:fix`     | ESLint with auto-fix where possible |
-| `npm run format`       | Prettier write                      |
-| `npm run format:check` | Prettier check                      |
+| Command             | Purpose                                  |
+| ------------------- | ---------------------------------------- |
+| `npm run dev`       | Development mode with HMR                |
+| `npm run dev:debug` | Development mode with debug ports        |
+| `npm run typecheck` | TypeScript check                         |
+| `pnpm lint`         | Oxlint (root `.oxlintrc.json`)           |
+| `pnpm lint:fix`     | Oxlint with auto-fix where possible      |
+| `pnpm format`       | Prettier write (root `.prettierrc.json`) |
+| `pnpm format:check` | Prettier check                           |
 
 Before opening a pull request, please run `typecheck` and `lint` locally when feasible. If you touch layout or style-heavy files, consider `format:check` or `format`.
 

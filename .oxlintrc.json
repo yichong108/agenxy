@@ -1,0 +1,59 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "import"],
+  "categories": {
+    "correctness": "error"
+  },
+  "env": {
+    "builtin": true
+  },
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/out/**",
+    "**/release/**",
+    "**/.next/**",
+    "**/.turbo/**",
+    "apps/desktop/src/extensions/**",
+    "apps/desktop/src/skills/**"
+  ],
+  "settings": {
+    "next": {
+      "rootDir": "apps/landing/"
+    }
+  },
+  "overrides": [
+    {
+      "files": ["apps/desktop/**/*.{ts,tsx,js,jsx}"],
+      "env": {
+        "browser": true,
+        "node": true
+      },
+      "rules": {
+        "typescript/no-require-imports": "off"
+      }
+    },
+    {
+      "files": ["apps/admin/**/*.{ts,tsx,js,jsx}", "apps/phone/**/*.{ts,tsx,js,jsx}"],
+      "env": {
+        "browser": true
+      }
+    },
+    {
+      "files": ["apps/landing/**/*.{ts,tsx,js,jsx}"],
+      "plugins": ["typescript", "import", "react", "nextjs"],
+      "env": {
+        "browser": true
+      }
+    },
+    {
+      "files": [
+        "apps/command/**/*.{ts,tsx,js,jsx}",
+        "services/**/*.{ts,tsx,js,jsx}",
+        "packages/**/*.{ts,tsx,js,jsx}"
+      ],
+      "env": {
+        "node": true
+      }
+    }
+  ]
+}

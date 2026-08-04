@@ -1,9 +1,9 @@
-import cors from 'cors';
-import express from 'express';
-import { authRouter } from './routes/auth.js';
-import { healthRouter } from './routes/health.js';
-import { settingsRouter } from './routes/settings.js';
-import { usersRouter } from './routes/users.js';
+import cors from 'cors'
+import express from 'express'
+import { authRouter } from './routes/auth.js'
+import { healthRouter } from './routes/health.js'
+import { settingsRouter } from './routes/settings.js'
+import { usersRouter } from './routes/users.js'
 
 /**
  * 创建并配置 Express 应用实例
@@ -14,14 +14,14 @@ import { usersRouter } from './routes/users.js';
  * @returns 配置完成的 Express 应用
  */
 export function createApp() {
-  const app = express();
+  const app = express()
 
-  app.use(cors());
-  app.use(express.json({ limit: '2mb' }));
-  app.use(healthRouter);
-  app.use(authRouter);
-  app.use(usersRouter);
-  app.use(settingsRouter);
+  app.use(cors())
+  app.use(express.json({ limit: '2mb' }))
+  app.use(healthRouter)
+  app.use(authRouter)
+  app.use(usersRouter)
+  app.use(settingsRouter)
 
-  return app;
+  return app
 }

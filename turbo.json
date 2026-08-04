@@ -10,22 +10,8 @@
       "cache": false,
       "persistent": true
     },
-    "lint": {
-      "cache": false
-    },
-    "lint:fix": {
-      "cache": false
-    },
     "typecheck": {
       "cache": false
-    },
-    "format": {
-      "cache": true,
-      "outputs": []
-    },
-    "format:check": {
-      "cache": true,
-      "outputs": []
     }
   }
 }

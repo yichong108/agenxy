@@ -33,16 +33,16 @@ npm run dev
 
 ## 常用脚本
 
-| 命令                                      | 说明                                          |
-| ----------------------------------------- | --------------------------------------------- |
-| `npm run dev`                             | 开发模式启动应用（含热更新）                  |
-| `npm run dev:debug`                       | 开发模式并开启 Node/Electron 调试端口         |
-| `npm run build`                           | 生产构建并执行 `electron-builder` 打安装包    |
-| `npm run build:app`                       | 仅构建主进程 / preload / 渲染进程，不打安装包 |
-| `npm run preview`                         | 预览已构建的渲染端产物                        |
-| `npm run typecheck`                       | TypeScript 检查（web 与 node 配置）           |
-| `npm run lint` / `npm run lint:fix`       | ESLint                                        |
-| `npm run format` / `npm run format:check` | Prettier                                      |
+| 命令                                | 说明                                          |
+| ----------------------------------- | --------------------------------------------- |
+| `npm run dev`                       | 开发模式启动应用（含热更新）                  |
+| `npm run dev:debug`                 | 开发模式并开启 Node/Electron 调试端口         |
+| `npm run build`                     | 生产构建并执行 `electron-builder` 打安装包    |
+| `npm run build:app`                 | 仅构建主进程 / preload / 渲染进程，不打安装包 |
+| `npm run preview`                   | 预览已构建的渲染端产物                        |
+| `npm run typecheck`                 | TypeScript 检查（web 与 node 配置）           |
+| `pnpm lint` / `pnpm lint:fix`       | Oxlint（仓库根目录 `.oxlintrc.json`）         |
+| `pnpm format` / `pnpm format:check` | Prettier（仓库根目录 `.prettierrc.json`）     |
 
 安装包输出目录为 `release/`（具体目标见 `package.json` 中的 `electron-builder` 配置）。
 

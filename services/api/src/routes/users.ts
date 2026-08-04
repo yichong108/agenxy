@@ -1,13 +1,13 @@
-import { Router } from 'express';
+import { Router } from 'express'
 
-import { listUsers } from '../services/user-service.js';
+import { listUsers } from '../services/user-service.js'
 
 /** 与桌面端 / 管理端 `request` 对齐的统一响应 envelope */
 type ApiEnvelope<T> = {
-  code: number;
-  message: string;
-  data: T | null;
-};
+  code: number
+  message: string
+  data: T | null
+}
 
 /**
  * 构造成功响应（HTTP 200 + code 0）
@@ -16,9 +16,8 @@ type ApiEnvelope<T> = {
  * @param message - 可选提示文案
  */
 function ok<T>(data: T, message = 'ok'): ApiEnvelope<T> {
-  return { code: 0, message, data };
+  return { code: 0, message, data }
 }
-
 
 /**
  * 构造业务失败响应（HTTP 200 + 非 0 code）
@@ -27,7 +26,7 @@ function ok<T>(data: T, message = 'ok'): ApiEnvelope<T> {
  * @param message - 错误说明
  */
 function fail(code: number, message: string): ApiEnvelope<null> {
-  return { code, message, data: null };
+  return { code, message, data: null }
 }
 
 /**
@@ -37,16 +36,14 @@ function fail(code: number, message: string): ApiEnvelope<null> {
  *
  * 响应统一为 `{ code, message, data }`。
  */
-export const usersRouter = Router();
+export const usersRouter = Router()
 
 usersRouter.get('/users', async (_req, res) => {
   try {
-    const users = await listUsers();
-    res.status(200).json(ok({ users }));
+    const users = await listUsers()
+    res.status(200).json(ok({ users }))
   } catch (error) {
-    console.error('[api] GET /users failed', error);
-    res.status(200).json(
-      fail(50003, error instanceof Error ? error.message : String(error))
-    );
+    console.error('[api] GET /users failed', error)
+    res.status(200).json(fail(50003, error instanceof Error ? error.message : String(error)))
   }
-});
+})

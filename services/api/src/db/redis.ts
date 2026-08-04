@@ -1,5 +1,5 @@
-import { Redis } from 'ioredis';
-import { env } from '../config/env.js';
+import { Redis } from 'ioredis'
+import { env } from '../config/env.js'
 
 /**
  * Redis 客户端单例
@@ -15,7 +15,7 @@ export const redis = new Redis({
   lazyConnect: true,
   maxRetriesPerRequest: 1,
   enableOfflineQueue: false
-});
+})
 
 /**
  * 探测 Redis 是否可连通
@@ -28,11 +28,11 @@ export const redis = new Redis({
 export async function pingRedis(): Promise<boolean> {
   try {
     if (redis.status === 'wait' || redis.status === 'end') {
-      await redis.connect();
+      await redis.connect()
     }
-    const result = await redis.ping();
-    return result === 'PONG';
+    const result = await redis.ping()
+    return result === 'PONG'
   } catch {
-    return false;
+    return false
   }
 }

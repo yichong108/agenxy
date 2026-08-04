@@ -1,19 +1,19 @@
-import type { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
-import { defaultSettings, normalizeSettings, type AppSettings } from '@luneto/shared';
+import type { RowDataPacket, ResultSetHeader } from 'mysql2/promise'
+import { defaultSettings, normalizeSettings, type AppSettings } from '@luneto/shared'
 
-import { mysqlPool } from '../db/mysql.js';
-import { redis } from '../db/redis.js';
+import { mysqlPool } from '../db/mysql.js'
+import { redis } from '../db/redis.js'
 
 /** 全局单例 settings 行主键（多用户 auth 落地前使用） */
-export const DEFAULT_SETTINGS_ID = 'default';
+export const DEFAULT_SETTINGS_ID = 'default'
 
-const CACHE_KEY = `app_settings:${DEFAULT_SETTINGS_ID}`;
+const CACHE_KEY = `app_settings:${DEFAULT_SETTINGS_ID}`
 /** Redis 缓存 TTL（秒） */
-const CACHE_TTL_SEC = 60;
+const CACHE_TTL_SEC = 60
 
 type SettingsRow = RowDataPacket & {
-  payload: AppSettings | string;
-};
+  payload: AppSettings | string
+}
 
 /**
  * 从 MySQL 行的 JSON 列解析并规范化 AppSettings
@@ -22,15 +22,15 @@ type SettingsRow = RowDataPacket & {
  * @returns 规范化后的 AppSettings
  */
 function parsePayload(payload: AppSettings | string | null | undefined): AppSettings {
-  if (payload == null) return normalizeSettings({});
+  if (payload == null) return normalizeSettings({})
   if (typeof payload === 'string') {
     try {
-      return normalizeSettings(JSON.parse(payload) as Partial<AppSettings>);
+      return normalizeSettings(JSON.parse(payload) as Partial<AppSettings>)
     } catch {
-      return normalizeSettings({});
+      return normalizeSettings({})
     }
   }
-  return normalizeSettings(payload);
+  return normalizeSettings(payload)
 }
 
 /**
@@ -41,13 +41,13 @@ function parsePayload(payload: AppSettings | string | null | undefined): AppSett
 async function readCache(): Promise<AppSettings | null> {
   try {
     if (redis.status === 'wait' || redis.status === 'end') {
-      await redis.connect();
+      await redis.connect()
     }
-    const raw = await redis.get(CACHE_KEY);
-    if (!raw) return null;
-    return normalizeSettings(JSON.parse(raw) as Partial<AppSettings>);
+    const raw = await redis.get(CACHE_KEY)
+    if (!raw) return null
+    return normalizeSettings(JSON.parse(raw) as Partial<AppSettings>)
   } catch {
-    return null;
+    return null
   }
 }
 
@@ -59,9 +59,9 @@ async function readCache(): Promise<AppSettings | null> {
 async function writeCache(settings: AppSettings): Promise<void> {
   try {
     if (redis.status === 'wait' || redis.status === 'end') {
-      await redis.connect();
+      await redis.connect()
     }
-    await redis.set(CACHE_KEY, JSON.stringify(settings), 'EX', CACHE_TTL_SEC);
+    await redis.set(CACHE_KEY, JSON.stringify(settings), 'EX', CACHE_TTL_SEC)
   } catch {
     // ignore cache write failures
   }
@@ -73,9 +73,9 @@ async function writeCache(settings: AppSettings): Promise<void> {
 async function invalidateCache(): Promise<void> {
   try {
     if (redis.status === 'wait' || redis.status === 'end') {
-      await redis.connect();
+      await redis.connect()
     }
-    await redis.del(CACHE_KEY);
+    await redis.del(CACHE_KEY)
   } catch {
     // ignore
   }
@@ -89,24 +89,24 @@ async function invalidateCache(): Promise<void> {
  * @returns 规范化后的 AppSettings
  */
 export async function getAppSettings(): Promise<AppSettings> {
-  const cached = await readCache();
-  if (cached) return cached;
+  const cached = await readCache()
+  if (cached) return cached
 
   const [rows] = await mysqlPool.query<SettingsRow[]>(
     'SELECT payload FROM app_settings WHERE id = ? LIMIT 1',
     [DEFAULT_SETTINGS_ID]
-  );
+  )
 
-  const row = rows[0];
+  const row = rows[0]
   if (!row) {
-    const seed = normalizeSettings({ ...defaultSettings });
-    await saveAppSettings(seed);
-    return seed;
+    const seed = normalizeSettings({ ...defaultSettings })
+    await saveAppSettings(seed)
+    return seed
   }
 
-  const settings = parsePayload(row.payload);
-  await writeCache(settings);
-  return settings;
+  const settings = parsePayload(row.payload)
+  await writeCache(settings)
+  return settings
 }
 
 /**
@@ -116,16 +116,16 @@ export async function getAppSettings(): Promise<AppSettings> {
  * @returns 写入后的 AppSettings
  */
 export async function saveAppSettings(settings: AppSettings): Promise<AppSettings> {
-  const next = normalizeSettings(settings);
+  const next = normalizeSettings(settings)
   await mysqlPool.query<ResultSetHeader>(
     `INSERT INTO app_settings (id, payload)
      VALUES (?, CAST(? AS JSON))
      ON DUPLICATE KEY UPDATE payload = VALUES(payload)`,
     [DEFAULT_SETTINGS_ID, JSON.stringify(next)]
-  );
-  await invalidateCache();
-  await writeCache(next);
-  return next;
+  )
+  await invalidateCache()
+  await writeCache(next)
+  return next
 }
 
 /**
@@ -135,6 +135,6 @@ export async function saveAppSettings(settings: AppSettings): Promise<AppSetting
  * @returns 合并并规范化后的完整 AppSettings
  */
 export async function patchAppSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
-  const current = await getAppSettings();
-  return saveAppSettings({ ...current, ...patch });
+  const current = await getAppSettings()
+  return saveAppSettings({ ...current, ...patch })
 }
