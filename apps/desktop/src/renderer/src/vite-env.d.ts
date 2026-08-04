@@ -11,9 +11,6 @@ import type {
   McpWarmupStatus,
   RendererUiState,
   SessionInfo,
-  SkillsRuntimeState,
-  SkillsUninstallPayload,
-  SkillsUninstallResult,
   StreamEvent,
   TerminalCompleteResult,
   TerminalOutputEvent,
@@ -85,8 +82,6 @@ type Api = {
   onWorkspaceChange: (cb: (p: { path: string }) => void) => () => void
   onWorkspacesSync: (cb: (p: WorkspacesPayload) => void) => () => void
   onSettingsSync: (cb: (s: AppSettings) => void) => () => void
-  getSkillsState: () => Promise<SkillsRuntimeState>
-  uninstallSkill: (payload: SkillsUninstallPayload) => Promise<SkillsUninstallResult>
 }
 
 declare global {

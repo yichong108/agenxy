@@ -14,9 +14,6 @@ import {
   type McpWarmupStatus,
   type RendererUiState,
   type SessionInfo,
-  type SkillsRuntimeState,
-  type SkillsUninstallPayload,
-  type SkillsUninstallResult,
   type StreamEvent,
   type TerminalCompleteResult,
   type TerminalOutputEvent,
@@ -147,10 +144,7 @@ const api = {
     return () => {
       ipcRenderer.removeListener(EVENTS.TERMINAL_OUTPUT, h)
     }
-  },
-  getSkillsState: () => ipcRenderer.invoke(IPC.SKILLS_STATE) as Promise<SkillsRuntimeState>,
-  uninstallSkill: (payload: SkillsUninstallPayload) =>
-    ipcRenderer.invoke(IPC.SKILLS_UNINSTALL, payload) as Promise<SkillsUninstallResult>
+  }
 }
 
 contextBridge.exposeInMainWorld('bridge', api)

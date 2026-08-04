@@ -7,6 +7,7 @@
 import { type Agent, type CoreMessage, createAgent, type CreateAgentOptions } from '@openwork/agent'
 import type { LanguageModel } from 'ai'
 
+import { resolveCreateAgentSkillPaths } from '@/main/agent/skills'
 import { getMcpConfigPath } from '@/main/store'
 
 /**
@@ -23,10 +24,12 @@ const PLACEHOLDER_PROVIDER = { modelId: 'desktop-placeholder' } as LanguageModel
  * @returns CreateAgentOptions
  */
 function buildSessionAgentOptions(cwd?: string, messages?: CoreMessage[]): CreateAgentOptions {
+  const skillPaths = resolveCreateAgentSkillPaths()
   return {
     provider: PLACEHOLDER_PROVIDER,
     ...(messages ? { messages } : {}),
     ...(cwd ? { local: { cwd } } : {}),
+    ...(skillPaths.length ? { skills: { paths: skillPaths } } : {}),
     mcp: { configPath: getMcpConfigPath() }
   }
 }

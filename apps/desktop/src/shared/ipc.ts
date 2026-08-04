@@ -37,10 +37,6 @@ export const IPC = {
   MCP_WARMUP_GET: 'mcp:warmup:get',
   /** 立即重新执行池化预热并复用/更新连接 */
   MCP_WARMUP_RUN: 'mcp:warmup:run',
-  /** 聚合当前技能清单（内置 / 市场 / 兼容） */
-  SKILLS_STATE: 'skills:state',
-  /** 卸载市场或兼容目录技能包 */
-  SKILLS_UNINSTALL: 'skills:uninstall',
   /** Windows 自定义标题栏：窗口行为（最小化 / 最大化 / 关闭 / 重载 / 退出） */
   WINDOW_ACTION: 'window:action',
   /**
@@ -125,11 +121,6 @@ export type {
   ModelProviderId,
   ProviderProfile,
   SettingsFormValues,
-  SkillInstallKind,
-  SkillsRuntimeState,
-  SkillsUninstallPayload,
-  SkillsUninstallResult,
-  SkillUiEntry,
   StreamDoneEvent,
   StreamErrorEvent,
   StreamEvent,

@@ -1,8 +1,7 @@
-import { McpHubModal, SettingsModal, SkillsHubModal } from './modals'
+import { McpHubModal, SettingsModal } from './modals'
 import { useWorkspaceLeftPane } from './useWorkspaceLeftPane'
 import {
   ApiOutlined,
-  AppstoreOutlined,
   FolderOpenOutlined,
   InboxOutlined,
   LogoutOutlined,
@@ -75,13 +74,6 @@ export function WorkspaceLeftPane({ leftTogglePortalHost }: WorkspaceLeftPanePro
                     onClick={p.openMcpHub}
                     className="app-settings-btn"
                     title="MCP 与扩展"
-                  />
-                  <Button
-                    type="text"
-                    icon={<AppstoreOutlined />}
-                    onClick={p.openSkillsHub}
-                    className="app-settings-btn"
-                    title="技能"
                   />
                   <Button
                     type="text"
@@ -268,7 +260,6 @@ export function WorkspaceLeftPane({ leftTogglePortalHost }: WorkspaceLeftPanePro
       />
       <McpHubModal open={p.mcpOpen} onClose={p.closeMcpHub} />
       <SettingsModal open={p.settingsOpen} onClose={p.closeSettings} />
-      <SkillsHubModal open={p.skillsOpen} onClose={p.closeSkillsHub} />
 
       <Modal
         title="重命名会话"

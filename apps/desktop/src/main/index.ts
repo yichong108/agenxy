@@ -15,12 +15,7 @@ import {
   isSessionRunning,
   runUserMessage
 } from '@/main/agent/agent-service'
-import {
-  ensureUserSkillsLayout,
-  gatherSkillsRuntimeState,
-  uninstallLegacySkillFolder,
-  uninstallMarketSkillFolder
-} from '@/main/agent/skills'
+import { ensureUserSkillsLayout } from '@/main/agent/skills'
 import { shutdownLangfuseTracing, startLangfuseTracingIfConfigured } from '@/main/langfuse'
 import { mainLog } from '@/main/logger'
 import {
@@ -66,7 +61,6 @@ import {
   type McpWarmupStatus,
   normalizeComposerMode,
   type RendererUiState,
-  type SkillsUninstallPayload,
   type StreamEvent,
   type TerminalOutputEvent,
   type WebEditAction,
@@ -618,20 +612,6 @@ function registerIpc(): void {
       (await getMcpHostAgent().mcp?.probe(entry)) ?? { ok: false as const, error: 'MCP 未配置' }
     )
   })
-  ipcMain.handle(IPC.SKILLS_STATE, async () => gatherSkillsRuntimeState())
-  ipcMain.handle(IPC.SKILLS_UNINSTALL, async (_e, payload: SkillsUninstallPayload) => {
-    if (!payload || typeof payload !== 'object') {
-      return { ok: false as const, error: '无效参数' }
-    }
-    if (payload.kind === 'market') {
-      return await uninstallMarketSkillFolder(payload.folderId)
-    }
-    if (payload.kind === 'legacy') {
-      return await uninstallLegacySkillFolder(payload.legacyFolderRelative)
-    }
-    return { ok: false as const, error: '无效参数' }
-  })
-
   ipcMain.on(IPC.WINDOW_CAPTION_CONTROLS, (event, visible: unknown) => {
     const win =
       mainWindow && !mainWindow.isDestroyed() ? mainWindow : BrowserWindow.getFocusedWindow()

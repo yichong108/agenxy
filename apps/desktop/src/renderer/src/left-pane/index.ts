@@ -1,2 +1,2 @@
-export { McpHubModal, SettingsModal, SkillsHubModal } from './modals'
+export { McpHubModal, SettingsModal } from './modals'
 export { WorkspaceLeftPane } from './WorkspaceLeftPane'
