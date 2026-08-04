@@ -120,4 +120,5 @@ class SessionManager {
 - [@luneto/admin](apps/admin/README.md) 后台管理
 - [@luneto/command](apps/command/README.md) 命令行客户端
 - [@luneto/landing](apps/landing/README.md) 文档项目
+- [@luneto/phone](apps/phone/README.md) 移动端客户端
 - [@luneto/langfuse-local](services/langfuse-local/README.md) 本地 Langfuse

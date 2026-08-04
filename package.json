@@ -57,6 +57,12 @@
     "command:build": "pnpm --filter @luneto/command build",
     "command:start:dist": "pnpm --filter @luneto/command start:dist",
     "command:typecheck": "pnpm --filter @luneto/command typecheck",
+    "phone:dev": "pnpm --filter @luneto/phone dev",
+    "phone:start": "pnpm --filter @luneto/phone start",
+    "phone:android": "pnpm --filter @luneto/phone android",
+    "phone:ios": "pnpm --filter @luneto/phone ios",
+    "phone:web": "pnpm --filter @luneto/phone web",
+    "phone:typecheck": "pnpm --filter @luneto/phone typecheck",
     "prepare": "husky"
   },
   "devDependencies": {
