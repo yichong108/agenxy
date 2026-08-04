@@ -30,7 +30,7 @@ import type {
 declare global {
   interface ImportMetaEnv {
     readonly VITE_API_URL?: string
-    readonly VITE_AGENWORK_API_BASE_URL?: string
+    readonly VITE_LUNETO_API_BASE_URL?: string
   }
 }
 

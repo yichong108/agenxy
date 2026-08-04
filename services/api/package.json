@@ -1,7 +1,7 @@
 {
-  "name": "@agenwork/api",
+  "name": "@luneto/api",
   "version": "0.0.0",
-  "description": "Agenwork backend API — Express + MySQL + Redis",
+  "description": "Luneto backend API — Express + MySQL + Redis",
   "type": "module",
   "private": true,
   "scripts": {
@@ -19,7 +19,7 @@
     "docker:reset": "docker compose down -v"
   },
   "dependencies": {
-    "@agenwork/shared": "workspace:*",
+    "@luneto/shared": "workspace:*",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",

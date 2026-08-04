@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { LoginRequest } from '@agenwork/shared';
+import type { LoginRequest } from '@luneto/shared';
 
 import {
   getUserFromAccessToken,

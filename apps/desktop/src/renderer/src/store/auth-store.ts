@@ -1,10 +1,10 @@
-import type { AuthUser } from '@agenwork/shared'
+import type { AuthUser } from '@luneto/shared'
 import { create } from 'zustand'
 
 import { fetchAuthMeApi, loginWithPasswordApi } from '@/renderer/src/api/auth-api'
 
 /** localStorage 中持久化登录会话的 key */
-const AUTH_STORAGE_KEY = 'agenwork.auth.session'
+const AUTH_STORAGE_KEY = 'luneto.auth.session'
 
 type PersistedAuthSession = {
   accessToken: string

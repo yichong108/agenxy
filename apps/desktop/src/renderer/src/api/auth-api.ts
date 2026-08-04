@@ -1,4 +1,4 @@
-import type { AuthUser, LoginResult } from '@agenwork/shared'
+import type { AuthUser, LoginResult } from '@luneto/shared'
 
 import { getRequestErrorMessage, request } from '@/renderer/src/api/request'
 

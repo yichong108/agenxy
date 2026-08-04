@@ -4,7 +4,7 @@
 
 ## 项目
 
-**Agenwork** — 面向智能体的 Electron 桌面应用（React、Ant Design、AI SDK、MCP）。主要代码位于 `src/`（`main`、`renderer`、`preload`）。
+**Luneto** — 面向智能体的 Electron 桌面应用（React、Ant Design、AI SDK、MCP）。主要代码位于 `src/`（`main`、`renderer`、`preload`）。
 
 ## 包管理器
 
@@ -113,11 +113,11 @@ class SessionManager {
 
 
 ## 模块文档
-- [@agenwork/agent](packages/agent/README.md) 智能体
-- [@agenwork/shared](packages/shared/README.md) 公用工具
-- [@agenwork/api](services/api/README.md) 后端API服务
-- [@agenwork/desktop](apps/desktop/README.md) 桌面客户端
-- [@agenwork/admin](apps/admin/README.md) 后台管理
-- [@agenwork/command](apps/command/README.md) 命令行客户端
-- [@agenwork/landing](apps/landing/README.md) 文档项目
-- [@agenwork/langfuse-local](services/langfuse-local/README.md) 本地 Langfuse
+- [@luneto/agent](packages/agent/README.md) 智能体
+- [@luneto/shared](packages/shared/README.md) 公用工具
+- [@luneto/api](services/api/README.md) 后端API服务
+- [@luneto/desktop](apps/desktop/README.md) 桌面客户端
+- [@luneto/admin](apps/admin/README.md) 后台管理
+- [@luneto/command](apps/command/README.md) 命令行客户端
+- [@luneto/landing](apps/landing/README.md) 文档项目
+- [@luneto/langfuse-local](services/langfuse-local/README.md) 本地 Langfuse

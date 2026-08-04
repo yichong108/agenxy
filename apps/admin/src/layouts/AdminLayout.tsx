@@ -42,7 +42,7 @@ export function AdminLayout() {
             letterSpacing: 0.5
           }}
         >
-          Agenwork
+          Luneto
         </div>
         <Menu
           theme="dark"

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { AppSettings } from '@agenwork/shared';
+import type { AppSettings } from '@luneto/shared';
 
 import { getAppSettings, patchAppSettings } from '../services/settings-service.js';
 

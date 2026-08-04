@@ -10,7 +10,7 @@ import {
   type AppSettings,
   defaultSettings,
   normalizeSettings
-} from '@agenwork/shared'
+} from '@luneto/shared'
 import { config as loadDotenv } from 'dotenv'
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -32,21 +32,21 @@ export function loadCommandEnv(): void {
 /**
  * 从环境变量组装 CLI 用 AppSettings。
  *
- * 读取 `AGENWORK_API_KEY` / `AGENWORK_BASE_URL` / `AGENWORK_MODEL` /
+ * 读取 `LUNETO_API_KEY` / `LUNETO_BASE_URL` / `LUNETO_MODEL` /
  * `TAVILY_API_KEY`；未设置时回退 defaultSettings。
  *
  * @returns 规范化后的 AppSettings
  */
 export function settingsFromEnv(): AppSettings {
   const apiKey =
-    process.env.AGENWORK_API_KEY?.trim() ||
+    process.env.LUNETO_API_KEY?.trim() ||
     process.env.OPENAI_API_KEY?.trim() ||
     ''
   const baseUrl =
-    process.env.AGENWORK_BASE_URL?.trim() ||
+    process.env.LUNETO_BASE_URL?.trim() ||
     defaultSettings.providerProfiles.deepseek.baseUrl
   const model =
-    process.env.AGENWORK_MODEL?.trim() ||
+    process.env.LUNETO_MODEL?.trim() ||
     defaultSettings.providerProfiles.deepseek.model
   const tavilyApiKey = process.env.TAVILY_API_KEY?.trim() || ''
 

@@ -11,12 +11,12 @@ import {
   createAgent,
   getChatModel,
   type ToolObservation
-} from '@agenwork/agent'
+} from '@luneto/agent'
 import {
   type AgentComposerMode,
   type AppSettings,
   MAX_AGENT_LOOP_STEPS
-} from '@agenwork/shared'
+} from '@luneto/shared'
 
 /**
  * 根据设置与工作区创建 CLI agent 实例。
@@ -35,7 +35,7 @@ export function createCliAgent(
   const provider = getChatModel(settings)
   if (!provider) {
     throw new Error(
-      '请先配置 AGENWORK_API_KEY（或 OPENAI_API_KEY），参见 apps/command/.env.example'
+      '请先配置 LUNETO_API_KEY（或 OPENAI_API_KEY），参见 apps/command/.env.example'
     )
   }
 
@@ -119,7 +119,7 @@ export async function runRepl(
 ): Promise<void> {
   const rl = createInterface({ input, output, terminal: true })
   console.log(
-    `Agenwork CLI（mode=${options.mode}）。输入消息后回车；exit / quit 退出。`
+    `Luneto CLI（mode=${options.mode}）。输入消息后回车；exit / quit 退出。`
   )
 
   try {

@@ -20,7 +20,7 @@ importers:
 
   apps/admin:
     dependencies:
-      '@agenwork/shared':
+      '@luneto/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       '@ant-design/icons':
@@ -84,10 +84,10 @@ importers:
 
   apps/command:
     dependencies:
-      '@agenwork/agent':
+      '@luneto/agent':
         specifier: workspace:*
         version: link:../../packages/agent
-      '@agenwork/shared':
+      '@luneto/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       '@vscode/ripgrep':
@@ -112,10 +112,10 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@agenwork/agent':
+      '@luneto/agent':
         specifier: workspace:*
         version: link:../../packages/agent
-      '@agenwork/shared':
+      '@luneto/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       '@ai-sdk/openai':
@@ -351,7 +351,7 @@ importers:
 
   packages/agent:
     dependencies:
-      '@agenwork/shared':
+      '@luneto/shared':
         specifier: workspace:*
         version: link:../shared
       '@ai-sdk/openai':
@@ -385,7 +385,7 @@ importers:
 
   services/api:
     dependencies:
-      '@agenwork/shared':
+      '@luneto/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       bcryptjs:

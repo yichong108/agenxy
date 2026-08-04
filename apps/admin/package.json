@@ -1,7 +1,7 @@
 {
-  "name": "@agenwork/admin",
+  "name": "@luneto/admin",
   "version": "1.0.0",
-  "description": "Agenwork 后台管理 — Vite + React + Ant Design",
+  "description": "Luneto 后台管理 — Vite + React + Ant Design",
   "type": "module",
   "private": true,
   "scripts": {
@@ -16,7 +16,7 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,css,scss}\""
   },
   "dependencies": {
-    "@agenwork/shared": "workspace:*",
+    "@luneto/shared": "workspace:*",
     "@ant-design/icons": "^5.6.1",
     "antd": "^5.24.6",
     "axios": "^1.19.0",

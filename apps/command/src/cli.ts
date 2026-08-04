@@ -2,7 +2,7 @@
  * CLI 参数解析与帮助文案。
  */
 
-import type { AgentComposerMode } from '@agenwork/shared'
+import type { AgentComposerMode } from '@luneto/shared'
 
 /** 解析后的命令行选项 */
 export type CliOptions = {
@@ -22,11 +22,11 @@ export type CliOptions = {
  * 打印 CLI 用法。
  */
 export function printHelp(): void {
-  console.log(`Agenwork Command — 命令行智能体
+  console.log(`Luneto Command — 命令行智能体
 
 用法:
-  pnpm --filter @agenwork/command start -- [options] [prompt]
-  pnpm --filter @agenwork/command start -- [options]
+  pnpm --filter @luneto/command start -- [options] [prompt]
+  pnpm --filter @luneto/command start -- [options]
 
 选项:
   -h, --help          显示帮助
@@ -35,14 +35,14 @@ export function printHelp(): void {
   --mcp <path>        MCP 配置文件绝对/相对路径
 
 环境变量（见 .env.example）:
-  AGENWORK_API_KEY    OpenAI 兼容 API Key（必填）
-  AGENWORK_BASE_URL   接口地址
-  AGENWORK_MODEL      模型名
+  LUNETO_API_KEY    OpenAI 兼容 API Key（必填）
+  LUNETO_BASE_URL   接口地址
+  LUNETO_MODEL      模型名
   TAVILY_API_KEY      可选联网搜索
 
 示例:
-  pnpm --filter @agenwork/command start -- "列出当前目录文件"
-  pnpm --filter @agenwork/command start -- -m ask
+  pnpm --filter @luneto/command start -- "列出当前目录文件"
+  pnpm --filter @luneto/command start -- -m ask
 `)
 }
 

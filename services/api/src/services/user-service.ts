@@ -1,4 +1,4 @@
-import type { AuthUserListItem } from '@agenwork/shared';
+import type { AuthUserListItem } from '@luneto/shared';
 import type { RowDataPacket } from 'mysql2/promise';
 
 import { mysqlPool } from '../db/mysql.js';

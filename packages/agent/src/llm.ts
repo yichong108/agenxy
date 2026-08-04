@@ -4,7 +4,7 @@
  */
 
 import { createOpenAI } from '@ai-sdk/openai'
-import { type AppSettings, getActiveProviderProfile } from '@agenwork/shared'
+import { type AppSettings, getActiveProviderProfile } from '@luneto/shared'
 import type { LanguageModel } from 'ai'
 
 /**

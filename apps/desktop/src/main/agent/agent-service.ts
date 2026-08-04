@@ -7,7 +7,7 @@ import {
   resolveChatModel,
   type ToolObservation,
   userMessage
-} from '@agenwork/agent'
+} from '@luneto/agent'
 import type { WebContents } from 'electron'
 
 import { createSessionAgent } from '@/main/agent/agent-instance'

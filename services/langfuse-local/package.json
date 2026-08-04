@@ -1,5 +1,5 @@
 {
-  "name": "@agenwork/langfuse-local",
+  "name": "@luneto/langfuse-local",
   "version": "1.0.0",
   "description": "Local Langfuse observability service (Docker Compose)",
   "type": "module",

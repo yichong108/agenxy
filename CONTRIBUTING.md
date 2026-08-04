@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for your interest in **Agenwork**. This document explains how to set up your environment, submit changes, and follow project conventions when working with maintainers.
+Thank you for your interest in **Luneto**. This document explains how to set up your environment, submit changes, and follow project conventions when working with maintainers.
 
 Repository-wide guidance for humans and AI assistants is in [AGENTS.md](AGENTS.md).
 

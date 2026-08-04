@@ -4,7 +4,7 @@
  * 每个会话应持有独立的 agent 实例（createSessionAgent）。
  * MCP 预热 / 探测 / dispose 使用应用级宿主（getMcpHostAgent），不参与会话 send。
  */
-import { type Agent, type CoreMessage, createAgent, type CreateAgentOptions } from '@agenwork/agent'
+import { type Agent, type CoreMessage, createAgent, type CreateAgentOptions } from '@luneto/agent'
 import type { LanguageModel } from 'ai'
 
 import { getMcpConfigPath } from '@/main/store'

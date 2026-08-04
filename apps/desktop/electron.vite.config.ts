@@ -30,19 +30,19 @@ const monacoGithubLightThemeJson = resolve(
 export default defineConfig({
   main: {
     define: {
-      __AGENWORK_GIT_COMMIT__: JSON.stringify(readGitShortHash(rootDir)),
-      __AGENWORK_BUILD_ISO__: JSON.stringify(new Date().toISOString())
+      __LUNETO_GIT_COMMIT__: JSON.stringify(readGitShortHash(rootDir)),
+      __LUNETO_BUILD_ISO__: JSON.stringify(new Date().toISOString())
     },
     resolve: {
       alias: {
         '@': aliasSrc,
-        '@agenwork/agent': aliasAgent,
-        '@agenwork/shared': aliasShared
+        '@luneto/agent': aliasAgent,
+        '@luneto/shared': aliasShared
       }
     },
     plugins: [
       externalizeDepsPlugin({
-        exclude: ['@agenwork/agent', '@agenwork/shared']
+        exclude: ['@luneto/agent', '@luneto/shared']
       })
     ],
     build: {
@@ -57,13 +57,13 @@ export default defineConfig({
     resolve: {
       alias: {
         '@': aliasSrc,
-        '@agenwork/agent': aliasAgent,
-        '@agenwork/shared': aliasShared
+        '@luneto/agent': aliasAgent,
+        '@luneto/shared': aliasShared
       }
     },
     plugins: [
       externalizeDepsPlugin({
-        exclude: ['@agenwork/agent', '@agenwork/shared']
+        exclude: ['@luneto/agent', '@luneto/shared']
       })
     ],
     build: {

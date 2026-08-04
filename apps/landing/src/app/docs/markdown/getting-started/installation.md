@@ -12,7 +12,7 @@
 
 1. 访问官网下载 Windows 安装包
 2. 双击安装包，按照提示完成安装
-3. 启动 Agenwork 应用
+3. 启动 Luneto 应用
 
 ### macOS
 
@@ -24,11 +24,11 @@
 
 ```bash
 # 使用 AppImage
-chmod +x Agenwork.AppImage
-./Agenwork.AppImage
+chmod +x Luneto.AppImage
+./Luneto.AppImage
 
 # 或使用 DEB 包
-sudo dpkg -i agenwork.deb
+sudo dpkg -i luneto.deb
 ```
 
 ## 验证安装

@@ -9,7 +9,7 @@ import {
   getDefaultEnvironment,
   StdioClientTransport
 } from '@modelcontextprotocol/sdk/client/stdio.js'
-import type { McpServerEntry } from '@agenwork/shared'
+import type { McpServerEntry } from '@luneto/shared'
 import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
 
@@ -77,7 +77,7 @@ async function withMcpClient<T>(
     env: { ...getDefaultEnvironment(), ...flattenMcpEnvForSpawn(entry.env) },
     stderr: 'pipe'
   })
-  const client = new Client({ name: 'agenwork', version: '0.1.0' })
+  const client = new Client({ name: 'luneto', version: '0.1.0' })
   await client.connect(transport)
   try {
     return await fn(client)
@@ -174,7 +174,7 @@ async function ensurePooledSlot(entry: McpServerEntry): Promise<PooledSlot> {
       env: { ...getDefaultEnvironment(), ...flattenMcpEnvForSpawn(entry.env) },
       stderr: 'pipe'
     })
-    const client = new Client({ name: 'agenwork', version: '0.1.0' })
+    const client = new Client({ name: 'luneto', version: '0.1.0' })
     await client.connect(transport)
     const slot: PooledSlot = {
       launchKey,

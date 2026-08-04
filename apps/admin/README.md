@@ -1,6 +1,6 @@
-# @agenwork/admin
+# @luneto/admin
 
-Agenwork 后台管理前端（Vite + React + Ant Design）。
+Luneto 后台管理前端（Vite + React + Ant Design）。
 
 ## 功能
 
@@ -26,13 +26,13 @@ pnpm admin:dev
 
 | 变量                         | 说明            | 默认                    |
 | ---------------------------- | --------------- | ----------------------- |
-| `VITE_AGENWORK_API_BASE_URL` | 后端 API 根地址 | `http://127.0.0.1:3100` |
+| `VITE_LUNETO_API_BASE_URL` | 后端 API 根地址 | `http://127.0.0.1:3100` |
 
 ## 脚本
 
 | 命令                                      | 说明            |
 | ----------------------------------------- | --------------- |
-| `pnpm --filter @agenwork/admin dev`       | 开发模式        |
-| `pnpm --filter @agenwork/admin build`     | 生产构建        |
-| `pnpm --filter @agenwork/admin typecheck` | TypeScript 检查 |
-| `pnpm --filter @agenwork/admin lint`      | ESLint          |
+| `pnpm --filter @luneto/admin dev`       | 开发模式        |
+| `pnpm --filter @luneto/admin build`     | 生产构建        |
+| `pnpm --filter @luneto/admin typecheck` | TypeScript 检查 |
+| `pnpm --filter @luneto/admin lint`      | ESLint          |

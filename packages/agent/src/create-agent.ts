@@ -8,7 +8,7 @@ import {
   type McpServerEntry,
   normalizeComposerMode,
   type StreamEvent,
-} from "@agenwork/shared";
+} from "@luneto/shared";
 import type { CoreMessage, LanguageModel, ToolSet } from "ai";
 
 import type { PreparedTooling } from "./run-types.js";
