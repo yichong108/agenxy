@@ -52,9 +52,58 @@ curl http://127.0.0.1:3100/health
 
 当 MySQL 或 Redis 不可用时返回 HTTP `503`，`status` 为 `degraded`。
 
+## Auth API
+
+账号密码登录（暂无注册）。启动时 `ensureSchema()` 会创建 `users` 表，并在不存在时种子写入默认管理员：
+
+| 字段 | 值 |
+| --- | --- |
+| username | `admin` |
+| password | `admin` |
+| role | `admin` |
+
+密码以 bcrypt 哈希存储。JWT 相关配置见 `JWT_SECRET` / `JWT_EXPIRES_IN`。
+
+### `POST /auth/login`
+
+请求体：
+
+```json
+{ "username": "admin", "password": "admin" }
+```
+
+成功（200，`code === 0`）：
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "accessToken": "<jwt>",
+    "user": { "id": "...", "username": "admin", "role": "admin" }
+  }
+}
+```
+
+失败（仍为 HTTP 200，`code !== 0`）：
+
+```json
+{ "code": 40101, "message": "Invalid username or password", "data": null }
+```
+
+### `GET /auth/me`
+
+请求头：`Authorization: Bearer <accessToken>`
+
+成功返回：
+
+```json
+{ "code": 0, "message": "ok", "data": { "user": { "id": "...", "username": "admin", "role": "admin" } } }
+```
+
 ## Settings API
 
-全局应用配置（与桌面端 `@agenwork/shared` 的 `AppSettings` 同构）。当前无用户鉴权，读写同一条 `default` 记录，落库于 MySQL `app_settings`，并用 Redis 短缓存。
+全局应用配置（与桌面端 `@agenwork/shared` 的 `AppSettings` 同构）。当前 settings 路由仍无鉴权，读写同一条 `default` 记录，落库于 MySQL `app_settings`，并用 Redis 短缓存。
 
 ### `GET /settings`
 

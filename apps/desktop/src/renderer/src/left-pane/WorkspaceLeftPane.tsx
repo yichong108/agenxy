@@ -5,15 +5,18 @@ import {
   AppstoreOutlined,
   FolderOpenOutlined,
   InboxOutlined,
+  LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   PlusOutlined,
   RightOutlined,
   SettingOutlined
 } from '@ant-design/icons'
-import { Button, Dropdown, Input, Modal, Space, Typography } from 'antd'
+import { App as AntdApp, Button, Dropdown, Input, Modal, Space, Typography } from 'antd'
 import type { DragEvent } from 'react'
 import { createPortal } from 'react-dom'
+
+import { useAuthStore } from '@/renderer/src/store/auth-store'
 
 const { Text } = Typography
 
@@ -24,6 +27,14 @@ export type WorkspaceLeftPaneProps = {
 
 export function WorkspaceLeftPane({ leftTogglePortalHost }: WorkspaceLeftPaneProps) {
   const p = useWorkspaceLeftPane()
+  const { message: msgApi } = AntdApp.useApp()
+  const authUser = useAuthStore((s) => s.user)
+  const logout = useAuthStore((s) => s.logout)
+
+  const handleLogout = () => {
+    logout()
+    msgApi.success('已退出登录')
+  }
 
   const leftToggleInTopbar = (
     <Button
@@ -78,6 +89,14 @@ export function WorkspaceLeftPane({ leftTogglePortalHost }: WorkspaceLeftPanePro
                     onClick={p.openSettings}
                     className="app-settings-btn"
                     title="设置"
+                  />
+                  <Button
+                    type="text"
+                    icon={<LogoutOutlined />}
+                    onClick={handleLogout}
+                    className="app-settings-btn"
+                    title={authUser ? `退出登录（${authUser.username}）` : '退出登录'}
+                    aria-label="退出登录"
                   />
                 </Space>
               </>

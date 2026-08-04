@@ -1,5 +1,6 @@
 import cors from 'cors';
 import express from 'express';
+import { authRouter } from './routes/auth.js';
 import { healthRouter } from './routes/health.js';
 import { settingsRouter } from './routes/settings.js';
 
@@ -17,6 +18,7 @@ export function createApp() {
   app.use(cors());
   app.use(express.json({ limit: '2mb' }));
   app.use(healthRouter);
+  app.use(authRouter);
   app.use(settingsRouter);
 
   return app;

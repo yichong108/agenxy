@@ -17,6 +17,7 @@ async function main() {
   app.listen(env.port, () => {
     console.log(`[api] listening on http://127.0.0.1:${env.port}`);
     console.log('[api] health check: GET /health');
+    console.log('[api] auth: POST /auth/login, GET /auth/me');
     console.log('[api] settings: GET|PUT /settings');
   });
 }

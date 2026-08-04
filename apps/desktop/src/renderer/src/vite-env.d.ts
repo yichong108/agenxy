@@ -26,6 +26,14 @@ import type {
   WorkspacesPayload
 } from '@/shared/ipc'
 
+/** 扩展 Vite 环境变量类型（渲染进程直连 API） */
+declare global {
+  interface ImportMetaEnv {
+    readonly VITE_API_URL?: string
+    readonly VITE_AGENWORK_API_BASE_URL?: string
+  }
+}
+
 type Api = {
   platform: NodeJS.Platform
   windowAction: (action: WindowChromeAction) => Promise<void>
