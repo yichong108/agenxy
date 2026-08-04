@@ -117,6 +117,7 @@ class SessionManager {
 - [@agenwork/shared](packages/shared/README.md) 公用工具
 - [@agenwork/api](services/api/README.md) 后端API服务
 - [@agenwork/desktop](apps/desktop/README.md) 桌面客户端
+- [@agenwork/admin](apps/admin/README.md) 后台管理
 - [@agenwork/command](apps/command/README.md) 命令行客户端
 - [@agenwork/landing](apps/landing/README.md) 文档项目
 - [@agenwork/langfuse-local](services/langfuse-local/README.md) 本地 Langfuse

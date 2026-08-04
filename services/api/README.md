@@ -101,6 +101,31 @@ curl http://127.0.0.1:3100/health
 { "code": 0, "message": "ok", "data": { "user": { "id": "...", "username": "admin", "role": "admin" } } }
 ```
 
+## Users API
+
+### `GET /users`
+
+返回全部用户公开信息（不含密码）。当前暂无鉴权，供后台管理使用。
+
+成功（200，`code === 0`）：
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "users": [
+      {
+        "id": "...",
+        "username": "admin",
+        "role": "admin",
+        "createdAt": "2026-08-04T03:00:00.000Z"
+      }
+    ]
+  }
+}
+```
+
 ## Settings API
 
 全局应用配置（与桌面端 `@agenwork/shared` 的 `AppSettings` 同构）。当前 settings 路由仍无鉴权，读写同一条 `default` 记录，落库于 MySQL `app_settings`，并用 Redis 短缓存。
