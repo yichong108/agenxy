@@ -1,4 +1,4 @@
-import { type AgentComposerMode, MAX_TERMINAL_OUTPUT_CHARS } from '@luneto/shared'
+import { type AgentComposerMode, MAX_TERMINAL_OUTPUT_CHARS } from '@openwork/shared'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
 

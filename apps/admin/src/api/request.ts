@@ -4,7 +4,7 @@ const API_SUCCESS_CODE = 0
 
 const API_URL =
   import.meta.env.VITE_API_URL ||
-  import.meta.env.VITE_LUNETO_API_BASE_URL ||
+  import.meta.env.VITE_OPENWORK_API_BASE_URL ||
   'http://127.0.0.1:3100'
 
 interface ApiEnvelope<T> {

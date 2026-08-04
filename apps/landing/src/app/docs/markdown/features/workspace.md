@@ -1,6 +1,6 @@
 # Workspace 管理
 
-Workspace 是 Luneto 中的工作空间概念，每个 Workspace 可以包含多个 Agent 和对话。
+Workspace 是 Openwork 中的工作空间概念，每个 Workspace 可以包含多个 Agent 和对话。
 
 ## 创建 Workspace
 

@@ -15,7 +15,7 @@ export const env = {
   /**
    * JWT 签名密钥；生产环境务必通过 JWT_SECRET 覆盖
    */
-  jwtSecret: process.env.JWT_SECRET ?? 'luneto-dev-jwt-secret-change-me',
+  jwtSecret: process.env.JWT_SECRET ?? 'openwork-dev-jwt-secret-change-me',
 
   /** access token 有效期（如 `7d`、`12h`） */
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
@@ -25,7 +25,7 @@ export const env = {
     port: Number(process.env.MYSQL_PORT ?? 3306),
     user: process.env.MYSQL_USER ?? 'root',
     password: process.env.MYSQL_PASSWORD ?? '',
-    database: process.env.MYSQL_DATABASE ?? 'luneto'
+    database: process.env.MYSQL_DATABASE ?? 'openwork'
   },
 
   redis: {

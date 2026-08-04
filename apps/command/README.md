@@ -6,7 +6,7 @@
 
 ## 边界与依赖
 
-- 依赖 `@luneto/agent`（`createAgent` / `getChatModel`），不重复实现 ReAct / 工具。
+- 依赖 `@openwork/agent`（`createAgent` / `getChatModel`），不重复实现 ReAct / 工具。
 - 会话消息仅在进程内持有，不做桌面端式持久化。
 - 模型凭据来自环境变量（或 `.env`），不读桌面 AppSettings 存储。
 
@@ -21,7 +21,7 @@
 
 ```bash
 cp apps/command/.env.example apps/command/.env
-# 编辑 LUNETO_API_KEY 等
+# 编辑 OPENWORK_API_KEY 等
 
 pnpm command:start -- "列出当前目录文件"
 pnpm command:start

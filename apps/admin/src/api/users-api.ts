@@ -1,4 +1,4 @@
-import type { UserListResult } from '@luneto/shared'
+import type { UserListResult } from '@openwork/shared'
 
 import { getRequestErrorMessage, request } from './request'
 

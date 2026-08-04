@@ -1,7 +1,7 @@
 {
-  "name": "@luneto/command",
+  "name": "@openwork/command",
   "version": "0.0.0",
-  "description": "Luneto CLI — 命令行调用 @luneto/agent",
+  "description": "Openwork CLI — 命令行调用 @openwork/agent",
   "type": "module",
   "private": true,
   "scripts": {
@@ -13,8 +13,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@luneto/agent": "workspace:*",
-    "@luneto/shared": "workspace:*",
+    "@openwork/agent": "workspace:*",
+    "@openwork/shared": "workspace:*",
     "@vscode/ripgrep": "^1.18.0",
     "dotenv": "^17.4.2"
   },

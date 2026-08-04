@@ -1,12 +1,12 @@
-# Luneto
+# Openwork
 
 [简体中文说明](README.zh-CN.md)
 
-**Luneto** is an AI agent suite in a **pnpm + Turborepo** monorepo: an **Electron** desktop client, a **Next.js** marketing site, and an optional **local Langfuse** stack for observability.
+**Openwork** is an AI agent suite in a **pnpm + Turborepo** monorepo: an **Electron** desktop client, a **Next.js** marketing site, and an optional **local Langfuse** stack for observability.
 
 ## Preview
 
-![Luneto main UI: workspace sidebar, session tree, and chat](assets/luneto-ui-screenshot.png)
+![Openwork main UI: workspace sidebar, session tree, and chat](assets/openwork-ui-screenshot.png)
 
 ## Highlights (desktop)
 
@@ -21,7 +21,7 @@
 The workspace is defined in `pnpm-workspace.yaml` (`apps/*`, `packages/*`, `services/*`). Current first-party packages live under `apps/` and `services/`.
 
 ```
-luneto/
+openwork/
 ├── apps/
 │   ├── desktop/              # Electron app (electron-vite, React, Ant Design)
 │   └── landing/              # Next.js landing page
@@ -64,7 +64,7 @@ pnpm desktop:dev
 Debug build (inspect / remote debugging ports):
 
 ```bash
-pnpm --filter @luneto/desktop run dev:debug
+pnpm --filter @openwork/desktop run dev:debug
 ```
 
 ### Landing page

@@ -1,6 +1,6 @@
 /** IPC 与流式事件类型（主进程 / 预加载 / 渲染层共享） */
 
-import type { ToolTimelineEvent } from '@luneto/shared'
+import type { ToolTimelineEvent } from '@openwork/shared'
 
 export const IPC = {
   WORKSPACE_SELECT: 'workspace:select',
@@ -139,7 +139,7 @@ export type {
   ToolCallEvent,
   ToolErrorEvent,
   ToolTimelineEvent
-} from '@luneto/shared'
+} from '@openwork/shared'
 export {
   applySettingsForm,
   defaultProviderProfiles,
@@ -153,7 +153,7 @@ export {
   normalizeSettings,
   parseMcpServersFromUnknown,
   settingsToFormValues
-} from '@luneto/shared'
+} from '@openwork/shared'
 
 export type McpProbeToolInfo = {
   name: string

@@ -97,7 +97,7 @@ export default function DocsPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <Link href="/" className="text-xl font-bold text-gray-900">
-              Luneto
+              Openwork
             </Link>
             <nav className="flex gap-6">
               <Link href="/" className="text-gray-600 hover:text-gray-900">

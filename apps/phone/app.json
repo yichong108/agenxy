@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Luneto Phone",
-    "slug": "luneto-phone",
+    "name": "Openwork Phone",
+    "slug": "openwork-phone",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

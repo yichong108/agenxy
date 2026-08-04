@@ -1,6 +1,6 @@
 # Agent 配置
 
-Agent 是 Luneto 的核心组件，负责处理用户请求和执行任务。
+Agent 是 Openwork 的核心组件，负责处理用户请求和执行任务。
 
 ## 基础配置
 

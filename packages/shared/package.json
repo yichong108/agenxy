@@ -1,7 +1,7 @@
 {
-  "name": "@luneto/shared",
+  "name": "@openwork/shared",
   "version": "0.0.0",
-  "description": "Luneto shared types and constants for agent runtime",
+  "description": "Openwork shared types and constants for agent runtime",
   "type": "module",
   "private": true,
   "exports": {

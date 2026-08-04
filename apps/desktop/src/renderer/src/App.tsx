@@ -10,8 +10,8 @@ import {
   useState
 } from 'react'
 
-import { AboutLunetoModal } from '@/renderer/src/AboutLunetoModal'
-import lunetoLogoUrl from '@/renderer/src/assets/luneto-logo.png'
+import { AboutOpenworkModal } from '@/renderer/src/AboutOpenworkModal'
+import openworkLogoUrl from '@/renderer/src/assets/openwork-logo.png'
 import { LoginPage } from '@/renderer/src/auth/LoginPage'
 import { WorkspaceCenterPane } from '@/renderer/src/center-pane'
 import { WorkspaceLeftPane } from '@/renderer/src/left-pane'
@@ -111,7 +111,7 @@ function AuthenticatedAppShell() {
   const [aboutOpen, setAboutOpen] = useState(false)
   const [aboutInfo, setAboutInfo] = useState<AboutAppInfo | null>(null)
 
-  const openAboutLuneto = useCallback(async () => {
+  const openAboutOpenwork = useCallback(async () => {
     setAboutOpen(true)
     setAboutInfo(null)
     try {
@@ -163,13 +163,13 @@ function AuthenticatedAppShell() {
         children: [
           {
             key: 'about',
-            label: '关于 Luneto',
-            onClick: () => void openAboutLuneto()
+            label: '关于 Openwork',
+            onClick: () => void openAboutOpenwork()
           }
         ]
       }
     ]
-  }, [bridge, isWinCustomChrome, openAboutLuneto])
+  }, [bridge, isWinCustomChrome, openAboutOpenwork])
 
   const [rightPaneWidth, setRightPaneWidth] = useState(RIGHT_PANE_DEFAULT_WIDTH)
   const [isRightPaneCollapsed, setIsRightPaneCollapsed] = useState(true)
@@ -263,7 +263,7 @@ function AuthenticatedAppShell() {
         <div className="app-win-titlebar">
           <span className="app-brand-logo-visual app-brand-logo-visual--titlebar">
             <img
-              src={lunetoLogoUrl}
+              src={openworkLogoUrl}
               alt=""
               width={15}
               height={15}
@@ -313,7 +313,7 @@ function AuthenticatedAppShell() {
         />
       </div>
 
-      <AboutLunetoModal
+      <AboutOpenworkModal
         open={aboutOpen}
         info={aboutInfo}
         onClose={() => {

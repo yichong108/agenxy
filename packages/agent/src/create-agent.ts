@@ -8,7 +8,7 @@ import {
   type McpServerEntry,
   normalizeComposerMode,
   type StreamEvent
-} from '@luneto/shared'
+} from '@openwork/shared'
 import type { CoreMessage, LanguageModel, ToolSet } from 'ai'
 
 import type { PreparedTooling } from './run-types.js'

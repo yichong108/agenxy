@@ -43,7 +43,7 @@ type StoreSchema = {
 const DEFAULT_WORKSPACE_ID = 'workspace-default'
 
 const store = new Store<StoreSchema>({
-  name: 'luneto',
+  name: 'openwork',
   defaults: {
     workspaces: [],
     activeWorkspaceId: null,

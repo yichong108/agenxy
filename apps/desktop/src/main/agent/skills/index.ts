@@ -2,7 +2,7 @@ import type { Dirent } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-import { mergeToolSets, type ToolSet } from '@luneto/agent'
+import { mergeToolSets, type ToolSet } from '@openwork/agent'
 import { tool } from 'ai'
 import { z } from 'zod'
 

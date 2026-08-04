@@ -1,13 +1,13 @@
-# @luneto/phone
+# @openwork/phone
 
-Luneto 移动端客户端（Expo + React Native）。
+Openwork 移动端客户端（Expo + React Native）。
 
 ## 开发
 
 ```bash
 pnpm phone:dev
 # 或
-pnpm --filter @luneto/phone start
+pnpm --filter @openwork/phone start
 ```
 
 启动后可用 Expo Go 扫码，或按 `a` / `i` / `w` 分别打开 Android / iOS / Web。

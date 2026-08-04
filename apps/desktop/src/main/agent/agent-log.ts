@@ -1,4 +1,4 @@
 import { logScope } from '@/main/logger'
 
-/** Desktop 主进程侧 agent 相关日志（与 @luneto/agent 内置 logger 独立） */
+/** Desktop 主进程侧 agent 相关日志（与 @openwork/agent 内置 logger 独立） */
 export const agentLog = logScope('agent')

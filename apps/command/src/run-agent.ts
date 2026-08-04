@@ -6,8 +6,8 @@ import { resolve } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
 
-import { type Agent, createAgent, getChatModel, type ToolObservation } from '@luneto/agent'
-import { type AgentComposerMode, type AppSettings, MAX_AGENT_LOOP_STEPS } from '@luneto/shared'
+import { type Agent, createAgent, getChatModel, type ToolObservation } from '@openwork/agent'
+import { type AgentComposerMode, type AppSettings, MAX_AGENT_LOOP_STEPS } from '@openwork/shared'
 
 /**
  * 根据设置与工作区创建 CLI agent 实例。
@@ -21,7 +21,9 @@ import { type AgentComposerMode, type AppSettings, MAX_AGENT_LOOP_STEPS } from '
 export function createCliAgent(settings: AppSettings, cwd: string, mcpConfigPath?: string): Agent {
   const provider = getChatModel(settings)
   if (!provider) {
-    throw new Error('请先配置 LUNETO_API_KEY（或 OPENAI_API_KEY），参见 apps/command/.env.example')
+    throw new Error(
+      '请先配置 OPENWORK_API_KEY（或 OPENAI_API_KEY），参见 apps/command/.env.example'
+    )
   }
 
   return createAgent({
@@ -101,7 +103,7 @@ export async function runRepl(
   }
 ): Promise<void> {
   const rl = createInterface({ input, output, terminal: true })
-  console.log(`Luneto CLI（mode=${options.mode}）。输入消息后回车；exit / quit 退出。`)
+  console.log(`Openwork CLI（mode=${options.mode}）。输入消息后回车；exit / quit 退出。`)
 
   try {
     while (true) {

@@ -15,7 +15,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@luneto/shared": ["../../packages/shared/src/index.ts"],
+      "@openwork/shared": ["../../packages/shared/src/index.ts"],
       "@monaco-themes/github-light": ["node_modules/monaco-themes/themes/GitHub Light.json"]
     }
   },

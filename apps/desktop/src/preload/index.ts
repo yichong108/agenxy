@@ -155,4 +155,4 @@ const api = {
 
 contextBridge.exposeInMainWorld('bridge', api)
 
-export type LunetoApi = typeof api
+export type OpenworkApi = typeof api

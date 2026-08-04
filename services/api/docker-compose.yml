@@ -1,24 +1,24 @@
-# Luneto API 本地依赖：MySQL + Redis
+# Openwork API 本地依赖：MySQL + Redis
 # 使用方法:
 #   1. 确认已复制 .env.example 为 .env（凭证与下方默认值一致）
 #   2. 启动: pnpm docker:up   或  docker compose up -d
 #   3. 停止: pnpm docker:down 或  docker compose down
 #
-# 与 services/langfuse-local 相互独立；容器名 / volume 均使用 luneto- 前缀。
+# 与 services/langfuse-local 相互独立；容器名 / volume 均使用 openwork- 前缀。
 # 若本机已占用 3306 / 6379，可在 .env 中覆盖 MYSQL_PORT / REDIS_PORT。
 
 services:
   mysql:
     image: mysql:8.4
-    container_name: luneto-mysql
+    container_name: openwork-mysql
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD:-password}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-luneto}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-openwork}
     ports:
       - "${MYSQL_PORT:-3306}:3306"
     volumes:
-      - luneto-mysql-data:/var/lib/mysql
+      - openwork-mysql-data:/var/lib/mysql
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
@@ -40,7 +40,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: luneto-redis
+    container_name: openwork-redis
     restart: unless-stopped
     # 与 .env.example 一致：默认无密码；若设置了 REDIS_PASSWORD 则启用 requirepass
     command: >
@@ -54,7 +54,7 @@ services:
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
-      - luneto-redis-data:/data
+      - openwork-redis-data:/data
     healthcheck:
       test:
         [
@@ -66,5 +66,5 @@ services:
       retries: 5
 
 volumes:
-  luneto-mysql-data:
-  luneto-redis-data:
+  openwork-mysql-data:
+  openwork-redis-data:

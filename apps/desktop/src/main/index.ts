@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 import '@/main/env-bootstrap'
 import '@/main/agent/agent-log'
-import { completeCommandInWorkspace, killCommand, runCommand } from '@luneto/agent'
+import { completeCommandInWorkspace, killCommand, runCommand } from '@openwork/agent'
 import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron'
 
 import { getMcpHostAgent, resetMcpHostAgent } from '@/main/agent/agent-instance'
@@ -81,8 +81,8 @@ function collectAboutAppInfo(): AboutAppInfo {
   return {
     productName: app.getName(),
     version: app.getVersion(),
-    gitCommit: __LUNETO_GIT_COMMIT__,
-    buildIso: __LUNETO_BUILD_ISO__,
+    gitCommit: __OPENWORK_GIT_COMMIT__,
+    buildIso: __OPENWORK_BUILD_ISO__,
     electron: process.versions.electron ?? '',
     chrome: process.versions.chrome ?? '',
     node: process.versions.node ?? '',

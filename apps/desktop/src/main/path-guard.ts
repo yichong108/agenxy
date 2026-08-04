@@ -1,4 +1,4 @@
 /**
- * 工作区路径安全解析 — 转发自 @luneto/agent。
+ * 工作区路径安全解析 — 转发自 @openwork/agent。
  */
-export { ensureWorkspaceExists, resolveSafePath } from '@luneto/agent'
+export { ensureWorkspaceExists, resolveSafePath } from '@openwork/agent'

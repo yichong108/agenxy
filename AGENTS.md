@@ -4,7 +4,7 @@
 
 ## 项目
 
-**Luneto** — 面向智能体的 Electron 桌面应用（React、Ant Design、AI SDK、MCP）。主要代码位于 `src/`（`main`、`renderer`、`preload`）。
+**Openwork** — 面向智能体的 Electron 桌面应用（React、Ant Design、AI SDK、MCP）。主要代码位于 `src/`（`main`、`renderer`、`preload`）。
 
 ## 包管理器
 
@@ -101,12 +101,12 @@ class SessionManager {
 
 ## 模块文档
 
-- [@luneto/agent](packages/agent/README.md) 智能体
-- [@luneto/shared](packages/shared/README.md) 公用工具
-- [@luneto/api](services/api/README.md) 后端API服务
-- [@luneto/desktop](apps/desktop/README.md) 桌面客户端
-- [@luneto/admin](apps/admin/README.md) 后台管理
-- [@luneto/command](apps/command/README.md) 命令行客户端
-- [@luneto/landing](apps/landing/README.md) 文档项目
-- [@luneto/phone](apps/phone/README.md) 移动端客户端
-- [@luneto/langfuse-local](services/langfuse-local/README.md) 本地 Langfuse
+- [@openwork/agent](packages/agent/README.md) 智能体
+- [@openwork/shared](packages/shared/README.md) 公用工具
+- [@openwork/api](services/api/README.md) 后端API服务
+- [@openwork/desktop](apps/desktop/README.md) 桌面客户端
+- [@openwork/admin](apps/admin/README.md) 后台管理
+- [@openwork/command](apps/command/README.md) 命令行客户端
+- [@openwork/landing](apps/landing/README.md) 文档项目
+- [@openwork/phone](apps/phone/README.md) 移动端客户端
+- [@openwork/langfuse-local](services/langfuse-local/README.md) 本地 Langfuse

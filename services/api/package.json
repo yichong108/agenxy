@@ -1,7 +1,7 @@
 {
-  "name": "@luneto/api",
+  "name": "@openwork/api",
   "version": "0.0.0",
-  "description": "Luneto backend API — Express + MySQL + Redis",
+  "description": "Openwork backend API — Express + MySQL + Redis",
   "type": "module",
   "private": true,
   "scripts": {
@@ -18,7 +18,7 @@
     "docker:reset": "docker compose down -v"
   },
   "dependencies": {
-    "@luneto/shared": "workspace:*",
+    "@openwork/shared": "workspace:*",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",

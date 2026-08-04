@@ -14,8 +14,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@luneto/agent": ["../../packages/agent/src/index.ts"],
-      "@luneto/shared": ["../../packages/shared/src/index.ts"]
+      "@openwork/agent": ["../../packages/agent/src/index.ts"],
+      "@openwork/shared": ["../../packages/shared/src/index.ts"]
     }
   },
   "include": ["electron.vite.config.ts", "src/main/**/*", "src/preload/**/*", "src/shared/**/*"]

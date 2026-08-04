@@ -42,7 +42,7 @@ export function AdminLayout() {
             letterSpacing: 0.5
           }}
         >
-          Luneto
+          Openwork
         </div>
         <Menu
           theme="dark"

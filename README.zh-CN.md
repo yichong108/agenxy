@@ -1,12 +1,12 @@
-# Luneto
+# Openwork
 
 [English README](README.md)
 
-**Luneto** 是一款基于 Electron 的 AI Agent 桌面应用。界面使用 React 与 Ant Design；主进程集成 LangChain 与各模型提供商，并支持 **MCP（Model Context Protocol）** 以接入外部工具与能力。
+**Openwork** 是一款基于 Electron 的 AI Agent 桌面应用。界面使用 React 与 Ant Design；主进程集成 LangChain 与各模型提供商，并支持 **MCP（Model Context Protocol）** 以接入外部工具与能力。
 
 ## 界面预览
 
-![Luneto 主界面：工作区侧栏、会话树与对话区](assets/luneto-ui-screenshot.png)
+![Openwork 主界面：工作区侧栏、会话树与对话区](assets/openwork-ui-screenshot.png)
 
 ## 功能概览
 
