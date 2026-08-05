@@ -14,6 +14,7 @@ import {
   type McpWarmupStatus,
   type RendererUiState,
   type SessionInfo,
+  type SkillListItem,
   type AgentStreamPayload,
   type TerminalCompleteResult,
   type TerminalOutputEvent,
@@ -39,6 +40,8 @@ const api = {
   },
   webEdit: (action: WebEditAction) => ipcRenderer.invoke(IPC.WEB_EDIT, action) as Promise<void>,
   showAbout: () => ipcRenderer.invoke(IPC.APP_ABOUT) as Promise<AboutAppInfo>,
+  /** 列出可用技能（输入框 `/` 斜杠菜单） */
+  listSkills: () => ipcRenderer.invoke(IPC.SKILLS_LIST) as Promise<SkillListItem[]>,
   selectWorkspace: () => ipcRenderer.invoke(IPC.WORKSPACE_SELECT) as Promise<{ path: string }>,
   getWorkspace: () => ipcRenderer.invoke(IPC.WORKSPACE_GET) as Promise<string>,
   listWorkspaces: () => ipcRenderer.invoke(IPC.WORKSPACE_LIST) as Promise<WorkspacesPayload>,

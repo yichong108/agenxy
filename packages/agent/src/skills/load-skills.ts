@@ -43,6 +43,20 @@ export type LoadedSkillsBundle = {
 }
 
 /**
+ * 技能列表项（供宿主 UI / IPC 展示，不含正文）。
+ *
+ * 字段与工具注册时使用的 name / description 一致，便于斜杠菜单选择后写入 `/name`。
+ */
+export type SkillListItem = {
+  /** 规范化后的技能工具名（如 `code_review`） */
+  name: string
+  /** 技能描述（来自 frontmatter 或回退文案） */
+  description: string
+  /** 相对技能根目录的 SKILL.md 路径 */
+  source: string
+}
+
+/**
  * 将任意字符串规范为合法工具名（小写、下划线）。
  *
  * @param input - 原始名称（frontmatter name 或目录名）
@@ -142,7 +156,7 @@ function dedupeFirstWins(defs: SkillDefinition[]): SkillDefinition[] {
 function makeSkillHint(defs: SkillDefinition[]): string {
   if (!defs.length) return ''
   const lines = defs.map((item) => `- ${item.name}: ${item.description} (source: ${item.source})`)
-  return `可用技能工具（可自动调用）：\n${lines.join('\n')}\n当用户意图与上述任一描述匹配时，必须先按上方准确名称调用对应技能工具（可传入概括用户问题的 question），再按需使用其他工具；不要跳过匹配技能而用泛化工具猜测。`
+  return `可用技能工具（可自动调用）：\n${lines.join('\n')}\n当用户意图与上述任一描述匹配时，必须先按上方准确名称调用对应技能工具（可传入概括用户问题的 question），再按需使用其他工具；不要跳过匹配技能而用泛化工具猜测。若用户消息包含独立的 \`/技能名\` token（如 \`/code_review\`），视为显式调用该技能，必须优先调用对应工具。`
 }
 
 /**
@@ -180,6 +194,37 @@ async function appendDefsFromRoot(absRoot: string, defs: SkillDefinition[]): Pro
 }
 
 /**
+ * 从配置的绝对路径列表解析并去重技能定义（含正文）。
+ *
+ * @param paths - 技能根目录绝对路径列表
+ * @returns 去重后的技能定义；无有效路径时为空数组
+ */
+async function resolveSkillDefinitions(paths: string[]): Promise<SkillDefinition[]> {
+  const cleaned = paths.map((p) => p.trim()).filter(Boolean)
+  if (!cleaned.length) return []
+
+  const defs: SkillDefinition[] = []
+  for (const absRoot of cleaned) {
+    await appendDefsFromRoot(absRoot, defs)
+    if (defs.length >= MAX_LOADED_SKILLS) break
+  }
+  return dedupeFirstWins(defs)
+}
+
+/**
+ * 列出技能元数据（不含正文），供宿主斜杠菜单等 UI 使用。
+ *
+ * 扫描与去重规则与 `loadSkillsFromPaths` 一致，保证菜单中的名称与实际注册工具名对齐。
+ *
+ * @param paths - 技能根目录绝对路径列表
+ * @returns 技能列表项；目录不存在或无 SKILL.md 时返回空数组
+ */
+export async function listSkillsFromPaths(paths: string[]): Promise<SkillListItem[]> {
+  const merged = await resolveSkillDefinitions(paths)
+  return merged.map(({ name, description, source }) => ({ name, description, source }))
+}
+
+/**
  * 从配置的绝对路径列表加载 Skills，并包装为 AI SDK ToolSet。
  *
  * 扫描顺序即优先级：同名技能以先出现的路径为准。不包含意图筛选；
@@ -198,13 +243,7 @@ export async function loadSkillsFromPaths(
     return { tools: {}, hint: '' }
   }
 
-  const defs: SkillDefinition[] = []
-  for (const absRoot of cleaned) {
-    await appendDefsFromRoot(absRoot, defs)
-    if (defs.length >= MAX_LOADED_SKILLS) break
-  }
-
-  const merged = dedupeFirstWins(defs)
+  const merged = await resolveSkillDefinitions(cleaned)
   agentLog.info(`[loadSkillsFromPaths] loaded=${merged.length} from ${cleaned.length} path(s)`)
 
   const tools = mergeToolSets(

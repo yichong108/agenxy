@@ -40,10 +40,12 @@ export {
 } from './messages.js'
 
 export {
+  listSkillsFromPaths,
   loadSkillsFromPaths,
   parseSkillFrontmatter,
   sanitizeSkillToolName,
-  type LoadedSkillsBundle
+  type LoadedSkillsBundle,
+  type SkillListItem
 } from './skills/load-skills.js'
 
 export { getChatModel, resolveChatModel } from './llm.js'

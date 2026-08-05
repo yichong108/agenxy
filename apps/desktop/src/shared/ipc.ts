@@ -48,8 +48,22 @@ export const IPC = {
   /** 触发 webContents 编辑命令（撤销、复制等） */
   WEB_EDIT: 'web:edit',
   /** 关于面板：返回版本/构建/引擎等信息（由渲染层展示弹窗） */
-  APP_ABOUT: 'app:about'
+  APP_ABOUT: 'app:about',
+  /** 列出用户 skills 目录下的可用技能（供输入框 `/` 菜单） */
+  SKILLS_LIST: 'skills:list'
 } as const
+
+/**
+ * 技能列表项 — 渲染层斜杠菜单与主进程扫描结果共用。
+ */
+export type SkillListItem = {
+  /** 规范化技能名（与工具名一致，如 `code_review`） */
+  name: string
+  /** 技能描述 */
+  description: string
+  /** 相对 skills 根目录的 SKILL.md 路径 */
+  source: string
+}
 
 /** 与 IPC.WINDOW_ACTION 对应的动作 */
 export type WindowChromeAction = 'minimize' | 'maximize-toggle' | 'close' | 'reload' | 'quit'

@@ -17,7 +17,7 @@ import {
   isSessionRunning,
   runUserMessage
 } from '@/main/agent/agent-service'
-import { ensureUserSkillsLayout } from '@/main/agent/skills'
+import { ensureUserSkillsLayout, listUserSkills } from '@/main/agent/skills'
 import { shutdownLangfuseTracing, startLangfuseTracingIfConfigured } from '@/main/langfuse'
 import { mainLog } from '@/main/logger'
 import {
@@ -680,6 +680,7 @@ function registerIpc(): void {
   })
 
   ipcMain.handle(IPC.APP_ABOUT, () => collectAboutAppInfo())
+  ipcMain.handle(IPC.SKILLS_LIST, () => listUserSkills())
 }
 
 app.whenReady().then(() => {
