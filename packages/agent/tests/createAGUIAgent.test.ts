@@ -3,7 +3,6 @@
  */
 
 import { EventType, type BaseEvent, type RunAgentInput } from '@ag-ui/client'
-import type { Agent, AgentRunResult, CoreMessage } from '@openworker/agent'
 import type { LanguageModel } from 'ai'
 import { firstValueFrom, toArray } from 'rxjs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -12,16 +11,18 @@ const { createAgentMock } = vi.hoisted(() => ({
   createAgentMock: vi.fn()
 }))
 
-vi.mock('@openworker/agent', () => ({
+vi.mock('../src/create-agent.js', () => ({
   createAgent: createAgentMock
 }))
 
+import type { Agent, AgentRunResult } from '../src/create-agent.js'
+import type { CoreMessage } from '../src/messages.js'
 import {
   aguiMessagesToCore,
   coreMessagesToAgui,
   extractUserTurn,
   OpenWorkerAgent
-} from '../index.js'
+} from '../src/createAGUIAgent.js'
 
 const stubModel = { modelId: 'test-model' } as LanguageModel
 
@@ -337,6 +338,56 @@ describe('OpenWorkerAgent', () => {
     )
   })
 
+  it('runAgent 可携带含函数的 LanguageModel（避免 structuredClone 失败）', async () => {
+    const send = vi.fn(async (userText, input = {}) => {
+      input.onTextDelta?.('ok')
+      return {
+        messages: [
+          { role: 'user' as const, content: userText },
+          { role: 'assistant' as const, content: 'ok' }
+        ],
+        result: 'ok'
+      }
+    })
+    createAgentMock.mockImplementation(() => createStubAgent({ send }))
+
+    // 模拟 @ai-sdk/openai 的 url 解析函数；structuredClone 会因此抛错
+    const modelWithUrl = {
+      modelId: 'openai-compat',
+      config: {
+        url: ({ path }: { path: string }) => `https://api.example/v1${path}`
+      }
+    } as unknown as LanguageModel
+
+    const abortController = new AbortController()
+    const agent = new OpenWorkerAgent({
+      agent: { provider: stubModel, local: { cwd: '/tmp/ws' } }
+    })
+    agent.messages = [{ id: 'u1', role: 'user', content: 'ping' }]
+
+    await expect(
+      agent.runAgent({
+        runId: 'run-clone-safe',
+        tools: [],
+        context: [],
+        forwardedProps: {
+          provider: modelWithUrl,
+          abortController,
+          workspacePath: '/tmp/ws'
+        }
+      })
+    ).resolves.toMatchObject({ result: 'ok' })
+
+    expect(send).toHaveBeenCalledWith(
+      'ping',
+      expect.objectContaining({
+        provider: modelWithUrl,
+        abortController,
+        workspacePath: '/tmp/ws'
+      })
+    )
+  })
+
   it('clone 返回独立实例', () => {
     const agent = new OpenWorkerAgent({
       agentId: 'ow',
@@ -345,7 +396,7 @@ describe('OpenWorkerAgent', () => {
     const cloned = agent.clone()
     expect(cloned).toBeInstanceOf(OpenWorkerAgent)
     expect(cloned).not.toBe(agent)
-    expect(cloned.getAgent()).not.toBe(agent.getAgent())
+    expect(cloned.mcp).not.toBe(agent.mcp)
   })
 
   it('暴露与 AG-UI AbstractAgent 一致的 API', () => {
@@ -354,6 +405,7 @@ describe('OpenWorkerAgent', () => {
     expect(typeof agent.runAgent).toBe('function')
     expect(typeof agent.abortRun).toBe('function')
     expect(typeof agent.subscribe).toBe('function')
+    expect(agent.mcp).toBeTypeOf('object')
     expect(createAgentMock).toHaveBeenCalled()
   })
 })

@@ -1,19 +1,25 @@
 /**
- * @openworker/agent 公共 API — 以 createAgent 为入口，辅以工具定义与宿主持久化所需类型。
+ * @openworker/agent 公共 API — 宿主入口为 OpenWorkerAgent（AG-UI），勿直接使用 createAgent。
  *
- * 消息与工具统一使用 AI SDK 的 CoreMessage / Tool / ToolSet。
- * MCP / Skills 由 send 内部从 ~/.openworker 约定路径加载；宿主侧用 agent.mcp（probe/warmup/dispose）管理连接池；
- * 不在包根导出 MCP 实现细节。
+ * createAgent 为包内实现细节，仅由 OpenWorkerAgent 委托；外部应经 AG-UI runAgent / 事件流交互。
+ * MCP 宿主能力经 OpenWorkerAgent.mcp（probe / warmup / dispose）。
  */
 
+/** AG-UI AbstractAgent 适配（宿主唯一对话入口） */
 export {
-  createAgent,
+  OpenWorkerAgent,
+  aguiMessagesToCore,
+  coreMessagesToAgui,
+  extractUserTurn,
+  type OpenWorkerAgentConfig,
+  type OpenWorkerAgentRunDefaults
+} from './createAGUIAgent.js'
+
+export {
   getOpenworkerDir,
   getOpenworkerMcpConfigPath,
   getOpenworkerSkillsPath,
-  type Agent,
   type AgentMcp,
-  type AgentRunInput,
   type AgentRunResult,
   type AgentRunTavilyOptions,
   type CreateAgentLocalOptions,
@@ -24,16 +30,11 @@ export {
   defineTool,
   filterToolSet,
   mergeToolSets,
-  type Tool,
   type ToolObservation,
-  type ToolOnTool,
-  type ToolSet
+  type ToolOnTool
 } from './define-tool.js'
 
 export {
-  type CoreAssistantMessage,
-  type CoreMessage,
-  type CoreUserMessage,
   assistantMessage,
   contentToText,
   findLastAiMessage,

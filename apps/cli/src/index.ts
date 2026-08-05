@@ -1,5 +1,5 @@
 /**
- * @openworker/cli 入口 — 解析参数、创建 agent、一次性对话或 REPL。
+ * @openworker/cli 入口 — 解析参数、创建 OpenWorkerAgent、一次性对话或 REPL。
  */
 
 import { parseArgs, printHelp } from './cli.js'
@@ -9,7 +9,7 @@ import { createCliAgent, runOnce, runRepl } from './run-agent.js'
 /**
  * CLI 主流程。
  *
- * 加载环境变量 → 解析参数 → createAgent → 一次性 prompt 或 REPL。
+ * 加载环境变量 → 解析参数 → OpenWorkerAgent → 一次性 prompt 或 REPL。
  */
 async function main(): Promise<void> {
   loadCliEnv()
@@ -46,7 +46,7 @@ async function main(): Promise<void> {
       })
     }
   } finally {
-    await agent.mcp.dispose()
+    await agent.dispose()
   }
 }
 

@@ -1,5 +1,5 @@
 /**
- * createAgent 是 agent 的唯一入口工厂。
+ * createAgent 是包内底层工厂，由 OpenWorkerAgent 委托；宿主勿直接调用。
  * 基于 createReActAgent，在 send 时按约定从 ~/.openworker 加载 Skills / MCP。
  */
 

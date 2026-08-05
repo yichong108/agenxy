@@ -263,7 +263,7 @@ function writeLocalSettingsCache(next: AppSettings): void {
 }
 
 /**
- * MCP 配置文件路径（~/.openworker/mcp.json），与 createAgent.send 约定一致。
+ * MCP 配置文件路径（~/.openworker/mcp.json），与 OpenWorkerAgent / 底层 send 约定一致。
  *
  * @returns 绝对路径
  */
@@ -608,7 +608,7 @@ export function userDataPath(): string {
   return app.getPath('userData')
 }
 
-// 模块加载时同步一次，保证 createAgent 首次 run 前 mcp.json 已存在
+// 模块加载时同步一次，保证首次 run 前 mcp.json 已存在
 try {
   syncMcpConfigFile(normalizeSettings(store.get('settings')))
 } catch {

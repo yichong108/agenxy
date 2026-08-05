@@ -1,5 +1,5 @@
 /**
- * OpenWorker AG-UI 适配器：将 `@openworker/agent` 的 createAgent 桥接为 AG-UI AbstractAgent。
+ * OpenWorker AG-UI 适配器：将 createAgent 桥接为 AG-UI AbstractAgent。
  *
  * 导出形态与官方集成一致：继承 `AbstractAgent`，`run(input)` 返回 `Observable<BaseEvent>`，
  * 可直接用于 CopilotKit / HttpAgent 服务端或 `runAgent()` 客户端管线。
@@ -14,6 +14,7 @@ import {
   type CustomEvent,
   type Message,
   type RunAgentInput,
+  type RunAgentParameters,
   type RunErrorEvent,
   type RunFinishedEvent,
   type RunStartedEvent,
@@ -25,18 +26,24 @@ import {
   type ToolCallResultEvent,
   type ToolCallStartEvent
 } from '@ag-ui/client'
-import {
-  createAgent,
-  type Agent,
-  type AgentRunInput,
-  type CreateAgentOptions,
-  type ToolObservation
-} from '@openworker/agent'
 import type { CoreMessage, CoreToolMessage } from 'ai'
 import { Observable, type Subscriber } from 'rxjs'
 
+import {
+  createAgent,
+  type Agent,
+  type AgentMcp,
+  type AgentRunInput,
+  type CreateAgentOptions
+} from './create-agent.js'
+import type { ToolObservation } from './define-tool.js'
+
 /**
  * 每轮 createAgent.send 的默认参数（不含流式回调；回调由本适配器映射为 AG-UI 事件）。
+ *
+ * 注意：经 `runAgent({ forwardedProps })` 传入时，AG-UI 会对 forwardedProps 做
+ * `structuredClone`。`provider`（LanguageModel，含 url 等函数）与 `abortController`
+ * 不可克隆，OpenWorkerAgent 会在克隆前剥离并在本轮 run 中合并回 send 选项。
  */
 export type OpenWorkerAgentRunDefaults = Omit<AgentRunInput, 'onTextDelta' | 'onTool' | 'onEmit'>
 
@@ -59,7 +66,7 @@ export type OpenWorkerAgentConfig = AgentConfig & {
   agent: CreateAgentOptions
   /**
    * 每轮 send 的默认参数。
-   * 优先级：runDefaults < RunAgentInput.forwardedProps
+   * 优先级：runDefaults < 克隆前剥离的 extras < RunAgentInput.forwardedProps
    */
   runDefaults?: OpenWorkerAgentRunDefaults
 }
@@ -101,6 +108,42 @@ function parseForwardedProps(forwarded: unknown): OpenWorkerAgentRunDefaults {
   }
 
   return out
+}
+
+/**
+ * 在 AG-UI structuredClone(forwardedProps) 之前剥离不可克隆字段。
+ *
+ * AI SDK OpenAI LanguageModel 内含 `url: ({ path }) => \`${baseURL}${path}\``，
+ * 直接克隆会报 “could not be cloned”。AbortController 克隆后与原实例断开，
+ * 宿主侧 abort() 将失效，故一并保留原引用。
+ *
+ * @param forwarded - 原始 forwardedProps
+ * @returns cloneable（可安全 structuredClone）与 extras（本轮合并回 send）
+ */
+function detachNonCloneableForwardedProps(forwarded: unknown): {
+  cloneable: Record<string, unknown>
+  extras: OpenWorkerAgentRunDefaults
+} {
+  if (!forwarded || typeof forwarded !== 'object') {
+    return { cloneable: {}, extras: {} }
+  }
+
+  const cloneable = { ...(forwarded as Record<string, unknown>) }
+  const extras: OpenWorkerAgentRunDefaults = {}
+
+  if ('provider' in cloneable && cloneable.provider != null) {
+    extras.provider = cloneable.provider as OpenWorkerAgentRunDefaults['provider']
+    delete cloneable.provider
+  }
+
+  if (cloneable.abortController instanceof AbortController) {
+    extras.abortController = cloneable.abortController
+    delete cloneable.abortController
+  } else if ('abortController' in cloneable) {
+    delete cloneable.abortController
+  }
+
+  return { cloneable, extras }
 }
 
 /**
@@ -356,7 +399,7 @@ function formatRunError(error: unknown): string {
 }
 
 /**
- * AG-UI AbstractAgent 实现：内部委托 `@openworker/agent` 的 createAgent。
+ * AG-UI AbstractAgent 实现：内部委托 createAgent。
  *
  * 与官方 `VercelAISDKAgent` / `ClaudeAgentAdapter` 相同契约：
  * - `run(input): Observable<BaseEvent>`
@@ -370,6 +413,11 @@ export class OpenWorkerAgent extends AbstractAgent {
   private readonly inner: Agent
   private readonly runDefaults: OpenWorkerAgentRunDefaults
   private activeAbort: AbortController | null = null
+  /**
+   * 自 forwardedProps 剥离、供本轮 run 合并的不可克隆字段（provider / abortController）。
+   * 由 prepareRunAgentInput 写入，translateRun 结束后清空。
+   */
+  private pendingForwardedExtras: OpenWorkerAgentRunDefaults = {}
 
   /**
    * 创建 OpenWorker AG-UI Agent。
@@ -411,12 +459,34 @@ export class OpenWorkerAgent extends AbstractAgent {
   }
 
   /**
-   * 底层 createAgent 实例（MCP probe/warmup/dispose 等宿主能力）。
+   * MCP 宿主侧能力（probe / warmup / dispose）。
    *
-   * @returns createAgent 返回值
+   * 供 Desktop 等宿主管理连接池；勿经此绕过 AG-UI 去调用底层 send。
    */
-  public getAgent(): Agent {
-    return this.inner
+  public get mcp(): AgentMcp {
+    return this.inner.mcp
+  }
+
+  /**
+   * 释放底层 MCP 连接池（进程退出或宿主销毁时调用）。
+   */
+  public async dispose(): Promise<void> {
+    await this.inner.mcp.dispose()
+  }
+
+  /**
+   * 组装 RunAgentInput：在 AG-UI structuredClone 之前剥离不可克隆的 forwardedProps。
+   *
+   * @param parameters - runAgent 入参
+   * @returns 可安全克隆的 RunAgentInput
+   */
+  protected prepareRunAgentInput(parameters?: RunAgentParameters): RunAgentInput {
+    const { cloneable, extras } = detachNonCloneableForwardedProps(parameters?.forwardedProps)
+    this.pendingForwardedExtras = extras
+    return super.prepareRunAgentInput({
+      ...parameters,
+      forwardedProps: cloneable
+    })
   }
 
   /**
@@ -429,16 +499,19 @@ export class OpenWorkerAgent extends AbstractAgent {
    */
   public run(input: RunAgentInput): Observable<BaseEvent> {
     return new Observable<BaseEvent>((subscriber) => {
+      const fromForwarded = {
+        ...this.pendingForwardedExtras,
+        ...parseForwardedProps(input.forwardedProps)
+      }
       const abortController =
-        parseForwardedProps(input.forwardedProps).abortController ??
-        this.runDefaults.abortController ??
-        new AbortController()
+        fromForwarded.abortController ?? this.runDefaults.abortController ?? new AbortController()
       this.activeAbort = abortController
 
       void this.translateRun(input, abortController, subscriber).finally(() => {
         if (this.activeAbort === abortController) {
           this.activeAbort = null
         }
+        this.pendingForwardedExtras = {}
       })
 
       return () => {
@@ -503,6 +576,7 @@ export class OpenWorkerAgent extends AbstractAgent {
 
     const merged: OpenWorkerAgentRunDefaults = {
       ...this.runDefaults,
+      ...this.pendingForwardedExtras,
       ...parseForwardedProps(input.forwardedProps),
       abortController
     }

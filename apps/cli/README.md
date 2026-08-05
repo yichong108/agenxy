@@ -2,18 +2,18 @@
 
 ## 一句话
 
-命令行宿主：从环境变量解析模型配置，调用 `createAgent` 发起对话。
+命令行宿主：从环境变量解析模型配置，经 `@openworker/agent` 的 `OpenWorkerAgent`（AG-UI）发起对话。
 
 ## 边界与依赖
 
-- 依赖 `@openworker/agent`（`createAgent` / `getChatModel`），不重复实现 ReAct / 工具。
-- 会话消息仅在进程内持有，不做桌面端式持久化。
+- 依赖 `@openworker/agent`（`OpenWorkerAgent` / `getChatModel`），经 AG-UI 协议驱动，不重复实现 ReAct / 工具。
+- 会话消息为 AG-UI `Message`，仅在进程内持有，不做桌面端式持久化。
 - 模型凭据来自环境变量（或 `.env`），不读桌面 AppSettings 存储。
 
 ## 反模式（本模块已出现过/严禁）
 
 - 在 CLI 内复制 Desktop 的会话 / IPC / 工具时间线逻辑
-- 绕过 `createAgent` 直接拼装 ReAct 循环
+- 绕过 OpenWorkerAgent 直接拼装 ReAct 循环
 
 # 用法
 

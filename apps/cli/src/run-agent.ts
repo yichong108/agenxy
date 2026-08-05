@@ -1,23 +1,32 @@
 /**
- * 创建并驱动 CLI 侧 agent：流式输出文本，简要打印工具事件。
+ * 创建并驱动 CLI 侧 OpenWorkerAgent：经 AG-UI 事件流式输出文本与工具事件。
  */
 
 import { resolve } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
 
-import { type Agent, createAgent, getChatModel, type ToolObservation } from '@openworker/agent'
+import {
+  EventType,
+  randomUUID,
+  type Message,
+  type RunErrorEvent,
+  type TextMessageContentEvent,
+  type ToolCallResultEvent,
+  type ToolCallStartEvent
+} from '@ag-ui/client'
+import { getChatModel, OpenWorkerAgent, type OpenWorkerAgentRunDefaults } from '@openworker/agent'
 import { type AgentComposerMode, type AppSettings, MAX_AGENT_LOOP_STEPS } from '@openworker/shared'
 
 /**
- * 根据设置与工作区创建 CLI agent 实例。
+ * 根据设置与工作区创建 CLI OpenWorkerAgent 实例。
  *
  * @param settings - 含 API Key / 模型的 AppSettings
  * @param cwd - 工作区根目录
- * @returns Agent 实例
+ * @returns OpenWorkerAgent 实例
  * @throws 未配置 API Key 时抛出
  */
-export function createCliAgent(settings: AppSettings, cwd: string): Agent {
+export function createCliAgent(settings: AppSettings, cwd: string): OpenWorkerAgent {
   const provider = getChatModel(settings)
   if (!provider) {
     throw new Error(
@@ -25,37 +34,57 @@ export function createCliAgent(settings: AppSettings, cwd: string): Agent {
     )
   }
 
-  return createAgent({
-    provider,
-    local: { cwd: resolve(cwd) }
+  const workspacePath = resolve(cwd)
+  return new OpenWorkerAgent({
+    agentId: 'openworker-cli',
+    description: 'Openworker CLI agent',
+    agent: {
+      provider,
+      local: { cwd: workspacePath }
+    },
+    runDefaults: {
+      workspacePath
+    }
   })
 }
 
 /**
- * 向 stdout 打印工具观察事件（简要一行）。
+ * 向 stdout 打印本轮 AG-UI 工具相关事件（简要一行）。
  *
- * @param event - ToolObservation
+ * @param event - AG-UI BaseEvent（仅处理 TOOL_CALL_* / RUN_ERROR）
  */
-function printToolEvent(event: ToolObservation): void {
-  const name = event.name || 'tool'
-  if (event.status === 'start') {
+function printAguiEvent(event: {
+  type: string
+  toolCallName?: string
+  toolCallId?: string
+  message?: string
+  content?: string
+}): void {
+  if (event.type === EventType.TOOL_CALL_START) {
+    const name = (event as ToolCallStartEvent).toolCallName || 'tool'
     process.stdout.write(`\n[tool] ${name} …\n`)
     return
   }
-  if (event.status === 'end') {
-    process.stdout.write(`[tool] ${name} done\n`)
+  if (event.type === EventType.TOOL_CALL_RESULT) {
+    const e = event as ToolCallResultEvent
+    process.stdout.write(`[tool] ${e.toolCallId} done\n`)
+    return
+  }
+  if (event.type === EventType.RUN_ERROR) {
+    const e = event as RunErrorEvent
+    process.stderr.write(`\n[error] ${e.message}\n`)
   }
 }
 
 /**
- * 发送一轮用户消息并流式打印助手回复。
+ * 发送一轮用户消息并经 AG-UI 流式打印助手回复。
  *
- * @param agent - createAgent 实例
+ * @param agent - OpenWorkerAgent 实例
  * @param userText - 用户输入
  * @param options - mode / settings
  */
 export async function runOnce(
-  agent: Agent,
+  agent: OpenWorkerAgent,
   userText: string,
   options: {
     mode: AgentComposerMode
@@ -68,19 +97,45 @@ export async function runOnce(
   }
   process.once('SIGINT', onSigInt)
 
+  const userMessage: Message = {
+    id: randomUUID(),
+    role: 'user',
+    content: userText
+  }
+  agent.messages = [...agent.messages, userMessage]
+
+  const forwardedProps: OpenWorkerAgentRunDefaults = {
+    composerMode: options.mode,
+    abortController,
+    tavily: { apiKey: options.settings.tavilyApiKey },
+    maxSteps: MAX_AGENT_LOOP_STEPS,
+    invokeTimeoutMs: options.settings.agentRunTimeoutMs
+  }
+
   try {
     process.stdout.write('\n')
-    await agent.send(userText, {
-      composerMode: options.mode,
-      abortController,
-      tavily: { apiKey: options.settings.tavilyApiKey },
-      maxSteps: MAX_AGENT_LOOP_STEPS,
-      invokeTimeoutMs: options.settings.agentRunTimeoutMs,
-      onTextDelta: (text) => {
-        process.stdout.write(text)
-      },
-      onTool: printToolEvent
+
+    const { unsubscribe } = agent.subscribe({
+      onEvent: ({ event }) => {
+        if (event.type === EventType.TEXT_MESSAGE_CONTENT) {
+          process.stdout.write((event as TextMessageContentEvent).delta)
+          return
+        }
+        printAguiEvent(event)
+      }
     })
+
+    try {
+      await agent.runAgent({
+        runId: `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        tools: [],
+        context: [],
+        forwardedProps
+      })
+    } finally {
+      unsubscribe()
+    }
+
     process.stdout.write('\n')
   } finally {
     process.off('SIGINT', onSigInt)
@@ -90,11 +145,11 @@ export async function runOnce(
 /**
  * 交互式 REPL：循环读取 stdin，直到空行 / exit / Ctrl+D。
  *
- * @param agent - createAgent 实例
+ * @param agent - OpenWorkerAgent 实例
  * @param options - mode / settings
  */
 export async function runRepl(
-  agent: Agent,
+  agent: OpenWorkerAgent,
   options: {
     mode: AgentComposerMode
     settings: AppSettings
