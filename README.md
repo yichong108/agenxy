@@ -67,19 +67,28 @@ Debug build (inspect / remote debugging ports):
 pnpm --filter @openworker/desktop run dev:debug
 ```
 
-### Landing page
+### Landing / Admin / Phone / CLI (opt-in)
+
+These are excluded from the default `pnpm dev` (they are heavier or less often needed). Start them when you need them:
 
 ```bash
 pnpm landing:dev
+pnpm admin:dev
+pnpm phone:dev
+pnpm cli:dev
 ```
 
-### Run everything in dev mode
+### Run core apps in dev mode
 
 ```bash
 pnpm dev
 ```
 
-(Turbo runs all `dev` tasks in parallel.)
+Starts packages that define `dev`, except `@openworker/phone`, `@openworker/admin`, `@openworker/landing`, and `@openworker/cli`. For the full set:
+
+```bash
+pnpm dev:all
+```
 
 ## Local Langfuse (optional)
 
@@ -92,13 +101,15 @@ To send traces from the **desktop app** to that stack, copy `apps/desktop/.env.e
 
 ## Common scripts (root)
 
-| Command                             | Description                                             |
-| ----------------------------------- | ------------------------------------------------------- |
-| `pnpm dev`                          | Dev servers for all packages that define `dev`          |
-| `pnpm build`                        | Production build via Turbo                              |
-| `pnpm lint` / `pnpm lint:fix`       | Oxlint across the workspace (root `.oxlintrc.json`)     |
-| `pnpm typecheck`                    | TypeScript checks across the workspace                  |
-| `pnpm format` / `pnpm format:check` | Prettier across the workspace (root `.prettierrc.json`) |
+| Command                                                    | Description                                               |
+| ---------------------------------------------------------- | --------------------------------------------------------- |
+| `pnpm dev`                                                 | Core dev servers (excludes phone / admin / landing / cli) |
+| `pnpm dev:all`                                             | Dev servers for all packages that define `dev`            |
+| `pnpm phone:dev` / `admin:dev` / `landing:dev` / `cli:dev` | Start those apps on demand                                |
+| `pnpm build`                                               | Production build via Turbo                                |
+| `pnpm lint` / `pnpm lint:fix`                              | Oxlint across the workspace (root `.oxlintrc.json`)       |
+| `pnpm typecheck`                                           | TypeScript checks across the workspace                    |
+| `pnpm format` / `pnpm format:check`                        | Prettier across the workspace (root `.prettierrc.json`)   |
 
 ### Desktop-only (from root)
 
