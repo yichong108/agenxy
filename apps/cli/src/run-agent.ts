@@ -20,9 +20,7 @@ import { type AgentComposerMode, type AppSettings, MAX_AGENT_LOOP_STEPS } from '
 export function createCliAgent(settings: AppSettings, cwd: string): Agent {
   const provider = getChatModel(settings)
   if (!provider) {
-    throw new Error(
-      '请先配置 OPENWORK_API_KEY（或 OPENAI_API_KEY），参见 apps/command/.env.example'
-    )
+    throw new Error('请先配置 OPENWORK_API_KEY（或 OPENAI_API_KEY），参见 apps/cli/.env.example')
   }
 
   return createAgent({

@@ -108,7 +108,7 @@ class SessionManager {
 - [@openwork/api](services/api/README.md) 后端API服务
 - [@openwork/desktop](apps/desktop/README.md) 桌面客户端
 - [@openwork/admin](apps/admin/README.md) 后台管理
-- [@openwork/command](apps/command/README.md) 命令行客户端
+- [@openwork/cli](apps/cli/README.md) 命令行客户端
 - [@openwork/landing](apps/landing/README.md) 文档项目
 - [@openwork/phone](apps/phone/README.md) 移动端客户端
 - [@openwork/langfuse-local](services/langfuse-local/README.md) 本地 Langfuse

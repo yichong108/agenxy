@@ -12,11 +12,11 @@ import { config as loadDotenv } from 'dotenv'
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 /**
- * 加载 apps/command 下的 `.env` / `.env.local`（后者覆盖前者）。
+ * 加载 apps/cli 下的 `.env` / `.env.local`（后者覆盖前者）。
  *
  * 不覆盖已存在的 process.env，便于 shell 导出优先。
  */
-export function loadCommandEnv(): void {
+export function loadCliEnv(): void {
   for (const name of ['.env', '.env.local'] as const) {
     const path = join(packageRoot, name)
     if (existsSync(path)) {

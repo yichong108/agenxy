@@ -1,9 +1,9 @@
 /**
- * @openwork/command 入口 — 解析参数、创建 agent、一次性对话或 REPL。
+ * @openwork/cli 入口 — 解析参数、创建 agent、一次性对话或 REPL。
  */
 
 import { parseArgs, printHelp } from './cli.js'
-import { loadCommandEnv, settingsFromEnv } from './env.js'
+import { loadCliEnv, settingsFromEnv } from './env.js'
 import { createCliAgent, runOnce, runRepl } from './run-agent.js'
 
 /**
@@ -12,7 +12,7 @@ import { createCliAgent, runOnce, runRepl } from './run-agent.js'
  * 加载环境变量 → 解析参数 → createAgent → 一次性 prompt 或 REPL。
  */
 async function main(): Promise<void> {
-  loadCommandEnv()
+  loadCliEnv()
 
   let options
   try {
@@ -52,6 +52,6 @@ async function main(): Promise<void> {
 
 main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error)
-  console.error(`[command] ${message}`)
+  console.error(`[cli] ${message}`)
   process.exitCode = 1
 })

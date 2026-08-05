@@ -1,5 +1,5 @@
 {
-  "name": "@openwork/command",
+  "name": "@openwork/cli",
   "version": "0.0.0",
   "description": "Openwork CLI — 命令行调用 @openwork/agent",
   "type": "module",

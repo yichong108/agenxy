@@ -20,20 +20,20 @@
 ## 开发（tsx，改完即跑）
 
 ```bash
-cp apps/command/.env.example apps/command/.env
+cp apps/cli/.env.example apps/cli/.env
 # 编辑 OPENWORK_API_KEY 等
 
-pnpm command:start -- "列出当前目录文件"
-pnpm command:start
-pnpm command:start -- -m ask -C ./some-workspace
+pnpm cli:start -- "列出当前目录文件"
+pnpm cli:start
+pnpm cli:start -- -m ask -C ./some-workspace
 ```
 
 ## 打包后测试
 
 ```bash
-pnpm command:build
-pnpm command:start:dist -- --help
-pnpm command:start:dist -- "用一句话介绍你自己"
+pnpm cli:build
+pnpm cli:start:dist -- --help
+pnpm cli:start:dist -- "用一句话介绍你自己"
 ```
 
-产物在 `apps/command/dist/index.js`（ESM bundle；`@vscode/ripgrep` 仍走 node_modules）。
+产物在 `apps/cli/dist/index.js`（ESM bundle；`@vscode/ripgrep` 仍走 node_modules）。

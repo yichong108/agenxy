@@ -47,7 +47,7 @@
     },
     {
       "files": [
-        "apps/command/**/*.{ts,tsx,js,jsx}",
+        "apps/cli/**/*.{ts,tsx,js,jsx}",
         "services/**/*.{ts,tsx,js,jsx}",
         "packages/**/*.{ts,tsx,js,jsx}"
       ],

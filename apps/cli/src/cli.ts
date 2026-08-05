@@ -20,11 +20,11 @@ export type CliOptions = {
  * 打印 CLI 用法。
  */
 export function printHelp(): void {
-  console.log(`Openwork Command — 命令行智能体
+  console.log(`Openwork CLI — 命令行智能体
 
 用法:
-  pnpm --filter @openwork/command start -- [options] [prompt]
-  pnpm --filter @openwork/command start -- [options]
+  pnpm --filter @openwork/cli start -- [options] [prompt]
+  pnpm --filter @openwork/cli start -- [options]
 
 选项:
   -h, --help          显示帮助
@@ -40,8 +40,8 @@ MCP / Skills 从用户目录 ~/.openwork/mcp.json 与 ~/.openwork/skills 自动�
   TAVILY_API_KEY      可选联网搜索
 
 示例:
-  pnpm --filter @openwork/command start -- "列出当前目录文件"
-  pnpm --filter @openwork/command start -- -m ask
+  pnpm --filter @openwork/cli start -- "列出当前目录文件"
+  pnpm --filter @openwork/cli start -- -m ask
 `)
 }
 
