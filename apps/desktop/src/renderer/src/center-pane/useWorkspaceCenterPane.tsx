@@ -27,6 +27,14 @@ import type { InputRef } from 'antd/es/input'
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 
+import { ComposerSkillMenu } from '@/renderer/src/center-pane/ComposerSkillMenu'
+import {
+  applySkillSlashSelection,
+  filterSkillsByQuery,
+  findActiveSlashSkillToken,
+  getComposerTextarea,
+  type SlashSkillToken
+} from '@/renderer/src/center-pane/composer-slash-skills'
 import { useUiStore } from '@/renderer/src/store/ui-store'
 import { useWorkspaceStore } from '@/renderer/src/store/workspace-store'
 import {
@@ -35,6 +43,7 @@ import {
   type ChatMessage,
   HOME_WORKSPACE_ID,
   type SessionInfo,
+  type SkillListItem,
   type ToolTimelineEvent,
   type WorkspaceInfo
 } from '@/shared/ipc'
@@ -105,6 +114,85 @@ export function useWorkspaceCenterPane({
 
   /** Composer 模式：Build / Ask */
   const [composerMode, setComposerMode] = useState<AgentComposerMode>('build')
+
+  /** 用户 skills 目录扫描结果（`/` 菜单数据源） */
+  const [skills, setSkills] = useState<SkillListItem[]>([])
+  const [skillsLoading, setSkillsLoading] = useState(false)
+  /** 当前活跃的 `/` token；null 表示菜单关闭 */
+  const [slashToken, setSlashToken] = useState<SlashSkillToken | null>(null)
+  const [skillMenuActiveIndex, setSkillMenuActiveIndex] = useState(0)
+  const skillsLoadedRef = useRef(false)
+
+  /**
+   * 拉取可用技能列表（惰性：首次打开 `/` 菜单时加载，之后复用缓存）。
+   */
+  const ensureSkillsLoaded = useCallback(async () => {
+    if (!preloadOk || skillsLoadedRef.current) return
+    skillsLoadedRef.current = true
+    setSkillsLoading(true)
+    try {
+      const list = await bridge.listSkills()
+      setSkills(Array.isArray(list) ? list : [])
+    } catch {
+      skillsLoadedRef.current = false
+      setSkills([])
+    } finally {
+      setSkillsLoading(false)
+    }
+  }, [bridge, preloadOk])
+
+  const filteredSkills = useMemo(
+    () => (slashToken ? filterSkillsByQuery(skills, slashToken.query) : []),
+    [skills, slashToken]
+  )
+
+  useEffect(() => {
+    if (!slashToken) return
+    setSkillMenuActiveIndex(0)
+  }, [slashToken?.query, slashToken])
+
+  useEffect(() => {
+    if (skillMenuActiveIndex < filteredSkills.length) return
+    setSkillMenuActiveIndex(filteredSkills.length > 0 ? filteredSkills.length - 1 : 0)
+  }, [filteredSkills.length, skillMenuActiveIndex])
+
+  /**
+   * 根据 textarea 光标位置同步斜杠技能菜单开关状态。
+   *
+   * @param text - 当前输入全文
+   * @param cursor - 光标位置；省略时从 DOM 读取
+   */
+  const syncSlashSkillMenu = useCallback(
+    (text: string, cursor?: number) => {
+      const textarea = getComposerTextarea(composerInputRef.current)
+      const pos = cursor ?? textarea?.selectionStart ?? text.length
+      const token = findActiveSlashSkillToken(text, pos)
+      setSlashToken(token)
+      if (token) void ensureSkillsLoaded()
+    },
+    [ensureSkillsLoaded]
+  )
+
+  /**
+   * 将选中技能写入输入框，替换当前 `/query` 为 `/skillName `。
+   *
+   * @param skill - 选中的技能
+   */
+  const selectSkillFromMenu = useCallback(
+    (skill: SkillListItem) => {
+      if (!slashToken) return
+      const { nextText, nextCursor } = applySkillSlashSelection(input, slashToken, skill.name)
+      setInput(nextText)
+      setSlashToken(null)
+      requestAnimationFrame(() => {
+        const textarea = getComposerTextarea(composerInputRef.current)
+        if (!textarea) return
+        textarea.focus()
+        textarea.setSelectionRange(nextCursor, nextCursor)
+      })
+    },
+    [input, setInput, slashToken]
+  )
 
   /** 顶栏工作区下拉始终含 Home；侧栏移除 Home 后主进程同步列表可能不含该项 */
   const workspacesWithComposerHomeStub = useMemo(() => {
@@ -554,6 +642,7 @@ export function useWorkspaceCenterPane({
   const send = async () => {
     const t = input.trim()
     if (!t) return
+    setSlashToken(null)
     setInput('')
     await sendAgentText(t, composerMode)
   }
@@ -602,18 +691,83 @@ export function useWorkspaceCenterPane({
     </div>
   )
 
+  const skillMenuOpen = slashToken != null
+
   const composerInput = (
     <div className="app-composer">
+      {skillMenuOpen ? (
+        <ComposerSkillMenu
+          skills={filteredSkills}
+          activeIndex={skillMenuActiveIndex}
+          loading={skillsLoading}
+          onSelect={selectSkillFromMenu}
+          onActiveIndexChange={setSkillMenuActiveIndex}
+        />
+      ) : null}
       <div className="app-composer-inner">
         <TextArea
           ref={composerInputRef}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => {
+            const next = e.target.value
+            setInput(next)
+            const cursor = e.target.selectionStart ?? next.length
+            syncSlashSkillMenu(next, cursor)
+          }}
+          onClick={(e) => {
+            const cursor = (e.target as HTMLTextAreaElement).selectionStart ?? input.length
+            syncSlashSkillMenu(input, cursor)
+          }}
+          onKeyUp={(e) => {
+            if (
+              e.key === 'ArrowLeft' ||
+              e.key === 'ArrowRight' ||
+              e.key === 'Home' ||
+              e.key === 'End'
+            ) {
+              syncSlashSkillMenu(input)
+            }
+          }}
+          onBlur={() => {
+            // 延迟关闭，允许菜单项 mousedown/click 先完成
+            window.setTimeout(() => setSlashToken(null), 120)
+          }}
           autoSize={isEmptyConversation ? { minRows: 4, maxRows: 16 } : { minRows: 1, maxRows: 12 }}
           variant="borderless"
-          placeholder="Enter发送，Shift+Enter换行"
+          placeholder="输入 / 选择技能，Enter 发送，Shift+Enter 换行"
           className="app-composer-input"
+          onKeyDown={(e) => {
+            if (!skillMenuOpen) return
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              setSlashToken(null)
+              return
+            }
+            if (e.key === 'ArrowDown') {
+              e.preventDefault()
+              if (!filteredSkills.length) return
+              setSkillMenuActiveIndex((i) => (i + 1) % filteredSkills.length)
+              return
+            }
+            if (e.key === 'ArrowUp') {
+              e.preventDefault()
+              if (!filteredSkills.length) return
+              setSkillMenuActiveIndex(
+                (i) => (i - 1 + filteredSkills.length) % filteredSkills.length
+              )
+              return
+            }
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              const skill = filteredSkills[skillMenuActiveIndex]
+              if (skill) selectSkillFromMenu(skill)
+            }
+          }}
           onPressEnter={(e) => {
+            if (skillMenuOpen) {
+              e.preventDefault()
+              return
+            }
             if (!e.shiftKey) {
               e.preventDefault()
               if (!isRun) void send()

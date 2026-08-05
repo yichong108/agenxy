@@ -11,6 +11,7 @@ import type {
   McpWarmupStatus,
   RendererUiState,
   SessionInfo,
+  SkillListItem,
   AgentStreamPayload,
   TerminalCompleteResult,
   TerminalOutputEvent,
@@ -38,6 +39,7 @@ type Api = {
   setCaptionControlsVisible: (visible: boolean) => void
   webEdit: (action: WebEditAction) => Promise<void>
   showAbout: () => Promise<AboutAppInfo>
+  listSkills: () => Promise<SkillListItem[]>
   selectWorkspace: () => Promise<{ path: string }>
   getWorkspace: () => Promise<string>
   listWorkspaces: () => Promise<WorkspacesPayload>

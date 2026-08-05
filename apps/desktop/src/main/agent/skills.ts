@@ -1,11 +1,31 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
+import { listSkillsFromPaths, type SkillListItem } from '@openworker/agent'
 import { app } from 'electron'
 
 import { mainLog } from '@/main/logger'
 import { existsSync } from 'node:fs'
 import { getElectronSkillsDir } from '../path'
+
+export type { SkillListItem }
+
+/**
+ * 列出用户 skills 目录下的可用技能（供输入框 `/` 斜杠菜单）。
+ *
+ * 扫描 `~/.openworker/skills`，规则与 agent send 时加载技能一致。
+ *
+ * @returns 技能列表；目录为空或不存在时返回空数组
+ */
+export async function listUserSkills(): Promise<SkillListItem[]> {
+  const skillsDir = getElectronSkillsDir()
+  try {
+    return await listSkillsFromPaths([skillsDir])
+  } catch (err) {
+    mainLog.warn('[skills] 列出技能失败:', err)
+    return []
+  }
+}
 
 /**
  * 创建用户 `skills` 目录。
