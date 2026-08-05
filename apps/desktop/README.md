@@ -3,7 +3,8 @@
 ## 一句话
 
 目前每个会话对应创建有且只有一个各自独立的agent；
-使用AG-UI协议，不使用Vercel AI SDK。
+使用AG-UI协议，不使用Vercel AI SDK；
+瘦Main、让Main稳定，减少重启带来的开发成本。
 
 ## 边界与依赖
 
