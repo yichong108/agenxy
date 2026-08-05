@@ -32,7 +32,7 @@ description: 面向发布与交付任务，按“变更确认-质量门禁-发�
 
 # 工具映射建议
 
-- 查看改动与上下文：`search_workspace`、`read_file`
+- 查看改动与上下文：`grep`、`read_file`
 - 记录发布说明：`write_file`
 - 运行门禁与发布命令：`shell`
 

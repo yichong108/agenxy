@@ -27,7 +27,7 @@ description: 面向缺陷修复任务，要求先复现与定位，再进行最�
 
 # 工具使用建议
 
-- 先 `read_file` / `list_dir` / `search_workspace`，后 `write_file`。
+- 先 `read_file` / `list_dir` / `grep`，后 `write_file`。
 - 需要执行验证时使用 `shell`。
 - 避免一次性大面积改写，优先小步快跑。
 

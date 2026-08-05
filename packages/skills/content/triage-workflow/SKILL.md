@@ -34,7 +34,7 @@ description: 面向问题分诊任务，对缺陷按严重度、影响范围和�
 
 # 工具映射建议
 
-- 汇总背景信息：`read_file`、`search_workspace`
+- 汇总背景信息：`read_file`、`grep`
 - 生成分诊清单：`write_file`
 - 若需验证现象：`shell`
 

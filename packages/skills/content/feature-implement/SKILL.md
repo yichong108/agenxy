@@ -28,7 +28,7 @@ description: 面向新功能开发任务，先明确需求边界与验收标准�
 
 # 工具建议
 
-- 理解阶段：`list_dir`、`search_workspace`、`read_file`
+- 理解阶段：`list_dir`、`grep`、`read_file`
 - 改动阶段：`write_file`
 - 验证阶段：`shell`
 

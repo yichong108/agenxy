@@ -8,7 +8,6 @@ import {
   globFilesTool,
   listDirTool,
   readFileTool,
-  searchWorkspace,
   writeFileTool
 } from './fs-tools.js'
 import { GREP_TOOL_DESCRIPTION, grepWorkspace } from './grep.js'
@@ -17,14 +16,7 @@ import { isTavilyConfigured, tavilyWebSearch } from './web-search.js'
 import { getOpenworkerMcpConfigPath, getOpenworkerSkillsDir } from '../path.js'
 
 /** Ask 模式允许的只读工具名 */
-const ASK_MODE_ALLOWED_TOOL_NAMES = new Set([
-  'read_file',
-  'list_dir',
-  'glob',
-  'grep',
-  'search_workspace',
-  'web_search'
-])
+const ASK_MODE_ALLOWED_TOOL_NAMES = new Set(['read_file', 'list_dir', 'glob', 'grep', 'web_search'])
 
 type ToolDefinition<T extends z.ZodTypeAny> = {
   name: string
@@ -121,13 +113,6 @@ export function buildWorkspaceTools(options: BuildWorkspaceToolsOptions): ToolSe
       truncateTo: 12_000
     },
     {
-      name: 'search_workspace',
-      description: '在文本文件中做简单子串搜索（无正则）。需要正则、glob 或匹配上下文时用 grep。',
-      parameters: z.object({ query: z.string() }),
-      execute: ({ query }) => searchWorkspace(root, query, { maxFiles: 50 }),
-      truncateTo: 8_000
-    },
-    {
       name: 'glob',
       description: userDataRoot
         ? '按模式在工作区根目录与用户数据根下 glob 匹配文件。仅返回文件路径（不含目录），分「工作区」与「用户数据」两段；模式为 Node 风格如 **/*.ts；两侧均排除 node_modules/.git/dist 及缓存目录'
@@ -157,7 +142,7 @@ export function buildWorkspaceTools(options: BuildWorkspaceToolsOptions): ToolSe
         {
           name: 'web_search',
           description:
-            '用 Tavily 搜索公开网页（天气、新闻、文档等）。search_workspace 只搜工作区代码；需要外部信息时调用本工具。',
+            '用 Tavily 搜索公开网页（天气、新闻、文档等）。工作区内代码搜索请用 grep；需要外部信息时调用本工具。',
           parameters: z.object({
             query: z.string(),
             max_results: z.number().int().min(1).max(20).optional()
@@ -258,16 +243,16 @@ function buildBuildSystemPrompt(
 
   const mcpToolNames = includeMcp ? '、mcp_list_servers、mcp_inspect_server' : ''
   const toolLine = web
-    ? `read_file、write_file、delete_file、list_dir、glob、grep、search_workspace、shell、web_search（Tavily 联网搜索）${mcpToolNames}`
-    : `read_file、write_file、delete_file、list_dir、glob、grep、search_workspace、shell${mcpToolNames}（未配置 Tavily API Key 时无 web_search）`
+    ? `read_file、write_file、delete_file、list_dir、glob、grep、shell、web_search（Tavily 联网搜索）${mcpToolNames}`
+    : `read_file、write_file、delete_file、list_dir、glob、grep、shell${mcpToolNames}（未配置 Tavily API Key 时无 web_search）`
 
   const webRule = web
     ? '- 用户询问**天气、气温、降雨、实时新闻、股价、政策**等需要外部信息时，必须先调用 **web_search** 再回答；不要编造天气或声称「搜索失败」。'
     : '- 未配置 Tavily，**web_search 不可用**：若用户需要今日天气等实时信息，明确告知在应用设置中填写「Tavily API Key」或配置环境变量 TAVILY_API_KEY；可建议天气网站/App；不要声称「搜索引擎坏了」或「无法联网」。'
 
   const followTools = includeMcp
-    ? 'read_file、list_dir、grep、search_workspace、shell、mcp_*'
-    : 'read_file、list_dir、grep、search_workspace、shell'
+    ? 'read_file、list_dir、grep、shell、mcp_*'
+    : 'read_file、list_dir、grep、shell'
   const skillRule =
     '- **优先 skill_***：用户意图明显匹配某 skill 工具描述时，必须先调用该 skill 获取流程/约束/输出，再按需使用 ' +
     followTools +
@@ -293,8 +278,8 @@ ${webRule}
 function buildAskSystemPrompt(root: string, tavilyApiKey?: string): string {
   const web = isTavilyConfigured(tavilyApiKey)
   const toolLine = web
-    ? 'read_file、list_dir、glob、grep、search_workspace、web_search（Tavily）'
-    : 'read_file、list_dir、glob、grep、search_workspace（未配置 Tavily 时无 web_search）'
+    ? 'read_file、list_dir、glob、grep、web_search（Tavily）'
+    : 'read_file、list_dir、glob、grep（未配置 Tavily 时无 web_search）'
   const webRule = web
     ? '- 需要外部信息时调用 **web_search**；不要编造搜索结果。'
     : '- 未配置 Tavily：若用户需要实时信息，如实说明并建议在设置中配置 Tavily。'
@@ -303,7 +288,7 @@ function buildAskSystemPrompt(root: string, tavilyApiKey?: string): string {
 - 仅只读工具：${toolLine}。路径均相对于工作区根目录。
 - 若用户要求「直接改代码 / 跑命令 / 打补丁」，说明问答模式不能自动执行，给出可复制片段或步骤；要自动应用请切换到 **构建模式**。
 ${webRule}
-- 回复清晰可验证：下结论前先 read/list/search 仓库内容。
+- 回复清晰可验证：下结论前先 read/list/grep 仓库内容。
 - 先理解意图 → 必要时复述目标
 `
 }

@@ -5,33 +5,6 @@ import { ensureWorkspaceExists, resolveSafePath } from './path-guard.js'
 
 const MAX_READ = 500_000
 
-const TEXT_EXT = new Set([
-  '.ts',
-  '.tsx',
-  '.js',
-  '.jsx',
-  '.mjs',
-  '.cjs',
-  '.json',
-  '.md',
-  '.yml',
-  '.yaml',
-  '.toml',
-  '.css',
-  '.html',
-  '.txt',
-  '.vue',
-  '.rs',
-  '.go',
-  '.py'
-])
-
-function looksTextual(file: string): boolean {
-  const ext = path.extname(file).toLowerCase()
-  if (!ext) return true
-  return TEXT_EXT.has(ext)
-}
-
 /**
  * 读取工作区内 UTF-8 文本文件。
  *
@@ -152,72 +125,6 @@ export async function listDirTool(
   }
   await walk(dir, 0, '')
   return lines.length ? lines.join('\n') : '（空目录）'
-}
-
-/**
- * 在文本文件中做简单子串搜索（无正则）。
- *
- * @param workspace - 工作区根目录
- * @param query - 子串
- * @param options - maxFiles 等
- * @returns 匹配预览文本
- */
-export async function searchWorkspace(
-  workspace: string,
-  query: string,
-  options?: { maxFiles?: number; glob?: string }
-): Promise<string> {
-  const root = ensureWorkspaceExists(workspace)
-  const maxFiles = options?.maxFiles ?? 64
-  const results: string[] = []
-  let count = 0
-  if (!query.trim()) {
-    return 'query 不能为空'
-  }
-  const lower = query.toLowerCase()
-
-  async function walk(d: string) {
-    if (count >= maxFiles) return
-    const entries = await fs.readdir(d, { withFileTypes: true })
-    for (const e of entries) {
-      if (count >= maxFiles) return
-      const full = path.join(d, e.name)
-      if (e.isDirectory()) {
-        if (
-          e.name === 'node_modules' ||
-          e.name === '.git' ||
-          e.name === 'dist' ||
-          e.name === 'out'
-        ) {
-          continue
-        }
-        await walk(full)
-      } else {
-        if (!looksTextual(full)) continue
-        try {
-          const st = await fs.stat(full)
-          if (st.size > 400_000) continue
-          const text = await fs.readFile(full, 'utf8')
-          const lowerText = text.toLowerCase()
-          if (!lowerText.includes(lower)) continue
-          const rel = path.relative(root, full)
-          const lineIdx = text.split('\n').findIndex((l) => l.toLowerCase().includes(lower))
-          const preview =
-            lineIdx >= 0
-              ? `L${lineIdx + 1}: ${text.split('\n')[lineIdx]!.trim().slice(0, 200)}`
-              : '匹配'
-          results.push(`${rel}\n  ${preview}`)
-          count++
-        } catch {
-          // skip
-        }
-      }
-    }
-  }
-  await walk(root)
-  return results.length
-    ? results.join('\n\n')
-    : `未找到包含「${query}」的文本文件（已扫描，最多 ${maxFiles} 个匹配文件）`
 }
 
 const GLOB_EXCLUDE = [
