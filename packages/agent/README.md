@@ -17,7 +17,7 @@ send 的 Skills / MCP 按用户目录约定自动加载：`~/.openwork/skills` �
 
 ## 反模式（本模块已出现过/严禁）
 
-- 让 agent 依赖宿主特有的 skills 目录布局（bundled / market / userData）；应统一走 `~/.openwork/skills`
+- 让 agent 依赖宿主特有的 skills 目录布局（bundled / userData）；应统一走 `~/.openwork/skills`
 
 - 在工作流中强制执行仅 Desktop 需要的增强阶段
 

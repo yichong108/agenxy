@@ -210,8 +210,6 @@ type LegacyFlatSettings = {
 export function normalizeSettings(
   input: Partial<AppSettings> &
     LegacyFlatSettings & {
-      skillsMarketCatalogUrl?: unknown
-      skillsMarketCatalogRefreshHours?: unknown
       /** 旧版持久化字段，忽略 */
       maxConcurrentStreams?: unknown
       /** 已改为内置常量，忽略旧持久化 */
@@ -227,8 +225,6 @@ export function normalizeSettings(
     baseUrl: legacyBaseUrl,
     model: legacyModel,
     apiKey: legacyApiKey,
-    skillsMarketCatalogUrl: legacySkillsMarketCatalogUrl,
-    skillsMarketCatalogRefreshHours: legacySkillsMarketCatalogRefreshHours,
     maxConcurrentStreams: _legacyMaxConcurrentStreams,
     maxAgentLoopSteps: _legacyMaxAgentLoopSteps,
     streamFlushMs: _legacyStreamFlushMs,
@@ -236,8 +232,6 @@ export function normalizeSettings(
     maxTerminalOutputChars: _legacyMaxTerminalOutputChars,
     ...inputRest
   } = input
-  void legacySkillsMarketCatalogUrl
-  void legacySkillsMarketCatalogRefreshHours
   void _legacyMaxConcurrentStreams
   void _legacyMaxAgentLoopSteps
   void _legacyStreamFlushMs

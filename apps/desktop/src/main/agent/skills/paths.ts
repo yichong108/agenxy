@@ -12,11 +12,6 @@ export function userSkillsAbsRoot(): string {
   return path.join(userDataPath(), 'skills')
 }
 
-/** 市场安装目录：`userData/skills/market/<id>/` */
-export function marketSkillsInstallRoot(): string {
-  return path.join(userSkillsAbsRoot(), 'market')
-}
-
 /** 扩展用缓存目录（预留） */
 export function skillsCacheRoot(): string {
   return path.join(userSkillsAbsRoot(), '.cache')
@@ -39,13 +34,12 @@ export function getBundledSkillsSourceDir(): string | null {
 }
 
 /**
- * 创建 `skills`、`skills/market`、`skills/.cache`。
+ * 创建 `skills`、`skills/.cache`。
  * 不再将内置技能整棵复制到用户目录（内置仅从随包目录只读加载）。
  */
 export async function ensureUserSkillsLayout(): Promise<void> {
   const root = userSkillsAbsRoot()
   await fs.mkdir(root, { recursive: true })
-  await fs.mkdir(marketSkillsInstallRoot(), { recursive: true })
   await fs.mkdir(skillsCacheRoot(), { recursive: true })
   if (!app.isPackaged) {
     mainLog.info('[skills] 用户技能目录:', root)

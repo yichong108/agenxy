@@ -2,7 +2,7 @@
  * 从配置的目录路径加载基础 Skills（扫描 SKILL.md）。
  *
  * 这是 agent 内建的可选能力：宿主只需传入 paths，即可获得 skill_* 工具与 prompt 提示。
- * 意图筛选、市场安装、Electron 路径解析等增强由宿主自行实现。
+ * 意图筛选、Electron 路径解析等增强由宿主自行实现。
  */
 
 import type { Dirent } from 'node:fs'
