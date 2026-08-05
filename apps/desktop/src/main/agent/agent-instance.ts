@@ -3,12 +3,10 @@
  *
  * 每个会话应持有独立的 agent 实例（createSessionAgent）。
  * MCP 预热 / 探测 / dispose 使用应用级宿主（getMcpHostAgent），不参与会话 send。
+ * Skills / MCP 工具绑定在 send 时按轮传入。
  */
 import { type Agent, type CoreMessage, createAgent, type CreateAgentOptions } from '@openwork/agent'
 import type { LanguageModel } from 'ai'
-
-import { resolveCreateAgentSkillPaths } from '@/main/agent/skills'
-import { getMcpConfigPath } from '@/main/store'
 
 /**
  * 创建时占位模型：会话实际对话模型由 send 的 provider 覆盖；
@@ -24,13 +22,10 @@ const PLACEHOLDER_PROVIDER = { modelId: 'desktop-placeholder' } as LanguageModel
  * @returns CreateAgentOptions
  */
 function buildSessionAgentOptions(cwd?: string, messages?: CoreMessage[]): CreateAgentOptions {
-  const skillPaths = resolveCreateAgentSkillPaths()
   return {
     provider: PLACEHOLDER_PROVIDER,
     ...(messages ? { messages } : {}),
-    ...(cwd ? { local: { cwd } } : {}),
-    ...(skillPaths.length ? { skills: { paths: skillPaths } } : {}),
-    mcp: { configPath: getMcpConfigPath() }
+    ...(cwd ? { local: { cwd } } : {})
   }
 }
 
@@ -58,8 +53,7 @@ let mcpHostAgent: Agent | undefined
 export function getMcpHostAgent(): Agent {
   if (!mcpHostAgent) {
     mcpHostAgent = createAgent({
-      provider: PLACEHOLDER_PROVIDER,
-      mcp: { configPath: getMcpConfigPath() }
+      provider: PLACEHOLDER_PROVIDER
     })
   }
   return mcpHostAgent
@@ -71,10 +65,9 @@ export function getMcpHostAgent(): Agent {
  * @returns 重建后的宿主 Agent
  */
 export async function resetMcpHostAgent(): Promise<Agent> {
-  await mcpHostAgent?.mcp?.dispose()
+  await mcpHostAgent?.mcp.dispose()
   mcpHostAgent = createAgent({
-    provider: PLACEHOLDER_PROVIDER,
-    mcp: { configPath: getMcpConfigPath() }
+    provider: PLACEHOLDER_PROVIDER
   })
   return mcpHostAgent
 }

@@ -94,6 +94,12 @@ function parseForwardedProps(forwarded: unknown): OpenWorkAgentRunDefaults {
   if (src.tavily != null && typeof src.tavily === 'object') {
     out.tavily = src.tavily as OpenWorkAgentRunDefaults['tavily']
   }
+  if (src.skills != null && typeof src.skills === 'object') {
+    out.skills = src.skills as OpenWorkAgentRunDefaults['skills']
+  }
+  if (src.mcp != null && typeof src.mcp === 'object') {
+    out.mcp = src.mcp as OpenWorkAgentRunDefaults['mcp']
+  }
   if (typeof src.maxSteps === 'number') {
     out.maxSteps = src.maxSteps
   }

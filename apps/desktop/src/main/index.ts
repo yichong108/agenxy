@@ -32,6 +32,7 @@ import {
   ensureHomeWorkspaceInList,
   getActiveWorkspace,
   getActiveWorkspaceId,
+  getMcpConfigPath,
   getSessionMessages,
   getUiState,
   getWorkspace,
@@ -124,7 +125,7 @@ function getMcpWarmupStatus(): McpWarmupStatus {
 
 async function executeMcpWarmupCycle(): Promise<McpWarmupReport> {
   const gen = ++mcpWarmupGen
-  const servers = (await getMcpHostAgent().mcp?.warmup()) ?? []
+  const servers = (await getMcpHostAgent().mcp.warmup(getMcpConfigPath())) ?? []
   if (gen !== mcpWarmupGen) {
     return lastMcpWarmupReport ?? { atMs: Date.now(), servers: [] }
   }
@@ -608,9 +609,7 @@ function registerIpc(): void {
     if (!entry || typeof entry !== 'object') {
       return { ok: false as const, error: '无效配置' }
     }
-    return (
-      (await getMcpHostAgent().mcp?.probe(entry)) ?? { ok: false as const, error: 'MCP 未配置' }
-    )
+    return (await getMcpHostAgent().mcp.probe(entry)) ?? { ok: false as const, error: 'MCP 未配置' }
   })
   ipcMain.on(IPC.WINDOW_CAPTION_CONTROLS, (event, visible: unknown) => {
     const win =
@@ -696,7 +695,7 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   applicationIsQuitting = true
-  void getMcpHostAgent().mcp?.dispose()
+  void getMcpHostAgent().mcp.dispose()
   void shutdownLangfuseTracing()
 })
 

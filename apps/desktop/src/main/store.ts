@@ -262,7 +262,7 @@ function writeLocalSettingsCache(next: AppSettings): void {
 }
 
 /**
- * MCP 配置文件路径（userData/mcp.json），供 createAgent.mcp.configPath 使用。
+ * MCP 配置文件路径（userData/mcp.json），供 send.mcp.configPath 使用。
  *
  * @returns 绝对路径
  */

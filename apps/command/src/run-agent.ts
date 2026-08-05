@@ -14,11 +14,10 @@ import { type AgentComposerMode, type AppSettings, MAX_AGENT_LOOP_STEPS } from '
  *
  * @param settings - 含 API Key / 模型的 AppSettings
  * @param cwd - 工作区根目录
- * @param mcpConfigPath - 可选 MCP 配置路径
  * @returns Agent 实例
  * @throws 未配置 API Key 时抛出
  */
-export function createCliAgent(settings: AppSettings, cwd: string, mcpConfigPath?: string): Agent {
+export function createCliAgent(settings: AppSettings, cwd: string): Agent {
   const provider = getChatModel(settings)
   if (!provider) {
     throw new Error(
@@ -28,8 +27,7 @@ export function createCliAgent(settings: AppSettings, cwd: string, mcpConfigPath
 
   return createAgent({
     provider,
-    local: { cwd: resolve(cwd) },
-    ...(mcpConfigPath ? { mcp: { configPath: resolve(mcpConfigPath) } } : {})
+    local: { cwd: resolve(cwd) }
   })
 }
 
@@ -54,7 +52,7 @@ function printToolEvent(event: ToolObservation): void {
  *
  * @param agent - createAgent 实例
  * @param userText - 用户输入
- * @param options - mode / settings（超时与 Tavily）
+ * @param options - mode / settings / 可选 mcpConfigPath
  */
 export async function runOnce(
   agent: Agent,
@@ -62,6 +60,7 @@ export async function runOnce(
   options: {
     mode: AgentComposerMode
     settings: AppSettings
+    mcpConfigPath?: string
   }
 ): Promise<void> {
   const abortController = new AbortController()
@@ -76,6 +75,7 @@ export async function runOnce(
       composerMode: options.mode,
       abortController,
       tavily: { apiKey: options.settings.tavilyApiKey },
+      ...(options.mcpConfigPath ? { mcp: { configPath: resolve(options.mcpConfigPath) } } : {}),
       maxSteps: MAX_AGENT_LOOP_STEPS,
       invokeTimeoutMs: options.settings.agentRunTimeoutMs,
       onTextDelta: (text) => {
@@ -93,13 +93,14 @@ export async function runOnce(
  * 交互式 REPL：循环读取 stdin，直到空行 / exit / Ctrl+D。
  *
  * @param agent - createAgent 实例
- * @param options - mode / settings
+ * @param options - mode / settings / 可选 mcpConfigPath
  */
 export async function runRepl(
   agent: Agent,
   options: {
     mode: AgentComposerMode
     settings: AppSettings
+    mcpConfigPath?: string
   }
 ): Promise<void> {
   const rl = createInterface({ input, output, terminal: true })

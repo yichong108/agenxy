@@ -2,7 +2,7 @@
  * @openwork/agent 公共 API — 以 createAgent 为入口，辅以工具定义与宿主持久化所需类型。
  *
  * 消息与工具统一使用 AI SDK 的 CoreMessage / Tool / ToolSet。
- * MCP 通过 createAgent({ provider, mcp: { configPath } }) 启用，宿主侧用 agent.mcp（probe/warmup/dispose）；
+ * MCP 通过 send({ mcp: { configPath } }) 按轮启用；宿主侧用 agent.mcp（probe/warmup/dispose）管理连接池；
  * 不在包根导出 MCP 实现细节。
  */
 
@@ -11,14 +11,14 @@ export {
   type Agent,
   type AgentMcp,
   type AgentRunInput,
+  type AgentRunMcpOptions,
   type AgentRunResult,
+  type AgentRunSkillsOptions,
   type AgentRunTavilyOptions,
   type AgentWaitResult,
   type AgentWaitStatus,
   type CreateAgentLocalOptions,
-  type CreateAgentMcpOptions,
-  type CreateAgentOptions,
-  type CreateAgentSkillsOptions
+  type CreateAgentOptions
 } from './create-agent.js'
 
 export {

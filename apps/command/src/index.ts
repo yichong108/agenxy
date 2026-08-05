@@ -31,19 +31,24 @@ async function main(): Promise<void> {
   }
 
   const settings = settingsFromEnv()
-  const agent = createCliAgent(settings, options.cwd, options.mcpConfigPath)
+  const agent = createCliAgent(settings, options.cwd)
 
   try {
     if (options.prompt) {
       await runOnce(agent, options.prompt, {
         mode: options.mode,
-        settings
+        settings,
+        mcpConfigPath: options.mcpConfigPath
       })
     } else {
-      await runRepl(agent, { mode: options.mode, settings })
+      await runRepl(agent, {
+        mode: options.mode,
+        settings,
+        mcpConfigPath: options.mcpConfigPath
+      })
     }
   } finally {
-    await agent.mcp?.dispose()
+    await agent.mcp.dispose()
   }
 }
 

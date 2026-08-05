@@ -1,5 +1,5 @@
 /**
- * Desktop 技能路径解析 — 仅供 createAgent.skills.paths 使用。
+ * Desktop 技能路径解析 — 仅供 send.skills.paths 使用。
  *
  * 扫描优先级：内置随包目录 → market 安装子目录 → 用户根目录下其余技能包（跳过 market / .cache）。
  * 加载与工具组装由 @openwork/agent 的 loadSkillsFromPaths 完成。
@@ -22,9 +22,9 @@ export {
 } from '@/main/agent/skills/paths'
 
 /**
- * 解析当前进程可用的 skills 根目录列表，供 createAgent({ skills: { paths } }) 使用。
+ * 解析当前进程可用的 skills 根目录列表，供 agent.send({ skills: { paths } }) 使用。
  *
- * 同步实现，以便在同步的 createSessionAgent / createAgent 调用链中使用。
+ * 同步实现，可在 send 前解析路径。
  * 同名技能由 agent 侧「先出现优先」去重。
  *
  * @returns 绝对路径列表

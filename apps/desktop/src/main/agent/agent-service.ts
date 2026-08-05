@@ -12,8 +12,15 @@ import type { WebContents } from 'electron'
 
 import { createSessionAgent } from '@/main/agent/agent-instance'
 import { agentLog } from '@/main/agent/agent-log'
+import { resolveCreateAgentSkillPaths } from '@/main/agent/skills'
 import { flushLangfuseTracing } from '@/main/langfuse'
-import { getSessionMessages, getSettings, getWorkspaceById, setSessionMessages } from '@/main/store'
+import {
+  getMcpConfigPath,
+  getSessionMessages,
+  getSettings,
+  getWorkspaceById,
+  setSessionMessages
+} from '@/main/store'
 import {
   type AgentSendOptions,
   type ChatMessage,
@@ -330,6 +337,7 @@ export async function runUserMessage(
       throw new Error('请先在设置中配置 API Key')
     }
 
+    const skillPaths = resolveCreateAgentSkillPaths()
     const graphResult = await session.agent.send(agentUserText, {
       composerMode,
       provider,
@@ -338,6 +346,8 @@ export async function runUserMessage(
       // sessionId / runId / traceId 仅在宿主侧使用；agent 只收 terminalKey
       terminalKey: session.terminalKey,
       tavily: { apiKey: settings.tavilyApiKey },
+      ...(skillPaths.length ? { skills: { paths: skillPaths } } : {}),
+      mcp: { configPath: getMcpConfigPath() },
       maxSteps: MAX_AGENT_LOOP_STEPS,
       invokeTimeoutMs: settings.agentRunTimeoutMs,
       onTextDelta: (text) => {
