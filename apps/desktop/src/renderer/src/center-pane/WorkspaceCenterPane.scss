@@ -291,6 +291,10 @@
   padding: 10px 14px;
 }
 
+.app-message-card.is-user .ant-card-body {
+  padding: 8px 14px;
+}
+
 .app-message-card.is-assistant .ant-card-body {
   padding: 4px 7px;
 }
@@ -298,6 +302,7 @@
 .app-message-card.is-user {
   border: 1px solid var(--aw-color-border);
   background: var(--aw-color-bg-container);
+  box-shadow: var(--aw-shadow-soft);
 }
 
 .app-message-card.is-user.is-sticky-prompt {
@@ -325,12 +330,54 @@
 
 .app-message-card.is-user .app-message-content {
   white-space: pre-wrap;
+  font-size: var(--aw-font-lg);
+  line-height: 1.75;
+}
+
+.app-message-markdown-wrap {
+  min-width: 0;
+}
+
+.app-message-markdown-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+
+.app-message-markdown-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--aw-color-icon);
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
+}
+
+.app-message-markdown-copy:hover {
+  color: var(--aw-color-icon-hover);
+  background: rgb(24 24 27 / 0.04);
+}
+
+.app-message-markdown-copy:active {
+  background: rgb(24 24 27 / 0.1);
 }
 
 .app-message-markdown {
   color: var(--aw-color-text);
-  line-height: var(--aw-line-relaxed);
+  font-size: var(--aw-font-lg);
+  line-height: 1.75;
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .app-message-markdown > *:first-child {
@@ -342,60 +389,291 @@
 }
 
 .app-message-markdown p {
-  margin: 0 0 8px;
+  margin: 0 0 0.7em;
+}
+
+.app-message-markdown h1,
+.app-message-markdown h2,
+.app-message-markdown h3,
+.app-message-markdown h4,
+.app-message-markdown h5,
+.app-message-markdown h6 {
+  margin: 1.15em 0 0.45em;
+  color: var(--aw-color-text);
+  font-weight: var(--aw-font-weight-semibold);
+  line-height: var(--aw-line-snug);
+  letter-spacing: -0.01em;
+}
+
+.app-message-markdown h1 {
+  font-size: 1.35em;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--aw-color-border-secondary);
+}
+
+.app-message-markdown h2 {
+  font-size: 1.2em;
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid var(--aw-color-border-secondary);
+}
+
+.app-message-markdown h3 {
+  font-size: 1.08em;
+}
+
+.app-message-markdown h4,
+.app-message-markdown h5,
+.app-message-markdown h6 {
+  font-size: 1em;
+  color: var(--aw-color-text-secondary);
+}
+
+.app-message-markdown strong {
+  font-weight: var(--aw-font-weight-semibold);
+  color: var(--aw-color-text);
+}
+
+.app-message-markdown em {
+  color: var(--aw-color-text-secondary);
 }
 
 .app-message-markdown ul,
 .app-message-markdown ol {
-  margin: 0 0 8px;
-  padding-left: 20px;
+  margin: 0 0 0.7em;
+  padding-left: 1.35em;
 }
 
 .app-message-markdown li {
-  margin: 4px 0;
+  margin: 0.28em 0;
+  padding-left: 0.15em;
+}
+
+/* 自定义圆点：黑色 + 相对首行垂直居中（放大 ::marker 难以对齐） */
+.app-message-markdown ul:not(.contains-task-list) {
+  list-style: none;
+  padding-left: 0.2em;
+}
+
+.app-message-markdown ul:not(.contains-task-list) > li {
+  position: relative;
+  padding-left: 1.2em;
+}
+
+.app-message-markdown ul:not(.contains-task-list) > li::before {
+  content: '';
+  position: absolute;
+  left: 0.2em;
+  /* 与正文行高 1.75 对齐：落在首行中线 */
+  top: 0.875em;
+  width: 0.42em;
+  height: 0.42em;
+  border-radius: 50%;
+  background: var(--aw-color-text);
+  transform: translateY(-50%);
+}
+
+.app-message-markdown li > p {
+  margin: 0.25em 0;
+}
+
+.app-message-markdown li + li {
+  margin-top: 0.2em;
+}
+
+.app-message-markdown ul.contains-task-list {
+  list-style: none;
+  padding-left: 0.15em;
+}
+
+.app-message-markdown li.task-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45em;
+  padding-left: 0;
+}
+
+.app-message-markdown li.task-list-item input[type='checkbox'] {
+  margin: 0.35em 0 0;
+  accent-color: var(--aw-color-accent);
+  pointer-events: none;
 }
 
 .app-message-markdown blockquote {
-  margin: 8px 0;
-  padding: 4px 10px;
-  border-left: 3px solid var(--aw-color-primary-border);
+  margin: 0.75em 0;
+  padding: 0.45em 0.85em;
+  border-left: 3px solid var(--aw-color-border-strong);
+  border-radius: 0 8px 8px 0;
   color: var(--aw-color-text-secondary);
-  background: var(--aw-color-fill-secondary);
+  background: rgb(24 24 27 / 0.035);
+}
+
+.app-message-markdown blockquote > :last-child {
+  margin-bottom: 0;
 }
 
 .app-message-markdown code {
-  padding: 0 4px;
-  border-radius: 4px;
-  background: var(--aw-color-fill-secondary);
+  padding: 0.12em 0.4em;
+  border-radius: 5px;
+  background: rgb(24 24 27 / 0.05);
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
+  font-size: 0.92em;
+  color: var(--aw-color-text);
 }
 
 .app-message-markdown hr {
   border: none;
   border-top: 1px solid var(--aw-color-border);
-  margin-block-start: 1.5em;
-  margin-block-end: 1.5em;
-  margin-inline-start: auto;
-  margin-inline-end: auto;
+  margin: 1.25em 0;
+}
+
+.app-message-codeblock {
+  position: relative;
+  margin: 0.8em 0;
+  overflow: hidden;
+  border: 1px solid var(--aw-color-border);
+  border-radius: 10px;
+  /* 接近 Cursor：近白底，靠边框与画布区分，不用灰底 */
+  background: var(--aw-color-bg-container);
+  box-shadow: none;
+}
+
+.app-message-codeblock-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: var(--aw-color-bg-container);
+  color: var(--aw-color-icon);
+  font-size: 13px;
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease,
+    opacity 0.12s ease;
+}
+
+.app-message-codeblock:hover .app-message-codeblock-copy,
+.app-message-codeblock-copy:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.app-message-codeblock-copy:hover {
+  color: var(--aw-color-icon-hover);
+  background: rgb(24 24 27 / 0.04);
+}
+
+.app-message-codeblock-copy:active {
+  background: rgb(24 24 27 / 0.1);
 }
 
 .app-message-markdown pre {
-  margin: 8px 0;
-  padding: 10px;
+  margin: 0;
+  padding: 0.55em 0.7em;
+  /* 给右上角复制按钮留空，避免遮挡首行代码 */
+  padding-right: 2.2em;
   overflow: auto;
-  border: 1px solid var(--aw-color-border-secondary);
-  border-radius: 10px;
-  background: var(--aw-color-bg-container);
+  background: transparent;
 }
 
-.app-message-markdown pre code {
+.app-message-markdown pre code,
+.app-message-markdown pre .hljs {
+  display: block;
   padding: 0;
-  background: transparent;
+  border: none;
+  border-radius: 0;
+  background: transparent !important;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
+  font-size: var(--aw-font-sm);
+  line-height: var(--aw-line-body);
+  color: var(--aw-color-text);
+  tab-size: 2;
 }
 
 .app-message-markdown a {
   color: var(--aw-color-accent);
   text-decoration: underline;
+  text-decoration-color: rgb(10 10 10 / 0.28);
+  text-underline-offset: 0.18em;
+  transition:
+    color 0.12s ease,
+    text-decoration-color 0.12s ease;
   cursor: pointer;
+}
+
+.app-message-markdown a:hover {
+  color: var(--aw-color-accent-hover);
+  text-decoration-color: rgb(10 10 10 / 0.55);
+}
+
+.app-message-markdown img {
+  max-width: 100%;
+  height: auto;
+  margin: 0.6em 0;
+  border: 1px solid var(--aw-color-border-secondary);
+  border-radius: 10px;
+  background: var(--aw-color-bg-container);
+}
+
+.app-message-markdown-table-wrap {
+  margin: 0.75em 0;
+  overflow: auto;
+  border: 1px solid var(--aw-color-border);
+  border-radius: 6px;
+  background: transparent;
+}
+
+.app-message-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--aw-font-md);
+  line-height: var(--aw-line-body);
+  background: transparent;
+}
+
+.app-message-markdown th,
+.app-message-markdown td {
+  padding: 0.5em 0.75em;
+  /* 仅内部分隔，外边框交给 wrap，避免叠粗并保住圆角 */
+  border: none;
+  border-right: 1px solid var(--aw-color-border);
+  border-bottom: 1px solid var(--aw-color-border);
+  background: transparent;
+  text-align: left;
+  vertical-align: top;
+}
+
+.app-message-markdown th:last-child,
+.app-message-markdown td:last-child {
+  border-right: none;
+}
+
+/* 仅去掉最后一行数据单元格底边；勿用 tr:last-child th（会误伤 thead） */
+.app-message-markdown tbody tr:last-child td,
+.app-message-markdown table > tr:last-child td {
+  border-bottom: none;
+}
+
+.app-message-markdown th {
+  border-bottom: 1px solid var(--aw-color-border);
+  color: var(--aw-color-text-secondary);
+  font-weight: var(--aw-font-weight-semibold);
+  white-space: nowrap;
 }
 
 .app-timeline-accordion {
@@ -645,8 +923,8 @@ textarea.app-composer-input.ant-input {
   flex: 0 1 auto;
   width: 100%;
   padding: 4px 2px 2px;
-  font-size: var(--aw-font-sm);
-  line-height: var(--aw-line-body);
+  font-size: var(--aw-font-lg);
+  line-height: 1.75;
   color: var(--aw-color-text);
   background: transparent !important;
   border: none !important;

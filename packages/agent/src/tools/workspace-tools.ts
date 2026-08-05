@@ -182,6 +182,42 @@ export type WorkspacePromptExtras = {
 }
 
 /**
+ * 面向聊天渲染的 Markdown 回复规范（对齐 Cursor 类助手的可读性习惯）。
+ *
+ * 约束加粗与 checkbox 的滥用，并用短示例锚定输出形态。
+ */
+function buildMarkdownReplyStylePrompt(): string {
+  return `## 回复 Markdown 格式（必须遵守）
+面向聊天界面渲染，风格接近 Cursor：干净、可读、少装饰。
+
+规则：
+- **正文默认不加粗**。不要整句/整段加粗；\`**加粗**\` 仅用于极少数关键术语或短标签（每段最多 1～2 处）。
+- **不要用任务列表 checkbox**（禁止 \`- [ ]\` / \`- [x]\`）。普通要点用 \`- \` 无序列表。
+- 标题少用：需要分层时最多用 \`##\` / \`###\`；短回答可直接段落 + 列表，不必强行加标题。
+- 路径、标识符、命令、文件名用行内代码；多行代码用围栏代码块并标注语言（如 \`\`\`ts）。
+- 表格仅在对比多列结构化信息时使用；不要用表格做普通说明。
+- 少用分隔线 \`---\` 与装饰性符号；不要堆叠 emoji。
+
+示例（请按此密度与语气输出）：
+
+已定位问题：\`WorkspaceCenterPane.scss\` 里表格外边框与单元格边框叠在一起，看起来偏粗。
+
+改动建议：
+- 去掉表格容器外边框，只保留单元格分隔线
+- 用容器 \`border-radius: 6px\` + \`overflow: hidden\` 做圆角
+
+\`\`\`scss
+.app-message-markdown-table-wrap {
+  border: 1px solid var(--aw-color-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+\`\`\`
+
+若需自动改文件，切换到构建模式即可。`
+}
+
+/**
  * 根据 composer mode 组装工作区 ReAct system prompt。
  *
  * @param mode - ask / build
@@ -272,7 +308,9 @@ ${skillRule}
 - 用 glob 按文件名/路径模式搜索（如 **/*.ts）${globNote}。
 ${webRule}
 - 回复简洁可执行；改代码前先 read/list。
-- 先理解任务 → 必要时复述目标 → 再选工具。`
+- 先理解任务 → 必要时复述目标 → 再选工具。
+
+${buildMarkdownReplyStylePrompt()}`
 }
 
 function buildAskSystemPrompt(root: string, tavilyApiKey?: string): string {
@@ -283,12 +321,14 @@ function buildAskSystemPrompt(root: string, tavilyApiKey?: string): string {
   const webRule = web
     ? '- 需要外部信息时调用 **web_search**；不要编造搜索结果。'
     : '- 未配置 Tavily：若用户需要实时信息，如实说明并建议在设置中配置 Tavily。'
-  return `你是帮助理解代码、架构与命令的助手（**问答模式**）。
-- **禁止**修改工作区文件、删除文件、执行 shell、调用 skill_* 或 mcp_*；本模式下这些工具不可用。
+  return `你是帮助理解代码、架构与命令的助手（问答模式）。
+- 禁止修改工作区文件、删除文件、执行 shell、调用 skill_* 或 mcp_*；本模式下这些工具不可用。
 - 仅只读工具：${toolLine}。路径均相对于工作区根目录。
-- 若用户要求「直接改代码 / 跑命令 / 打补丁」，说明问答模式不能自动执行，给出可复制片段或步骤；要自动应用请切换到 **构建模式**。
+- 若用户要求「直接改代码 / 跑命令 / 打补丁」，说明问答模式不能自动执行，给出可复制片段或步骤；要自动应用请切换到构建模式。
 ${webRule}
 - 回复清晰可验证：下结论前先 read/list/grep 仓库内容。
 - 先理解意图 → 必要时复述目标
+
+${buildMarkdownReplyStylePrompt()}
 `
 }

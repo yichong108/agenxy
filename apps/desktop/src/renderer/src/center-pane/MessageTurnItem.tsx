@@ -4,10 +4,10 @@ import {
   type MessageTurn,
   remarkLinkifyBareUrls
 } from './center-pane-utils'
-import { RightOutlined } from '@ant-design/icons'
-import { Card, Typography } from 'antd'
-import React from 'react'
-import ReactMarkdown from 'react-markdown'
+import { CheckOutlined, CopyOutlined, RightOutlined } from '@ant-design/icons'
+import { App as AntdApp, Card, Typography } from 'antd'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import ReactMarkdown, { type Components } from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
 import remarkGfm from 'remark-gfm'
 
@@ -17,6 +17,95 @@ const { Text } = Typography
 
 const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkLinkifyBareUrls]
 const MARKDOWN_REHYPE_PLUGINS = [rehypeHighlight]
+
+/** 递归收集 React 节点中的纯文本，用于代码块复制 */
+function collectTextContent(node: React.ReactNode): string {
+  if (node == null || typeof node === 'boolean') return ''
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(collectTextContent).join('')
+  if (React.isValidElement<{ children?: React.ReactNode }>(node)) {
+    return collectTextContent(node.props.children)
+  }
+  return ''
+}
+
+type MarkdownCodeBlockProps = {
+  children?: React.ReactNode
+}
+
+/**
+ * Markdown 围栏代码块：右上角复制按钮（不展示语言行）。
+ *
+ * 点击复制会写入剪贴板，并短暂切换为勾选图标作为反馈；
+ * 事件 stopPropagation，避免触发外层 Markdown 外链确认逻辑。
+ */
+function MarkdownCodeBlock({ children }: MarkdownCodeBlockProps) {
+  const { message: msgApi } = AntdApp.useApp()
+  const [copied, setCopied] = useState(false)
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current)
+    }
+  }, [])
+
+  const codeText = collectTextContent(children)
+
+  const handleCopy = useCallback(
+    async (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault()
+      event.stopPropagation()
+      if (!codeText) {
+        msgApi.warning('没有可复制的代码')
+        return
+      }
+      try {
+        await navigator.clipboard.writeText(codeText)
+        setCopied(true)
+        if (resetTimerRef.current) clearTimeout(resetTimerRef.current)
+        resetTimerRef.current = setTimeout(() => setCopied(false), 1600)
+      } catch {
+        msgApi.error('复制失败，请手动选择文本复制')
+      }
+    },
+    [codeText, msgApi]
+  )
+
+  return (
+    <div className="app-message-codeblock">
+      <button
+        type="button"
+        className="app-message-codeblock-copy"
+        onClick={(event) => void handleCopy(event)}
+        aria-label={copied ? '已复制' : '复制代码'}
+        title={copied ? '已复制' : '复制'}
+      >
+        {copied ? <CheckOutlined /> : <CopyOutlined />}
+      </button>
+      <pre>{children}</pre>
+    </div>
+  )
+}
+
+/**
+ * Markdown 自定义节点映射。
+ *
+ * 为代码块增加右上角复制、为表格增加横向滚动外壳，
+ * 其余节点沿用默认渲染并由 SCSS 控制观感。
+ */
+const MARKDOWN_COMPONENTS: Components = {
+  pre({ children }) {
+    return <MarkdownCodeBlock>{children}</MarkdownCodeBlock>
+  },
+  table({ children }) {
+    return (
+      <div className="app-message-markdown-table-wrap">
+        <table>{children}</table>
+      </div>
+    )
+  }
+}
 
 export type MessageTurnItemProps = {
   /** 单个消息回合（用户消息及其后的 assistant 回复等） */
@@ -126,10 +215,66 @@ function MessageMarkdown({
       <ReactMarkdown
         remarkPlugins={MARKDOWN_REMARK_PLUGINS}
         rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
+        components={MARKDOWN_COMPONENTS}
       >
         {content}
       </ReactMarkdown>
     </div>
+  )
+}
+
+type MessageContentCopyButtonProps = {
+  /** 要写入剪贴板的完整 Markdown 原文 */
+  text: string
+}
+
+/**
+ * 助手回复完成后的全文复制按钮（右下角常显）。
+ *
+ * @param text - 消息 Markdown 原文
+ */
+function MessageContentCopyButton({ text }: MessageContentCopyButtonProps) {
+  const { message: msgApi } = AntdApp.useApp()
+  const [copied, setCopied] = useState(false)
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current)
+    }
+  }, [])
+
+  const handleCopy = useCallback(
+    async (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault()
+      event.stopPropagation()
+      const value = text.trim()
+      if (!value) {
+        msgApi.warning('没有可复制的内容')
+        return
+      }
+      try {
+        await navigator.clipboard.writeText(value)
+        setCopied(true)
+        if (resetTimerRef.current) clearTimeout(resetTimerRef.current)
+        resetTimerRef.current = setTimeout(() => setCopied(false), 1600)
+      } catch {
+        msgApi.error('复制失败，请手动选择文本复制')
+      }
+    },
+    [msgApi, text]
+  )
+
+  return (
+    <button
+      type="button"
+      className="app-message-markdown-copy"
+      onClick={(event) => void handleCopy(event)}
+      aria-label={copied ? '已复制' : '复制回复'}
+      title={copied ? '已复制' : '复制'}
+    >
+      {copied ? <CheckOutlined /> : <CopyOutlined />}
+    </button>
   )
 }
 
@@ -195,8 +340,11 @@ type AssistantMessageBodyProps = {
   ctx: MessageCardContext
 }
 
-/** assistant 消息正文：时间线手风琴 + Markdown */
+/** assistant 消息正文：时间线手风琴 + Markdown；回复完成后右下角常显复制 */
 function AssistantMessageBody({ msg, view, ctx }: AssistantMessageBodyProps) {
+  const markdownContent = msg.content || view.contentPlaceholder
+  const showContentCopy = !view.isStreaming && Boolean(msg.content?.trim())
+
   return (
     <>
       {view.showTimelineAccordion ? (
@@ -212,10 +360,14 @@ function AssistantMessageBody({ msg, view, ctx }: AssistantMessageBodyProps) {
           }
         />
       ) : null}
-      <MessageMarkdown
-        content={msg.content || view.contentPlaceholder}
-        onMarkdownClick={ctx.onMarkdownClick}
-      />
+      <div className="app-message-markdown-wrap">
+        <MessageMarkdown content={markdownContent} onMarkdownClick={ctx.onMarkdownClick} />
+        {showContentCopy ? (
+          <div className="app-message-markdown-actions">
+            <MessageContentCopyButton text={msg.content} />
+          </div>
+        ) : null}
+      </div>
     </>
   )
 }
