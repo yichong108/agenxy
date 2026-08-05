@@ -1,7 +1,6 @@
 import { existsSync } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 
 import { app } from 'electron'
 
@@ -26,25 +25,16 @@ export function skillsCacheRoot(): string {
 /**
  * 内置技能（随包分发）源路径。
  * 打包：`resources/skills`。
- * 开发：`app.getAppPath()/src/skills` 或相对 bundle 回退到项目 `src/skills`。
+ * 开发：由 electron-vite define 注入的 `packages/skills/content` 目录。
  */
 export function getBundledSkillsSourceDir(): string | null {
   if (app.isPackaged) {
     const absRoot = path.join(process.resourcesPath, 'skills')
     return existsSync(absRoot) ? absRoot : null
   }
-  const appPathSkills = path.join(app.getAppPath(), 'src', 'skills')
-  if (existsSync(appPathSkills)) return appPathSkills
-  /** 与旧版一致：打包后主入口多在 `out/main`，`../../src/skills` 指向仓库技能目录 */
-  const fromBundle = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    '..',
-    '..',
-    'src',
-    'skills'
-  )
-  if (existsSync(fromBundle)) return fromBundle
-  mainLog.warn('[skills] 开发模式下未找到内置技能目录，已尝试:', appPathSkills, fromBundle)
+  const fromPackage = __OPENWORK_BUNDLED_SKILLS_DIR__
+  if (existsSync(fromPackage)) return fromPackage
+  mainLog.warn('[skills] 开发模式下未找到内置技能目录，已尝试:', fromPackage)
   return null
 }
 

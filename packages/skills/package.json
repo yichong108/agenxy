@@ -1,0 +1,17 @@
+{
+  "name": "@openwork/skills",
+  "version": "0.0.0",
+  "description": "Openwork bundled agent skills (SKILL.md 内容包)",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "typescript": "^5.8.3"
+  }
+}

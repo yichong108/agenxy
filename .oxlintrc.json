@@ -14,7 +14,7 @@
     "**/.next/**",
     "**/.turbo/**",
     "apps/desktop/src/extensions/**",
-    "apps/desktop/src/skills/**"
+    "packages/skills/content/**"
   ],
   "settings": {
     "next": {

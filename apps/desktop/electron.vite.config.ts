@@ -21,6 +21,8 @@ function readGitShortHash(cwd: string): string {
 const aliasSrc = resolve(__dirname, 'src')
 const aliasAgent = resolve(__dirname, '../../packages/agent/src/index.ts')
 const aliasShared = resolve(__dirname, '../../packages/shared/src/index.ts')
+/** 内置 skills 内容根目录（开发/未打包时由 define 注入，避免打包后 import.meta.url 漂移） */
+const bundledSkillsDir = resolve(__dirname, '../../packages/skills/content')
 /** monaco-themes 未在 package exports 中暴露 themes/，需直连磁盘路径供 Vite 解析 */
 const monacoGithubLightThemeJson = resolve(
   rootDir,
@@ -31,7 +33,8 @@ export default defineConfig({
   main: {
     define: {
       __OPENWORK_GIT_COMMIT__: JSON.stringify(readGitShortHash(rootDir)),
-      __OPENWORK_BUILD_ISO__: JSON.stringify(new Date().toISOString())
+      __OPENWORK_BUILD_ISO__: JSON.stringify(new Date().toISOString()),
+      __OPENWORK_BUNDLED_SKILLS_DIR__: JSON.stringify(bundledSkillsDir)
     },
     resolve: {
       alias: {

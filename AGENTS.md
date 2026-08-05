@@ -104,6 +104,7 @@ class SessionManager {
 - [@openwork/agent](packages/agent/README.md) 智能体
 - [@openwork/openwork-agent](packages/openworkAgent) AG-UI AbstractAgent 适配
 - [@openwork/shared](packages/shared/README.md) 公用工具
+- [@openwork/skills](packages/skills/README.md) 内置 Agent Skills
 - [@openwork/api](services/api/README.md) 后端API服务
 - [@openwork/desktop](apps/desktop/README.md) 桌面客户端
 - [@openwork/admin](apps/admin/README.md) 后台管理

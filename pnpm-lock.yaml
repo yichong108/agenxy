@@ -121,6 +121,9 @@ importers:
       '@openwork/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@openwork/skills':
+        specifier: workspace:*
+        version: link:../../packages/skills
       '@vscode/ripgrep':
         specifier: ^1.18.0
         version: 1.18.0
@@ -375,6 +378,15 @@ importers:
 
   packages/shared:
     devDependencies:
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
+  packages/skills:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.14.1
+        version: 22.19.19
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
