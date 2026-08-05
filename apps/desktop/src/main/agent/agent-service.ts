@@ -1,27 +1,31 @@
 import {
-  type Agent,
+  type CoreMessage,
   assistantMessage,
   contentToText,
-  type CoreMessage,
   killCommand,
   resolveChatModel,
-  type ToolObservation,
   userMessage
 } from '@openworker/agent'
+import {
+  coreMessagesToAgui,
+  OpenWorkerAgent,
+  type OpenWorkerAgentRunDefaults
+} from '@openworker/openworker-agent'
+import { EventType, type BaseEvent, type RunErrorEvent, type RunStartedEvent } from '@ag-ui/client'
 import type { WebContents } from 'electron'
+import type { Subscription } from 'rxjs'
 
-import { createSessionAgent } from '@/main/agent/agent-instance'
+import { createSessionOpenWorkerAgent } from '@/main/agent/agent-instance'
 import { agentLog } from '@/main/agent/agent-log'
 import { flushLangfuseTracing } from '@/main/langfuse'
 import { getSessionMessages, getSettings, getWorkspaceById, setSessionMessages } from '@/main/store'
 import {
   type AgentSendOptions,
+  type AgentStreamPayload,
   type ChatMessage,
   EVENTS,
   MAX_AGENT_LOOP_STEPS,
-  normalizeComposerMode,
-  type StreamEvent,
-  type ToolTimelineEvent
+  normalizeComposerMode
 } from '@/shared/ipc'
 
 /** @deprecated 从 `@/main/agent/agent-log` 导入 */
@@ -29,42 +33,60 @@ export { agentLog } from '@/main/agent/agent-log'
 
 type SessionRuntime = {
   workspaceId: string
-  /** 该会话独立的 agent 实例（勿跨会话复用） */
-  agent: Agent
+  /** 该会话独立的 AG-UI agent（勿跨会话复用） */
+  agent: OpenWorkerAgent
   messages: CoreMessage[]
   controller: AbortController | null
+  subscription: Subscription | null
   terminalKey: string
 }
 
 /**
- * 按工作区创建会话级 agent。
+ * 按工作区创建会话级 OpenWorkerAgent。
  *
  * @param workspaceId - 工作区 ID
+ * @param sessionId - 会话 ID（作为 AG-UI threadId）
  * @param messages - 会话初始消息（可选）
- * @returns 新 Agent
+ * @returns 新 OpenWorkerAgent
  */
-function createAgentForWorkspace(workspaceId: string, messages?: CoreMessage[]): Agent {
+function createAgentForWorkspace(
+  workspaceId: string,
+  sessionId: string,
+  messages?: CoreMessage[]
+): OpenWorkerAgent {
   const cwd = getWorkspaceById(workspaceId)?.path?.trim() || undefined
-  return createSessionAgent({ cwd, messages })
+  return createSessionOpenWorkerAgent({ cwd, messages, threadId: sessionId })
 }
 
 const sessions = new Map<string, SessionRuntime>()
 let webContents: WebContents | null = null
 const MAX_PERSISTED_MESSAGES = 200
 
+/**
+ * 生成本轮 runId。
+ *
+ * @returns runId 字符串
+ */
 function makeRunId(): string {
   return `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-function makeTraceId(sessionId: string, runId: string): string {
-  return `${sessionId}:${runId}`
-}
-
-function emit(event: StreamEvent): void {
+/**
+ * 向渲染层推送 AG-UI 事件信封。
+ *
+ * @param payload - sessionId + BaseEvent
+ */
+function emit(payload: AgentStreamPayload): void {
   if (!webContents || webContents.isDestroyed()) return
-  webContents.send(EVENTS.AGENT_STREAM, event)
+  webContents.send(EVENTS.AGENT_STREAM, payload)
 }
 
+/**
+ * 裁剪持久化消息数量上限。
+ *
+ * @param messages - ChatMessage 列表
+ * @returns 裁剪后的列表
+ */
 function trimPersistedMessages(messages: ChatMessage[]): ChatMessage[] {
   if (messages.length <= MAX_PERSISTED_MESSAGES) return messages
   return messages.slice(-MAX_PERSISTED_MESSAGES)
@@ -73,7 +95,7 @@ function trimPersistedMessages(messages: ChatMessage[]): ChatMessage[] {
 /**
  * 将内存中的 CoreMessage 转为可持久化的 ChatMessage。
  *
- * 仅保留 user 与最后一条有文本的 assistant；tool 轮次靠 toolEvents 承载。
+ * 仅保留 user 与最后一条有文本的 assistant；工具过程靠 aguiEvents 承载。
  *
  * @param coreMessages - AI SDK CoreMessage 列表
  * @returns ChatMessage 列表
@@ -139,21 +161,29 @@ function fromPersistedMessages(messages: ChatMessage[]): CoreMessage[] {
   return list
 }
 
+/**
+ * 将 CoreMessage 轨迹持久化为 ChatMessage，并可选挂上本轮 AG-UI 事件快照。
+ *
+ * @param workspaceId - 工作区 ID
+ * @param sessionId - 会话 ID
+ * @param coreMessages - 本轮结束后的完整轨迹
+ * @param opts - 可选：挂到最后一条 assistant 的 aguiEvents（原始 AG-UI，不做 UI 转换）
+ */
 function persistSessionMessages(
   workspaceId: string,
   sessionId: string,
   coreMessages: CoreMessage[],
   opts?: {
-    toolEventsForLastAssistant?: ToolTimelineEvent[]
+    aguiEventsForLastAssistant?: BaseEvent[]
   }
 ): void {
   const list = toPersistedMessages(coreMessages)
-  const toolEvents = opts?.toolEventsForLastAssistant
-  if (toolEvents && toolEvents.length > 0) {
+  const aguiEvents = opts?.aguiEventsForLastAssistant
+  if (aguiEvents && aguiEvents.length > 0) {
     for (let i = list.length - 1; i >= 0; i -= 1) {
       const row = list[i]
       if (row?.role === 'assistant') {
-        list[i] = { ...row, toolEvents }
+        list[i] = { ...row, aguiEvents }
         break
       }
     }
@@ -161,12 +191,17 @@ function persistSessionMessages(
   setSessionMessages(workspaceId, sessionId, list)
 }
 
+/**
+ * 绑定主窗口 webContents，用于推送 AGENT_STREAM。
+ *
+ * @param wc - Electron WebContents
+ */
 export function bindAgentIpc(wc: WebContents): void {
   webContents = wc
 }
 
 /**
- * 初始化或校正会话运行时：每个会话绑定独立 agent。
+ * 初始化或校正会话运行时：每个会话绑定独立 OpenWorkerAgent。
  *
  * 若会话已存在但工作区变更，则重建该会话的 agent（更新 cwd）。
  *
@@ -179,7 +214,7 @@ export function initSessionState(workspaceId: string, sessionId: string): void {
     if (existing.workspaceId !== workspaceId) {
       existing.workspaceId = workspaceId
       // 工作区变更时重建 agent，保留已有会话消息
-      existing.agent = createAgentForWorkspace(workspaceId, existing.messages)
+      existing.agent = createAgentForWorkspace(workspaceId, sessionId, existing.messages)
     }
     return
   }
@@ -188,9 +223,10 @@ export function initSessionState(workspaceId: string, sessionId: string): void {
   const messages = fromPersistedMessages(persisted)
   sessions.set(sessionId, {
     workspaceId,
-    agent: createAgentForWorkspace(workspaceId, messages),
+    agent: createAgentForWorkspace(workspaceId, sessionId, messages),
     messages,
     controller: null,
+    subscription: null,
     terminalKey: `term:${sessionId}`
   })
 }
@@ -205,20 +241,33 @@ export function getSessionCoreMessages(sessionId: string): CoreMessage[] {
   return sessions.get(sessionId)?.messages ?? []
 }
 
+/**
+ * 清除会话运行时：取消进行中的 run、杀掉终端进程并删除会话条目。
+ *
+ * @param sessionId - 会话 ID
+ */
 export function clearSessionState(sessionId: string): void {
   const s = sessions.get(sessionId)
   if (s?.controller) {
     s.controller.abort()
   }
+  s?.subscription?.unsubscribe()
+  s?.agent.abortRun()
   void killCommand(s?.terminalKey ?? `term:${sessionId}`)
   sessions.delete(sessionId)
 }
 
+/**
+ * 取消当前会话进行中的 run。
+ *
+ * @param sessionId - 会话 ID
+ */
 export function cancelRun(sessionId: string): void {
   const s = sessions.get(sessionId)
   if (s?.controller) {
     s.controller.abort()
   }
+  s?.agent.abortRun()
   void killCommand(`term:${sessionId}`)
 }
 
@@ -233,7 +282,58 @@ export function isSessionRunning(sessionId: string): boolean {
 }
 
 /**
- * 运行用户消息。
+ * 发送预检失败的 AG-UI 边界事件（RUN_STARTED + RUN_ERROR）。
+ *
+ * @param sessionId - 会话 ID
+ * @param message - 错误文案
+ * @param runId - 可选 runId
+ */
+function emitPreRunError(sessionId: string, message: string, runId?: string): void {
+  const id = runId ?? makeRunId()
+  const started: RunStartedEvent = {
+    type: EventType.RUN_STARTED,
+    threadId: sessionId,
+    runId: id,
+    timestamp: Date.now()
+  }
+  emit({ sessionId, event: started })
+  const err: RunErrorEvent = {
+    type: EventType.RUN_ERROR,
+    message,
+    code: 'ERROR',
+    timestamp: Date.now()
+  }
+  emit({ sessionId, event: err })
+}
+
+/**
+ * 收集本轮与工具时间线相关的原始 AG-UI 事件（供落盘；不做 UI 转换）。
+ *
+ * @returns 累加器：onEvent + getEvents
+ */
+function createAguiTimelineEventCollector(): {
+  onEvent: (event: BaseEvent) => void
+  getEvents: () => BaseEvent[]
+} {
+  const events: BaseEvent[] = []
+  return {
+    onEvent(event: BaseEvent) {
+      if (
+        event.type === EventType.TOOL_CALL_START ||
+        event.type === EventType.TOOL_CALL_ARGS ||
+        event.type === EventType.TOOL_CALL_END ||
+        event.type === EventType.TOOL_CALL_RESULT ||
+        event.type === EventType.RUN_ERROR
+      ) {
+        events.push(event)
+      }
+    },
+    getEvents: () => events
+  }
+}
+
+/**
+ * 运行用户消息（经 OpenWorkerAgent / AG-UI）。
  *
  * 同会话同时只允许一次 run：已有运行中的智能体时直接拒绝。
  * 不同会话各自独立，可并行执行。
@@ -250,7 +350,7 @@ export async function runUserMessage(
   const composerMode = normalizeComposerMode(options?.mode)
   const agentUserText = userText.trim()
   if (!agentUserText) {
-    emit({ type: 'error', sessionId, message: '消息为空' })
+    emitPreRunError(sessionId, '消息为空')
     return
   }
   const settings = getSettings()
@@ -258,7 +358,7 @@ export async function runUserMessage(
 
   const session = sessions.get(sessionId)
   if (!session) {
-    emit({ type: 'error', sessionId, message: '会话不存在或已过期' })
+    emitPreRunError(sessionId, '会话不存在或已过期')
     return
   }
   if (session.controller) {
@@ -273,11 +373,13 @@ export async function runUserMessage(
   )
 
   if (!workspacePath) {
-    emit({
-      type: 'error',
-      sessionId,
-      message: '当前会话未绑定工作区目录，请先绑定路径'
-    })
+    emitPreRunError(sessionId, '当前会话未绑定工作区目录，请先绑定路径')
+    return
+  }
+
+  const provider = resolveChatModel(settings)
+  if (!provider) {
+    emitPreRunError(sessionId, '请先在设置中配置 API Key')
     return
   }
 
@@ -286,121 +388,93 @@ export async function runUserMessage(
   session.controller = ac
 
   const runId = makeRunId()
-  const traceId = makeTraceId(sessionId, runId)
   const runStartedAt = Date.now()
-  const runToolEvents: ToolTimelineEvent[] = []
+  const aguiCollector = createAguiTimelineEventCollector()
+
+  const forwardedProps: OpenWorkerAgentRunDefaults = {
+    composerMode,
+    provider,
+    abortController: ac,
+    workspacePath,
+    terminalKey: session.terminalKey,
+    tavily: { apiKey: settings.tavilyApiKey },
+    maxSteps: MAX_AGENT_LOOP_STEPS,
+    invokeTimeoutMs: settings.agentRunTimeoutMs
+  }
+
+  const aguiMessages = [
+    ...coreMessagesToAgui(session.messages),
+    {
+      id: `u-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      role: 'user' as const,
+      content: agentUserText
+    }
+  ]
 
   try {
     agentLog.info(
-      `[runUserMessage] run-start: ${runId}, traceId: ${traceId}, sessionId: ${sessionId}, timestampMs: ${runStartedAt}`
+      `[runUserMessage] run-start: ${runId}, sessionId: ${sessionId}, timestampMs: ${runStartedAt}`
     )
-    emit({ type: 'run-start', sessionId, runId, traceId, timestampMs: runStartedAt })
 
-    const emitTool = (e: ToolTimelineEvent) => {
-      emit({
-        type: 'tool',
-        sessionId,
-        runId,
-        traceId,
-        event: {
-          ...e,
+    await new Promise<void>((resolve, reject) => {
+      const subscription = session.agent
+        .run({
+          threadId: sessionId,
           runId,
-          traceId,
-          timestampMs: e.timestampMs ?? Date.now()
-        }
-      })
-    }
-
-    /** agent 仅上报 ToolObservation；宿主附加 runId/traceId 并映射为 ToolTimelineEvent */
-    const onTool = (obs: ToolObservation) => {
-      const e: ToolTimelineEvent = {
-        kind: 'tool',
-        ...obs,
-        runId,
-        traceId,
-        timestampMs: obs.timestampMs ?? Date.now()
-      }
-      runToolEvents.push(e)
-      emitTool(e)
-    }
-
-    // 用户消息由 agent.send 内部追加到 messages；宿主只负责持久化与会话镜像
-    const provider = resolveChatModel(settings)
-    if (!provider) {
-      throw new Error('请先在设置中配置 API Key')
-    }
-
-    const graphResult = await session.agent.send(agentUserText, {
-      composerMode,
-      provider,
-      abortController: ac,
-      workspacePath,
-      // sessionId / runId / traceId 仅在宿主侧使用；agent 只收 terminalKey
-      terminalKey: session.terminalKey,
-      tavily: { apiKey: settings.tavilyApiKey },
-      maxSteps: MAX_AGENT_LOOP_STEPS,
-      invokeTimeoutMs: settings.agentRunTimeoutMs,
-      onTextDelta: (text) => {
-        emit({ type: 'text-delta', sessionId, text, runId, traceId })
-      },
-      onTool,
-      onEmit: emit
+          state: {},
+          messages: aguiMessages,
+          tools: [],
+          context: [],
+          forwardedProps
+        })
+        .subscribe({
+          next: (event: BaseEvent) => {
+            aguiCollector.onEvent(event)
+            emit({ sessionId, event })
+          },
+          error: (err) => {
+            reject(err instanceof Error ? err : new Error(String(err)))
+          },
+          complete: () => {
+            resolve()
+          }
+        })
+      session.subscription = subscription
     })
 
     const latest = sessions.get(sessionId)
     if (!latest) return
 
-    // agent.messages 已含本轮完整轨迹，镜像到会话运行时
-    latest.messages = graphResult.messages
+    // 底层 createAgent.messages 已含本轮完整轨迹
+    latest.messages = latest.agent.getAgent().messages
 
+    const aguiEvents = aguiCollector.getEvents()
     persistSessionMessages(latest.workspaceId, sessionId, latest.messages, {
-      toolEventsForLastAssistant: runToolEvents.length > 0 ? runToolEvents : undefined
-    })
-    emit({
-      type: 'done',
-      sessionId,
-      runId,
-      traceId,
-      timestampMs: Date.now(),
-      durationMs: Date.now() - runStartedAt
+      aguiEventsForLastAssistant: aguiEvents.length > 0 ? aguiEvents : undefined
     })
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
-
-    emit({
-      type: 'error',
-      sessionId,
+    const err: RunErrorEvent = {
+      type: EventType.RUN_ERROR,
       message,
-      runId,
-      traceId,
-      timestampMs: Date.now(),
-      durationMs: Date.now() - runStartedAt
-    })
+      code: 'ERROR',
+      timestamp: Date.now()
+    }
+    emit({ sessionId, event: err })
+    aguiCollector.onEvent(err)
 
     const latest = sessions.get(sessionId)
     if (latest) {
-      emit({
-        type: 'tool',
-        sessionId,
-        runId,
-        traceId,
-        event: {
-          kind: 'error',
-          message,
-          runId,
-          traceId,
-          timestampMs: Date.now(),
-          durationMs: Date.now() - runStartedAt
-        }
-      })
+      const aguiEvents = aguiCollector.getEvents()
       persistSessionMessages(latest.workspaceId, sessionId, latest.messages, {
-        toolEventsForLastAssistant: runToolEvents.length > 0 ? runToolEvents : undefined
+        aguiEventsForLastAssistant: aguiEvents.length > 0 ? aguiEvents : undefined
       })
     }
   } finally {
     const latest = sessions.get(sessionId)
     if (latest) {
       latest.controller = null
+      latest.subscription = null
     }
     void flushLangfuseTracing()
   }

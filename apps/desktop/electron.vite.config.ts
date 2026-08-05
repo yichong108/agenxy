@@ -20,6 +20,7 @@ function readGitShortHash(cwd: string): string {
 }
 const aliasSrc = resolve(__dirname, 'src')
 const aliasAgent = resolve(__dirname, '../../packages/agent/src/index.ts')
+const aliasOpenworkerAgent = resolve(__dirname, '../../packages/openworkerAgent/index.ts')
 const aliasShared = resolve(__dirname, '../../packages/shared/src/index.ts')
 /** 内置 skills 内容根目录（开发/未打包时由 define 注入，避免打包后 import.meta.url 漂移） */
 const bundledSkillsDir = resolve(__dirname, '../../packages/skills/content')
@@ -40,12 +41,13 @@ export default defineConfig({
       alias: {
         '@': aliasSrc,
         '@openworker/agent': aliasAgent,
+        '@openworker/openworker-agent': aliasOpenworkerAgent,
         '@openworker/shared': aliasShared
       }
     },
     plugins: [
       externalizeDepsPlugin({
-        exclude: ['@openworker/agent', '@openworker/shared']
+        exclude: ['@openworker/agent', '@openworker/openworker-agent', '@openworker/shared']
       })
     ],
     build: {
@@ -61,12 +63,13 @@ export default defineConfig({
       alias: {
         '@': aliasSrc,
         '@openworker/agent': aliasAgent,
+        '@openworker/openworker-agent': aliasOpenworkerAgent,
         '@openworker/shared': aliasShared
       }
     },
     plugins: [
       externalizeDepsPlugin({
-        exclude: ['@openworker/agent', '@openworker/shared']
+        exclude: ['@openworker/agent', '@openworker/openworker-agent', '@openworker/shared']
       })
     ],
     build: {

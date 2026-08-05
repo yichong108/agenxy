@@ -14,7 +14,7 @@ import {
   type McpWarmupStatus,
   type RendererUiState,
   type SessionInfo,
-  type StreamEvent,
+  type AgentStreamPayload,
   type TerminalCompleteResult,
   type TerminalOutputEvent,
   type TerminalRunResult,
@@ -103,8 +103,8 @@ const api = {
       ipcRenderer.removeListener(EVENTS.MCP_WARMUP, h)
     }
   },
-  onStream: (cb: (e: StreamEvent) => void) => {
-    const h = (_: Electron.IpcRendererEvent, p: StreamEvent) => cb(p)
+  onStream: (cb: (e: AgentStreamPayload) => void) => {
+    const h = (_: Electron.IpcRendererEvent, p: AgentStreamPayload) => cb(p)
     ipcRenderer.on(EVENTS.AGENT_STREAM, h)
     return () => {
       ipcRenderer.removeListener(EVENTS.AGENT_STREAM, h)

@@ -1,11 +1,20 @@
 import { findAndReplace } from 'mdast-util-find-and-replace'
 
+import { aguiEventsToToolTimeline } from '@/renderer/src/center-pane/agui-timeline'
 import type { ChatMessage, SessionInfo, ToolTimelineEvent } from '@/shared/ipc'
 
 export const PRELOAD_MISSING_ERROR = '未检测到 preload 注入（window.bridge 不存在）'
 
 /**
- * 根据消息与会话上下文计算单条消息的展示派生状态。
+ * 根据消息与会话上下文计算助手消息的展示时间线。
+ *
+ * 历史消息：从落盘的 AG-UI 事件在渲染层派生；进行中：使用 liveTimeline。
+ *
+ * @param message - 当前消息
+ * @param latestAssistantId - 最新 assistant 消息 id
+ * @param isRun - 会话是否正在 run
+ * @param liveTimeline - 直播时间线（已由 AG-UI 派生）
+ * @returns 展示用 ToolTimelineEvent
  */
 export function assistantDisplayTimeline(
   message: ChatMessage,
@@ -15,7 +24,9 @@ export function assistantDisplayTimeline(
 ): ToolTimelineEvent[] {
   if (message.role !== 'assistant') return []
   if (message.id === latestAssistantId && isRun) return liveTimeline
-  if (message.toolEvents && message.toolEvents.length > 0) return message.toolEvents
+  if (message.aguiEvents && message.aguiEvents.length > 0) {
+    return aguiEventsToToolTimeline(message.aguiEvents)
+  }
   if (message.id === latestAssistantId && liveTimeline.length > 0) return liveTimeline
   return []
 }

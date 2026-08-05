@@ -11,7 +11,7 @@ import type {
   McpWarmupStatus,
   RendererUiState,
   SessionInfo,
-  StreamEvent,
+  AgentStreamPayload,
   TerminalCompleteResult,
   TerminalOutputEvent,
   TerminalRunResult,
@@ -77,7 +77,7 @@ type Api = {
   getMcpWarmupStatus: () => Promise<McpWarmupStatus>
   mcpRunWarmup: () => Promise<McpWarmupReport>
   onMcpWarmup: (cb: (r: McpWarmupReport) => void) => () => void
-  onStream: (cb: (e: StreamEvent) => void) => () => void
+  onStream: (cb: (e: AgentStreamPayload) => void) => () => void
   onSessionsSync: (cb: (s: SessionInfo[]) => void) => () => void
   onWorkspaceChange: (cb: (p: { path: string }) => void) => () => void
   onWorkspacesSync: (cb: (p: WorkspacesPayload) => void) => () => void

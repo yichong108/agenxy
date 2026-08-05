@@ -15,6 +15,7 @@
     "paths": {
       "@/*": ["src/*"],
       "@openworker/agent": ["../../packages/agent/src/index.ts"],
+      "@openworker/openworker-agent": ["../../packages/openworkerAgent/index.ts"],
       "@openworker/shared": ["../../packages/shared/src/index.ts"]
     }
   },

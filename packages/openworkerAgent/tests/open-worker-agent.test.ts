@@ -16,7 +16,12 @@ vi.mock('@openworker/agent', () => ({
   createAgent: createAgentMock
 }))
 
-import { aguiMessagesToCore, extractUserTurn, OpenWorkerAgent } from '../index.js'
+import {
+  aguiMessagesToCore,
+  coreMessagesToAgui,
+  extractUserTurn,
+  OpenWorkerAgent
+} from '../index.js'
 
 const stubModel = { modelId: 'test-model' } as LanguageModel
 
@@ -119,6 +124,62 @@ describe('OpenWorkerAgent helpers', () => {
     ])
     expect(core[0]).toMatchObject({ role: 'assistant' })
     expect(core[1]).toMatchObject({ role: 'tool' })
+  })
+
+  it('coreMessagesToAgui 与 aguiMessagesToCore 往返保留 user/assistant 文本', () => {
+    const core: CoreMessage[] = [
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'hey' }
+    ]
+    const agui = coreMessagesToAgui(core)
+    expect(agui).toHaveLength(2)
+    expect(agui[0]).toMatchObject({ role: 'user', content: 'hi' })
+    expect(agui[1]).toMatchObject({ role: 'assistant', content: 'hey' })
+    expect(aguiMessagesToCore(agui)).toEqual(core)
+  })
+
+  it('coreMessagesToAgui 转换 assistant tool-call 与 tool 结果', () => {
+    const agui = coreMessagesToAgui([
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'calling' },
+          {
+            type: 'tool-call',
+            toolCallId: 'tc1',
+            toolName: 'read_file',
+            args: { path: 'a.ts' }
+          }
+        ]
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'tc1',
+            toolName: 'read_file',
+            result: 'ok'
+          }
+        ]
+      }
+    ])
+    expect(agui[0]).toMatchObject({
+      role: 'assistant',
+      content: 'calling',
+      toolCalls: [
+        {
+          id: 'tc1',
+          type: 'function',
+          function: { name: 'read_file', arguments: '{"path":"a.ts"}' }
+        }
+      ]
+    })
+    expect(agui[1]).toMatchObject({
+      role: 'tool',
+      toolCallId: 'tc1',
+      content: 'ok'
+    })
   })
 })
 

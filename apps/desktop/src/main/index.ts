@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import '@/main/env-bootstrap'
 import '@/main/agent/agent-log'
 import { completeCommandInWorkspace, killCommand, runCommand } from '@openworker/agent'
+import { EventType } from '@ag-ui/client'
 import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron'
 
 import { getMcpHostAgent, resetMcpHostAgent } from '@/main/agent/agent-instance'
@@ -60,8 +61,8 @@ import {
   type McpWarmupReport,
   type McpWarmupStatus,
   normalizeComposerMode,
+  type AgentStreamPayload,
   type RendererUiState,
-  type StreamEvent,
   type TerminalOutputEvent,
   type WebEditAction,
   type WindowChromeAction
@@ -564,10 +565,14 @@ function registerIpc(): void {
 
         const message = err instanceof Error ? err.message : String(err)
         mainWindow?.webContents.send(EVENTS.AGENT_STREAM, {
-          type: 'error',
           sessionId,
-          message
-        } as StreamEvent)
+          event: {
+            type: EventType.RUN_ERROR,
+            message,
+            code: 'ERROR',
+            timestamp: Date.now()
+          }
+        } satisfies AgentStreamPayload)
         return { ok: false as const, error: message }
       }
     }

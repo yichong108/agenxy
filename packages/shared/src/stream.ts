@@ -13,6 +13,11 @@ type Timing = {
 
 type RunMeta = RunRef & Timing
 
+/**
+ * 工具调用时间线事件（UI / 持久化视图模型）。
+ *
+ * 由宿主从 AG-UI `TOOL_CALL_*` 事件派生，不直接等于协议事件。
+ */
 export type ToolCallEvent = {
   kind: 'tool'
   id: string
@@ -22,48 +27,14 @@ export type ToolCallEvent = {
   result?: string
 } & RunMeta
 
+/**
+ * 工具/运行错误时间线事件。
+ */
 export type ToolErrorEvent = {
   kind: 'error'
   message: string
   errorCode?: string
 } & RunMeta
 
+/** 助手消息旁展示的工具时间线条目 */
 export type ToolTimelineEvent = ToolCallEvent | ToolErrorEvent
-
-type StreamBase = {
-  sessionId: string
-} & RunRef
-
-export type StreamTextDeltaEvent = StreamBase & {
-  type: 'text-delta'
-  text: string
-}
-
-export type StreamToolEvent = StreamBase & {
-  type: 'tool'
-  event: ToolTimelineEvent
-}
-
-export type StreamErrorEvent = StreamBase &
-  Timing & {
-    type: 'error'
-    message: string
-    errorCode?: string
-  }
-
-export type StreamDoneEvent = StreamBase &
-  Timing & {
-    type: 'done'
-  }
-
-export type StreamRunStartEvent = StreamBase & {
-  type: 'run-start'
-  timestampMs?: number
-}
-
-export type StreamEvent =
-  | StreamTextDeltaEvent
-  | StreamToolEvent
-  | StreamErrorEvent
-  | StreamDoneEvent
-  | StreamRunStartEvent

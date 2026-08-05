@@ -3,7 +3,7 @@
  * 它负责创建 agent 实例，并提供 send 方法，用于发起一次 agent run。
  */
 
-import { type AgentComposerMode, normalizeComposerMode, type StreamEvent } from '@openworker/shared'
+import { type AgentComposerMode, normalizeComposerMode } from '@openworker/shared'
 import type { CoreMessage, LanguageModel, ToolSet } from 'ai'
 
 import type { PreparedTooling } from './run-types.js'
@@ -38,7 +38,7 @@ type PrepareToolingFn = (args: {
   /** 工具生命周期观察回调 */
   onTool: ToolOnTool
   signal?: AbortSignal
-  emit: (event: StreamEvent) => void
+  emit: (event: unknown) => void
   provider?: LanguageModel
 }) => Promise<PreparedTooling>
 
@@ -138,8 +138,8 @@ export type AgentRunInput = {
   onTextDelta?: (text: string) => void
   /** 工具观察回调；可选，宿主可在此映射与收集工具时间线 */
   onTool?: (event: ToolObservation) => void
-  /** 向宿主推送 StreamEvent（如错误、状态）；可选 */
-  onEmit?: (event: StreamEvent) => void
+  /** 向宿主推送自定义事件（可选；桌面侧经 AG-UI CUSTOM 转发） */
+  onEmit?: (event: unknown) => void
   /** 最大工具调用轮次；缺省时使用 MAX_AGENT_LOOP_STEPS */
   maxSteps?: number
   /** 循环超时（毫秒）；缺省时使用 defaultSettings.agentRunTimeoutMs */

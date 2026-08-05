@@ -1,6 +1,6 @@
 /** IPC 与流式事件类型（主进程 / 预加载 / 渲染层共享） */
 
-import type { ToolTimelineEvent } from '@openworker/shared'
+import type { BaseEvent } from '@ag-ui/client'
 
 export const IPC = {
   WORKSPACE_SELECT: 'workspace:select',
@@ -121,12 +121,6 @@ export type {
   ModelProviderId,
   ProviderProfile,
   SettingsFormValues,
-  StreamDoneEvent,
-  StreamErrorEvent,
-  StreamEvent,
-  StreamRunStartEvent,
-  StreamTextDeltaEvent,
-  StreamToolEvent,
   ToolCallEvent,
   ToolErrorEvent,
   ToolTimelineEvent
@@ -145,6 +139,16 @@ export {
   parseMcpServersFromUnknown,
   settingsToFormValues
 } from '@openworker/shared'
+
+/**
+ * AGENT_STREAM 载荷：AG-UI BaseEvent + sessionId 信封。
+ *
+ * 中间事件（TEXT_MESSAGE_* / TOOL_CALL_*）不含 threadId，多会话必须带 sessionId。
+ */
+export type AgentStreamPayload = {
+  sessionId: string
+  event: BaseEvent
+}
 
 export type McpProbeToolInfo = {
   name: string
@@ -257,6 +261,9 @@ export type ChatMessage = {
   role: MessageRole
   /** 消息内容 */
   content: string
-  /** 附带的工具/时间线（仅用于 UI 恢复，主进程有完整 tool 过程） */
-  toolEvents?: ToolTimelineEvent[]
+  /**
+   * 本轮 AG-UI 工具相关事件快照（TOOL_CALL_* / RUN_ERROR）。
+   * 仅用于 UI 恢复；展示前由渲染层转为 ToolTimelineEvent。
+   */
+  aguiEvents?: BaseEvent[]
 }

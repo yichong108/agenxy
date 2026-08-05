@@ -5,6 +5,15 @@ import {
   randomId,
   type RunStats
 } from './center-pane-utils'
+import { aguiEventsToToolTimeline, isAguiTimelineSourceEvent } from './agui-timeline'
+import {
+  EventType,
+  type BaseEvent,
+  type RunErrorEvent,
+  type RunFinishedEvent,
+  type RunStartedEvent,
+  type TextMessageContentEvent
+} from '@ag-ui/client'
 import {
   CheckOutlined,
   DownOutlined,
@@ -22,10 +31,10 @@ import { useUiStore } from '@/renderer/src/store/ui-store'
 import { useWorkspaceStore } from '@/renderer/src/store/workspace-store'
 import {
   type AgentComposerMode,
+  type AgentStreamPayload,
   type ChatMessage,
   HOME_WORKSPACE_ID,
   type SessionInfo,
-  type StreamEvent,
   type ToolTimelineEvent,
   type WorkspaceInfo
 } from '@/shared/ipc'
@@ -119,14 +128,27 @@ export function useWorkspaceCenterPane({
   /** 避免首屏 load 完成前把「无选中」误判为需要强制回到 Home */
   const didInitialWorkspaceLoadRef = useRef(false)
   const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({})
-  const [timeline, setTimeline] = useState<Record<string, ToolTimelineEvent[]>>({})
+  /** 本轮直播 AG-UI 工具相关事件（渲染层再派生 ToolTimelineEvent） */
+  const [liveAguiEvents, setLiveAguiEvents] = useState<Record<string, BaseEvent[]>>({})
   const [running, setRunning] = useState<Record<string, boolean>>({})
   const [runStats, setRunStats] = useState<Record<string, RunStats | undefined>>({})
   const streamBuf = useRef<Record<string, string>>({})
   const assistantMsgId = useRef<Record<string, string | null>>({})
   const hydratedMessageSessions = useRef<Set<string>>(new Set())
-  /** 同会话发送 IPC 进行中，防止连点重复发送（不等同于 agent 已 run-start） */
+  /** 同会话发送 IPC 进行中，防止连点重复发送（不等同于 agent 已 RUN_STARTED） */
   const sendInFlightRef = useRef(new Set<string>())
+
+  const timeline = useMemo(() => {
+    const next: Record<string, ToolTimelineEvent[]> = {}
+    for (const [sessionId, events] of Object.entries(liveAguiEvents)) {
+      const stats = runStats[sessionId]
+      next[sessionId] = aguiEventsToToolTimeline(events, {
+        runId: stats?.runId,
+        traceId: stats?.traceId
+      })
+    }
+    return next
+  }, [liveAguiEvents, runStats])
 
   const ensureSessionMessages = useCallback(
     async (sessionId: string, force = false) => {
@@ -224,15 +246,18 @@ export function useWorkspaceCenterPane({
   ])
 
   const handleStream = useCallback(
-    (e: StreamEvent) => {
-      if (e.type === 'run-start') {
-        const startedAt = e.timestampMs ?? Date.now()
-        setRunning((r) => ({ ...r, [e.sessionId]: true }))
+    (payload: AgentStreamPayload) => {
+      const { sessionId, event } = payload
+
+      if (event.type === EventType.RUN_STARTED) {
+        const e = event as RunStartedEvent
+        const startedAt = e.timestamp ?? Date.now()
+        setRunning((r) => ({ ...r, [sessionId]: true }))
         setRunStats((s) => ({
           ...s,
-          [e.sessionId]: {
+          [sessionId]: {
             runId: e.runId,
-            traceId: e.traceId,
+            traceId: `${sessionId}:${e.runId}`,
             startedAt,
             durationMs: 0,
             toolCalls: 0,
@@ -240,107 +265,98 @@ export function useWorkspaceCenterPane({
             status: 'running'
           }
         }))
-        streamBuf.current[e.sessionId] = ''
+        streamBuf.current[sessionId] = ''
+        setLiveAguiEvents((t) => ({ ...t, [sessionId]: [] }))
         const aid = randomId()
-        assistantMsgId.current[e.sessionId] = aid
+        assistantMsgId.current[sessionId] = aid
         setMessages((m) => {
-          const cur = m[e.sessionId] ?? []
+          const cur = m[sessionId] ?? []
           return {
             ...m,
-            [e.sessionId]: [...cur, { id: aid, role: 'assistant' as const, content: '' }]
+            [sessionId]: [...cur, { id: aid, role: 'assistant' as const, content: '' }]
           }
         })
-        setTimeline((t) => ({ ...t, [e.sessionId]: [] }))
         return
       }
-      if (e.type === 'text-delta') {
-        streamBuf.current[e.sessionId] = (streamBuf.current[e.sessionId] ?? '') + e.text
-        const buf = streamBuf.current[e.sessionId]!
-        const amId = assistantMsgId.current[e.sessionId]
+
+      if (event.type === EventType.TEXT_MESSAGE_CONTENT) {
+        const e = event as TextMessageContentEvent
+        streamBuf.current[sessionId] = (streamBuf.current[sessionId] ?? '') + e.delta
+        const buf = streamBuf.current[sessionId]!
+        const amId = assistantMsgId.current[sessionId]
         if (!amId) return
         setMessages((m) => {
-          const cur = [...(m[e.sessionId] ?? [])]
+          const cur = [...(m[sessionId] ?? [])]
           const idx = cur.findIndex((c) => c.id === amId)
           if (idx < 0) return m
           const next = { ...cur[idx]!, content: buf }
           cur[idx] = next
-          return { ...m, [e.sessionId]: cur }
+          return { ...m, [sessionId]: cur }
         })
         return
       }
-      if (e.type === 'tool') {
-        const te = e.event
-        setRunStats((s) => {
-          const cur = s[e.sessionId]
-          if (!cur) return s
-          const isToolStart = te.kind === 'tool' && te.status === 'start'
-          const isToolError = te.kind === 'error'
-          return {
-            ...s,
-            [e.sessionId]: {
-              ...cur,
-              toolCalls: cur.toolCalls + (isToolStart ? 1 : 0),
-              toolErrors: cur.toolErrors + (isToolError ? 1 : 0)
+
+      if (isAguiTimelineSourceEvent(event)) {
+        if (event.type === EventType.TOOL_CALL_ARGS) {
+          setRunStats((s) => {
+            const stats = s[sessionId]
+            if (!stats) return s
+            return {
+              ...s,
+              [sessionId]: { ...stats, toolCalls: stats.toolCalls + 1 }
             }
-          }
-        })
-        setTimeline((t) => {
-          const list = [...(t[e.sessionId] ?? [])]
-          if (te.kind === 'tool') {
-            const same = list.find(
-              (x): x is Extract<ToolTimelineEvent, { kind: 'tool' }> =>
-                x.kind === 'tool' && x.id === te.id
-            )
-            if (same && te.status === 'end') {
-              const next: Extract<ToolTimelineEvent, { kind: 'tool' }> = { ...te }
-              return {
-                ...t,
-                [e.sessionId]: list.map((x) => (x.kind === 'tool' && x.id === te.id ? next : x))
+          })
+        }
+        if (event.type === EventType.RUN_ERROR) {
+          const e = event as RunErrorEvent
+          msgApi.error(e.message)
+          setMessages((m) => {
+            const cur = m[sessionId] ?? []
+            return {
+              ...m,
+              [sessionId]: appendAssistantText(cur, `执行失败：${e.message}`)
+            }
+          })
+          setRunning((r) => ({ ...r, [sessionId]: false }))
+          setRunStats((s) => {
+            const cur = s[sessionId]
+            if (!cur) return s
+            const durationMs = cur.startedAt ? Math.max(0, Date.now() - cur.startedAt) : undefined
+            return {
+              ...s,
+              [sessionId]: {
+                ...cur,
+                durationMs,
+                status: 'error',
+                toolErrors: cur.toolErrors + 1
               }
             }
-          }
-          list.push(te)
-          return { ...t, [e.sessionId]: list }
-        })
+          })
+        }
+        setLiveAguiEvents((t) => ({
+          ...t,
+          [sessionId]: [...(t[sessionId] ?? []), event]
+        }))
         return
       }
-      if (e.type === 'error') {
-        msgApi.error(e.message)
-        setMessages((m) => {
-          const cur = m[e.sessionId] ?? []
-          return {
-            ...m,
-            [e.sessionId]: appendAssistantText(cur, `执行失败：${e.message}`)
-          }
-        })
-        setRunning((r) => ({ ...r, [e.sessionId]: false }))
+
+      if (event.type === EventType.RUN_FINISHED) {
+        const e = event as RunFinishedEvent
+        setRunning((r) => ({ ...r, [sessionId]: false }))
         setRunStats((s) => {
-          const cur = s[e.sessionId]
+          const cur = s[sessionId]
           if (!cur) return s
-          const durationMs =
-            e.durationMs ?? (cur.startedAt ? Math.max(0, Date.now() - cur.startedAt) : undefined)
+          const durationMs = cur.startedAt
+            ? Math.max(0, (e.timestamp ?? Date.now()) - cur.startedAt)
+            : undefined
           return {
             ...s,
-            [e.sessionId]: { ...cur, durationMs, status: 'error' }
+            [sessionId]: { ...cur, durationMs, status: 'done' }
           }
         })
-        return
-      }
-      if (e.type === 'done') {
-        setRunning((r) => ({ ...r, [e.sessionId]: false }))
-        setRunStats((s) => {
-          const cur = s[e.sessionId]
-          if (!cur) return s
-          const durationMs =
-            e.durationMs ?? (cur.startedAt ? Math.max(0, Date.now() - cur.startedAt) : undefined)
-          return {
-            ...s,
-            [e.sessionId]: { ...cur, durationMs, status: 'done' }
-          }
-        })
-        streamBuf.current[e.sessionId] = ''
-        assistantMsgId.current[e.sessionId] = null
-        void ensureSessionMessages(e.sessionId, true)
+        streamBuf.current[sessionId] = ''
+        assistantMsgId.current[sessionId] = null
+        void ensureSessionMessages(sessionId, true)
       }
     },
     [ensureSessionMessages, msgApi]

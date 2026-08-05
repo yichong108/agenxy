@@ -130,6 +130,87 @@ function aguiContentToText(content: Message['content']): string {
 }
 
 /**
+ * 将 AI SDK CoreMessage 列表转换为 AG-UI Message 列表。
+ *
+ * 与 `aguiMessagesToCore` 对称，供宿主组装 `RunAgentInput.messages`。
+ * 跳过 system（createAgent 使用独立 system prompt）。
+ *
+ * @param messages - AI SDK CoreMessage 列表
+ * @returns AG-UI Message 列表
+ */
+export function coreMessagesToAgui(messages: CoreMessage[]): Message[] {
+  const result: Message[] = []
+
+  for (const message of messages) {
+    if (message.role === 'user') {
+      const content =
+        typeof message.content === 'string'
+          ? message.content
+          : message.content.map((part) => (part.type === 'text' ? part.text : '')).join('')
+      result.push({
+        id: randomUUID(),
+        role: 'user',
+        content
+      })
+      continue
+    }
+
+    if (message.role === 'assistant') {
+      if (typeof message.content === 'string') {
+        result.push({
+          id: randomUUID(),
+          role: 'assistant',
+          content: message.content
+        })
+        continue
+      }
+
+      let text = ''
+      const toolCalls: NonNullable<Extract<Message, { role: 'assistant' }>['toolCalls']> = []
+      for (const part of message.content) {
+        if (part.type === 'text') {
+          text += part.text
+          continue
+        }
+        if (part.type === 'tool-call') {
+          toolCalls.push({
+            id: part.toolCallId,
+            type: 'function',
+            function: {
+              name: part.toolName,
+              arguments: JSON.stringify(part.args ?? {})
+            }
+          })
+        }
+      }
+      result.push({
+        id: randomUUID(),
+        role: 'assistant',
+        content: text || undefined,
+        ...(toolCalls.length > 0 ? { toolCalls } : {})
+      })
+      continue
+    }
+
+    if (message.role === 'tool') {
+      for (const part of message.content) {
+        if (part.type !== 'tool-result') continue
+        const content =
+          typeof part.result === 'string' ? part.result : JSON.stringify(part.result ?? '')
+        result.push({
+          id: randomUUID(),
+          role: 'tool',
+          toolCallId: part.toolCallId,
+          content
+        })
+      }
+    }
+  }
+
+  return result
+}
+
+/**
  * 将 AG-UI Message 列表转换为 AI SDK CoreMessage 列表。
  *
  * 跳过 system / developer / activity / reasoning（createAgent 使用独立 system prompt）。

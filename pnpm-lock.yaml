@@ -97,6 +97,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@ag-ui/client':
+        specifier: 0.0.57
+        version: 0.0.57
       '@ai-sdk/openai':
         specifier: ^1.3.22
         version: 1.3.24(zod@3.25.76)
@@ -118,6 +121,9 @@ importers:
       '@openworker/agent':
         specifier: workspace:*
         version: link:../../packages/agent
+      '@openworker/openworker-agent':
+        specifier: workspace:*
+        version: link:../../packages/openworkerAgent
       '@openworker/shared':
         specifier: workspace:*
         version: link:../../packages/shared
