@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import '@/main/app-identity'
 import '@/main/env-bootstrap'
 import '@/main/agent/agent-log'
 import { completeCommandInWorkspace, killCommand, runCommand } from '@openworker/agent'
@@ -317,6 +318,9 @@ function createWindow(): void {
     mainLog.error(`[renderer] process gone: reason=${details.reason}, exitCode=${details.exitCode}`)
   })
   bindAgentIpc(mainWindow.webContents)
+  if (isDev) {
+    mainWindow.webContents.openDevTools({ mode: 'bottom' })
+  }
   mainWindow.webContents.on('did-finish-load', () => {
     mainWindow?.maximize()
     mainWindow?.show()

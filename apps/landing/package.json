@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "preinstall": "npx only-allow pnpm",
-    "dev": "node ./scripts/dev.mjs",
+    "dev": "cross-env BROWSER=none next dev",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit"
@@ -25,6 +25,7 @@
     "@types/react": "^18.3.20",
     "@types/react-dom": "^18.3.6",
     "autoprefixer": "^10.4.19",
+    "cross-env": "^10.1.0",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.3",
     "typescript": "^5.8.3"

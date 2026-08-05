@@ -20,8 +20,6 @@ export default defineConfig({
   },
   server: {
     port: 5174,
-    host: '127.0.0.1',
-    // 开发启动时不自动打开浏览器
-    open: false
+    host: '127.0.0.1'
   }
 })

@@ -16,9 +16,6 @@ export {
 } from './createAGUIAgent.js'
 
 export {
-  getOpenworkerDir,
-  getOpenworkerMcpConfigPath,
-  getOpenworkerSkillsPath,
   type AgentMcp,
   type AgentRunResult,
   type AgentRunTavilyOptions,

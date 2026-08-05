@@ -134,15 +134,14 @@ function dedupeFirstWins(defs: SkillDefinition[]): SkillDefinition[] {
 }
 
 /**
- * 生成注入 system prompt 的技能摘要。
+ * 生成注入 system prompt 的技能摘要（列出全部已加载技能名称与描述）。
  *
  * @param defs - 已加载技能
  * @returns 提示文本；无技能时为空串
  */
 function makeSkillHint(defs: SkillDefinition[]): string {
   if (!defs.length) return ''
-  const top = defs.slice(0, 10)
-  const lines = top.map((item) => `- ${item.name}: ${item.description} (source: ${item.source})`)
+  const lines = defs.map((item) => `- ${item.name}: ${item.description} (source: ${item.source})`)
   return `可用技能工具（可自动调用）：\n${lines.join('\n')}\n当用户意图与上述任一描述匹配时，必须先按上方准确名称调用对应技能工具（可传入概括用户问题的 question），再按需使用其他工具；不要跳过匹配技能而用泛化工具猜测。`
 }
 

@@ -12,8 +12,25 @@ vi.mock('../src/react-loop.js', () => ({
   ])
 }))
 
+vi.mock('../src/skills/load-skills.js', () => ({
+  loadSkillsFromPaths: vi.fn(async () => ({ tools: {}, hint: '' }))
+}))
+
+vi.mock('../src/mcp/mcp-runtime.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/mcp/mcp-runtime.js')>()
+  return {
+    ...actual,
+    buildMcpToolsFromConfig: vi.fn(async () => ({
+      tools: {},
+      contextHints: '',
+      servers: []
+    }))
+  }
+})
+
 import { createAgent } from '../src/create-agent.js'
 import { runReactLoop } from '../src/react-loop.js'
+import { loadSkillsFromPaths } from '../src/skills/load-skills.js'
 
 function createCallbacks() {
   return {
@@ -29,6 +46,8 @@ const stubModel = { modelId: 'test-model' } as LanguageModel
 describe('createAgent', () => {
   beforeEach(() => {
     vi.mocked(runReactLoop).mockClear()
+    vi.mocked(loadSkillsFromPaths).mockClear()
+    vi.mocked(loadSkillsFromPaths).mockResolvedValue({ tools: {}, hint: '' })
   })
 
   it('返回含 send / mcp 的实例', () => {
@@ -195,5 +214,36 @@ describe('createAgent', () => {
         ...callbacks
       })
     ).rejects.toThrow('model failed')
+  })
+
+  it('build 模式将 skills 名称摘要合并进 system prompt', async () => {
+    vi.mocked(loadSkillsFromPaths).mockResolvedValue({
+      tools: {},
+      hint: '可用技能工具（可自动调用）：\n- debug_workflow: 故障排查\n- code_review: 代码审查'
+    })
+
+    const agent = createAgent({ provider: stubModel, local: { cwd: '/tmp/ws' } })
+    await agent.send('修一下报错', { composerMode: 'build' })
+
+    expect(loadSkillsFromPaths).toHaveBeenCalledOnce()
+    const [, runPrompt] = vi.mocked(runReactLoop).mock.calls[0]!
+    expect(runPrompt).toContain('可用技能工具（可自动调用）')
+    expect(runPrompt).toContain('debug_workflow')
+    expect(runPrompt).toContain('code_review')
+  })
+
+  it('ask 模式不加载 skills、不注入技能摘要', async () => {
+    vi.mocked(loadSkillsFromPaths).mockResolvedValue({
+      tools: {},
+      hint: '可用技能工具（可自动调用）：\n- debug_workflow: 故障排查'
+    })
+
+    const agent = createAgent({ provider: stubModel, local: { cwd: '/tmp/ws' } })
+    await agent.send('这段代码做什么？', { composerMode: 'ask' })
+
+    expect(loadSkillsFromPaths).not.toHaveBeenCalled()
+    const [, runPrompt] = vi.mocked(runReactLoop).mock.calls[0]!
+    expect(runPrompt).not.toContain('可用技能工具')
+    expect(runPrompt).not.toContain('debug_workflow')
   })
 })

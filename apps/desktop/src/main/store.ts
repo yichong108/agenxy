@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
-import { getOpenworkerDir, getOpenworkerMcpConfigPath } from '@openworker/agent'
 import { app } from 'electron'
 import Store from 'electron-store'
 
@@ -21,6 +20,7 @@ import {
   type WorkspaceInfo,
   type WorkspaceUiState
 } from '@/shared/ipc'
+import { getElectronAppDir, getElectronMcpConfigPath } from './path'
 
 type StoreSchema = {
   workspaces: WorkspaceInfo[]
@@ -268,7 +268,7 @@ function writeLocalSettingsCache(next: AppSettings): void {
  * @returns 绝对路径
  */
 export function getMcpConfigPath(): string {
-  return getOpenworkerMcpConfigPath()
+  return getElectronMcpConfigPath()
 }
 
 /**
@@ -278,7 +278,7 @@ export function getMcpConfigPath(): string {
  */
 function syncMcpConfigFile(settings: AppSettings): void {
   try {
-    mkdirSync(getOpenworkerDir(), { recursive: true })
+    mkdirSync(getElectronAppDir(), { recursive: true })
     const payload = { mcpServers: settings.mcpServers ?? [] }
     writeFileSync(getMcpConfigPath(), `${JSON.stringify(payload, null, 2)}\n`, 'utf8')
   } catch (e) {
@@ -602,10 +602,6 @@ export function moveWorkspaceSessionData(fromWorkspaceId: string, toWorkspaceId:
   delete allMessages[fromWorkspaceId]
   store.set('sessionsMetaByWorkspace', allMeta)
   store.set('sessionsMessagesByWorkspace', allMessages)
-}
-
-export function userDataPath(): string {
-  return app.getPath('userData')
 }
 
 // 模块加载时同步一次，保证首次 run 前 mcp.json 已存在

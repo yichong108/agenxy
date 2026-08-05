@@ -14,6 +14,7 @@ import {
 import { GREP_TOOL_DESCRIPTION, grepWorkspace } from './grep.js'
 import { runCommand } from './terminal.js'
 import { isTavilyConfigured, tavilyWebSearch } from './web-search.js'
+import { getOpenworkerMcpConfigPath, getOpenworkerSkillsDir } from '../path.js'
 
 /** Ask 模式允许的只读工具名 */
 const ASK_MODE_ALLOWED_TOOL_NAMES = new Set([
@@ -210,15 +211,23 @@ export function buildWorkspaceRunPrompt(
   tavilyApiKey?: string,
   extras?: WorkspacePromptExtras
 ): string {
-  const common = `当前日期时间（UTC）：${new Date().toLocaleString()}；`
+  // Node 侧无浏览器地理定位；用系统时区作为本地上下文
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown'
+  const skillsPath = getOpenworkerSkillsDir()
+  const common = [
+    `当前日期时间：${new Date().toLocaleString()}；时区：${timeZone}；`,
+    `内置 skills 文件夹路径：${skillsPath}；`,
+    `mcp 配置文件路径：${getOpenworkerMcpConfigPath()}；`,
+    `工作区根目录：${root}；`
+  ].join('\n')
   if (mode === 'ask') {
-    return [buildAskSystemPrompt(root, tavilyApiKey), common].filter(Boolean).join('\n\n')
+    return [common, buildAskSystemPrompt(root, tavilyApiKey)].filter(Boolean).join('\n\n')
   }
   return [
+    common,
     buildBuildSystemPrompt(root, tavilyApiKey, extras),
     extras?.skillHint,
-    extras?.mcpContextHints,
-    common
+    extras?.mcpContextHints
   ]
     .filter(Boolean)
     .join('\n\n')
@@ -268,7 +277,7 @@ function buildBuildSystemPrompt(
     ? '：结果含工作区与「用户数据」目录（用户技能包等）；read_file/write 仍仅限工作区路径'
     : ''
 
-  return `你是协助办公与软件开发的智能体。工作区根目录：${root}。
+  return `你是协助办公与软件开发的智能体。
 - 工具中使用**相对于工作区根目录**的路径（如 src/index.ts）；不要用 ../ 逃出工作区。
 - 可用工具：${toolLine}，以及各类 skill_* 工具。${mcpNote}
 ${skillRule}
@@ -289,7 +298,7 @@ function buildAskSystemPrompt(root: string, tavilyApiKey?: string): string {
   const webRule = web
     ? '- 需要外部信息时调用 **web_search**；不要编造搜索结果。'
     : '- 未配置 Tavily：若用户需要实时信息，如实说明并建议在设置中配置 Tavily。'
-  return `你是帮助理解代码、架构与命令的助手（**问答模式**）。工作区根目录：${root}。
+  return `你是帮助理解代码、架构与命令的助手（**问答模式**）。
 - **禁止**修改工作区文件、删除文件、执行 shell、调用 skill_* 或 mcp_*；本模式下这些工具不可用。
 - 仅只读工具：${toolLine}。路径均相对于工作区根目录。
 - 若用户要求「直接改代码 / 跑命令 / 打补丁」，说明问答模式不能自动执行，给出可复制片段或步骤；要自动应用请切换到 **构建模式**。

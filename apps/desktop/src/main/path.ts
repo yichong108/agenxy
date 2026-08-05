@@ -1,22 +1,22 @@
 /**
- * 用户级 Openworker 配置路径 — `~/.openworker/` 下的 skills / mcp.json。
+ * 用户级  配置路径 — `~/.openworker/` 下的 skills / mcp.json。
  *
  * createAgent.send 内部按此约定加载；宿主写入 MCP 配置或预热时也应使用同一路径。
  */
 
-import { homedir } from 'node:os'
+import { app } from 'electron'
 import path from 'node:path'
 
 /** 用户主目录下的 `.openworker` 根目录名 */
-const OPENWORKERER_DIR_NAME = '.openworker'
+const OPENWORKER_DIR_NAME = '.openworker'
 
 /**
  * 解析用户主目录下的 `.openworker` 根目录绝对路径。
  *
  * @returns `~/.openworker` 绝对路径
  */
-export function getOpenworkerDir(): string {
-  return path.join(homedir(), OPENWORKERER_DIR_NAME)
+export function getElectronAppDir(): string {
+  return path.join(getElectronHomeDir(), OPENWORKER_DIR_NAME)
 }
 
 /**
@@ -26,8 +26,8 @@ export function getOpenworkerDir(): string {
  *
  * @returns `~/.openworker/skills` 绝对路径
  */
-export function getOpenworkerSkillsPath(): string {
-  return path.join(getOpenworkerDir(), 'skills')
+export function getElectronSkillsDir(): string {
+  return path.join(getElectronAppDir(), 'skills')
 }
 
 /**
@@ -38,6 +38,10 @@ export function getOpenworkerSkillsPath(): string {
  *
  * @returns `~/.openworker/mcp.json` 绝对路径
  */
-export function getOpenworkerMcpConfigPath(): string {
-  return path.join(getOpenworkerDir(), 'mcp.json')
+export function getElectronMcpConfigPath(): string {
+  return path.join(getElectronAppDir(), 'mcp.json')
+}
+
+export function getElectronHomeDir(): string {
+  return app.getPath('home')
 }
