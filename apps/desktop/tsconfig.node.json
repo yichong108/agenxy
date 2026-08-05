@@ -14,8 +14,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@openwork/agent": ["../../packages/agent/src/index.ts"],
-      "@openwork/shared": ["../../packages/shared/src/index.ts"]
+      "@openworker/agent": ["../../packages/agent/src/index.ts"],
+      "@openworker/shared": ["../../packages/shared/src/index.ts"]
     }
   },
   "include": ["electron.vite.config.ts", "src/main/**/*", "src/preload/**/*", "src/shared/**/*"]

@@ -1,7 +1,7 @@
 {
-  "name": "@openwork/shared",
+  "name": "@openworker/shared",
   "version": "0.0.0",
-  "description": "Openwork shared types and constants for agent runtime",
+  "description": "Openworker shared types and constants for agent runtime",
   "type": "module",
   "private": true,
   "exports": {

@@ -4,7 +4,7 @@
 
 ## 项目
 
-**Openwork** — 面向智能体的 Electron 桌面应用（React、Ant Design、AI SDK、MCP）。主要代码位于 `src/`（`main`、`renderer`、`preload`）。
+**Openworker** — 面向智能体的 Electron 桌面应用（React、Ant Design、AI SDK、MCP）。主要代码位于 `src/`（`main`、`renderer`、`preload`）。
 
 ## 包管理器
 
@@ -101,14 +101,14 @@ class SessionManager {
 
 ## 模块文档
 
-- [@openwork/agent](packages/agent/README.md) 智能体
-- [@openwork/openwork-agent](packages/openworkAgent) AG-UI AbstractAgent 适配
-- [@openwork/shared](packages/shared/README.md) 公用工具
-- [@openwork/skills](packages/skills/README.md) 内置 Agent Skills
-- [@openwork/api](services/api/README.md) 后端API服务
-- [@openwork/desktop](apps/desktop/README.md) 桌面客户端
-- [@openwork/admin](apps/admin/README.md) 后台管理
-- [@openwork/cli](apps/cli/README.md) 命令行客户端
-- [@openwork/landing](apps/landing/README.md) 文档项目
-- [@openwork/phone](apps/phone/README.md) 移动端客户端
-- [@openwork/langfuse-local](services/langfuse-local/README.md) 本地 Langfuse
+- [@openworker/agent](packages/agent/README.md) 智能体
+- [@openworker/openworker-agent](packages/openworkerAgent) AG-UI AbstractAgent 适配
+- [@openworker/shared](packages/shared/README.md) 公用工具
+- [@openworker/skills](packages/skills/README.md) 内置 Agent Skills
+- [@openworker/api](services/api/README.md) 后端API服务
+- [@openworker/desktop](apps/desktop/README.md) 桌面客户端
+- [@openworker/admin](apps/admin/README.md) 后台管理
+- [@openworker/cli](apps/cli/README.md) 命令行客户端
+- [@openworker/landing](apps/landing/README.md) 文档项目
+- [@openworker/phone](apps/phone/README.md) 移动端客户端
+- [@openworker/langfuse-local](services/langfuse-local/README.md) 本地 Langfuse

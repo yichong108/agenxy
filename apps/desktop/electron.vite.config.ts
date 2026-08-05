@@ -32,20 +32,20 @@ const monacoGithubLightThemeJson = resolve(
 export default defineConfig({
   main: {
     define: {
-      __OPENWORK_GIT_COMMIT__: JSON.stringify(readGitShortHash(rootDir)),
-      __OPENWORK_BUILD_ISO__: JSON.stringify(new Date().toISOString()),
-      __OPENWORK_BUNDLED_SKILLS_DIR__: JSON.stringify(bundledSkillsDir)
+      __OPENWORKERER_GIT_COMMIT__: JSON.stringify(readGitShortHash(rootDir)),
+      __OPENWORKERER_BUILD_ISO__: JSON.stringify(new Date().toISOString()),
+      __OPENWORKERER_BUNDLED_SKILLS_DIR__: JSON.stringify(bundledSkillsDir)
     },
     resolve: {
       alias: {
         '@': aliasSrc,
-        '@openwork/agent': aliasAgent,
-        '@openwork/shared': aliasShared
+        '@openworker/agent': aliasAgent,
+        '@openworker/shared': aliasShared
       }
     },
     plugins: [
       externalizeDepsPlugin({
-        exclude: ['@openwork/agent', '@openwork/shared']
+        exclude: ['@openworker/agent', '@openworker/shared']
       })
     ],
     build: {
@@ -60,13 +60,13 @@ export default defineConfig({
     resolve: {
       alias: {
         '@': aliasSrc,
-        '@openwork/agent': aliasAgent,
-        '@openwork/shared': aliasShared
+        '@openworker/agent': aliasAgent,
+        '@openworker/shared': aliasShared
       }
     },
     plugins: [
       externalizeDepsPlugin({
-        exclude: ['@openwork/agent', '@openwork/shared']
+        exclude: ['@openworker/agent', '@openworker/shared']
       })
     ],
     build: {

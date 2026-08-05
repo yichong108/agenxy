@@ -13,11 +13,11 @@ Agent可选MCP。
 ## 边界与依赖
 
 createAgent 的内部不依赖外部，只依赖 createAgent 的入参。
-send 的 Skills / MCP 按用户目录约定自动加载：`~/.openwork/skills` 与 `~/.openwork/mcp.json`（可通过 `getOpenworkSkillsPath` / `getOpenworkMcpConfigPath` 读取同一路径）。
+send 的 Skills / MCP 按用户目录约定自动加载：`~/.openworker/skills` 与 `~/.openworker/mcp.json`（可通过 `getOpenworkerSkillsPath` / `getOpenworkerMcpConfigPath` 读取同一路径）。
 
 ## 反模式（本模块已出现过/严禁）
 
-- 让 agent 依赖宿主特有的 skills 目录布局（bundled / userData）；应统一走 `~/.openwork/skills`
+- 让 agent 依赖宿主特有的 skills 目录布局（bundled / userData）；应统一走 `~/.openworker/skills`
 
 - 在工作流中强制执行仅 Desktop 需要的增强阶段
 

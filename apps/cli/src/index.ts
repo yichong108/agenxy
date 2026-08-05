@@ -1,5 +1,5 @@
 /**
- * @openwork/cli 入口 — 解析参数、创建 agent、一次性对话或 REPL。
+ * @openworker/cli 入口 — 解析参数、创建 agent、一次性对话或 REPL。
  */
 
 import { parseArgs, printHelp } from './cli.js'

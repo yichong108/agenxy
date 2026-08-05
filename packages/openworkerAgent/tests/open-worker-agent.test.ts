@@ -1,9 +1,9 @@
 /**
- * @file OpenWorkAgent AG-UI 适配器单元测试
+ * @file OpenWorkerAgent AG-UI 适配器单元测试
  */
 
 import { EventType, type BaseEvent, type RunAgentInput } from '@ag-ui/client'
-import type { Agent, AgentRunResult, CoreMessage } from '@openwork/agent'
+import type { Agent, AgentRunResult, CoreMessage } from '@openworker/agent'
 import type { LanguageModel } from 'ai'
 import { firstValueFrom, toArray } from 'rxjs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -12,11 +12,11 @@ const { createAgentMock } = vi.hoisted(() => ({
   createAgentMock: vi.fn()
 }))
 
-vi.mock('@openwork/agent', () => ({
+vi.mock('@openworker/agent', () => ({
   createAgent: createAgentMock
 }))
 
-import { aguiMessagesToCore, extractUserTurn, OpenWorkAgent } from '../index.js'
+import { aguiMessagesToCore, extractUserTurn, OpenWorkerAgent } from '../index.js'
 
 const stubModel = { modelId: 'test-model' } as LanguageModel
 
@@ -74,15 +74,15 @@ function createStubAgent(handlers?: { send?: Agent['send'] }): Agent {
 /**
  * 收集 Observable 全部事件。
  *
- * @param agent - OpenWorkAgent
+ * @param agent - OpenWorkerAgent
  * @param input - RunAgentInput
  * @returns 事件列表
  */
-async function collectEvents(agent: OpenWorkAgent, input: RunAgentInput): Promise<BaseEvent[]> {
+async function collectEvents(agent: OpenWorkerAgent, input: RunAgentInput): Promise<BaseEvent[]> {
   return firstValueFrom(agent.run(input).pipe(toArray()))
 }
 
-describe('OpenWorkAgent helpers', () => {
+describe('OpenWorkerAgent helpers', () => {
   it('extractUserTurn 提取最后一条 user 并保留历史', () => {
     const { userText, history } = extractUserTurn([
       { id: '1', role: 'user', content: 'hi' },
@@ -122,14 +122,14 @@ describe('OpenWorkAgent helpers', () => {
   })
 })
 
-describe('OpenWorkAgent', () => {
+describe('OpenWorkerAgent', () => {
   beforeEach(() => {
     createAgentMock.mockReset()
     createAgentMock.mockImplementation(() => createStubAgent())
   })
 
   it('run 产出与 AG-UI 一致的事件序列', async () => {
-    const agent = new OpenWorkAgent({
+    const agent = new OpenWorkerAgent({
       agentId: 'ow',
       agent: { provider: stubModel, local: { cwd: '/tmp/ws' } },
       runDefaults: { composerMode: 'ask', terminalKey: 'term:t' }
@@ -187,7 +187,7 @@ describe('OpenWorkAgent', () => {
       })
     )
 
-    const agent = new OpenWorkAgent({
+    const agent = new OpenWorkerAgent({
       agent: { provider: stubModel, local: { cwd: '/tmp/ws' } }
     })
     const events = await collectEvents(agent, baseInput())
@@ -213,7 +213,7 @@ describe('OpenWorkAgent', () => {
       })
     )
 
-    const agent = new OpenWorkAgent({
+    const agent = new OpenWorkerAgent({
       agent: { provider: stubModel, local: { cwd: '/tmp/ws' } }
     })
     const events = await collectEvents(agent, baseInput())
@@ -226,7 +226,7 @@ describe('OpenWorkAgent', () => {
   })
 
   it('无用户消息时产出 RUN_ERROR', async () => {
-    const agent = new OpenWorkAgent({ agent: { provider: stubModel } })
+    const agent = new OpenWorkerAgent({ agent: { provider: stubModel } })
     const events = await collectEvents(
       agent,
       baseInput({
@@ -254,7 +254,7 @@ describe('OpenWorkAgent', () => {
     })
     createAgentMock.mockImplementation(() => createStubAgent({ send }))
 
-    const agent = new OpenWorkAgent({
+    const agent = new OpenWorkerAgent({
       agent: { provider: stubModel, local: { cwd: '/tmp/ws' } },
       runDefaults: { composerMode: 'ask' }
     })
@@ -277,18 +277,18 @@ describe('OpenWorkAgent', () => {
   })
 
   it('clone 返回独立实例', () => {
-    const agent = new OpenWorkAgent({
+    const agent = new OpenWorkerAgent({
       agentId: 'ow',
       agent: { provider: stubModel }
     })
     const cloned = agent.clone()
-    expect(cloned).toBeInstanceOf(OpenWorkAgent)
+    expect(cloned).toBeInstanceOf(OpenWorkerAgent)
     expect(cloned).not.toBe(agent)
     expect(cloned.getAgent()).not.toBe(agent.getAgent())
   })
 
   it('暴露与 AG-UI AbstractAgent 一致的 API', () => {
-    const agent = new OpenWorkAgent({ agent: { provider: stubModel } })
+    const agent = new OpenWorkerAgent({ agent: { provider: stubModel } })
     expect(typeof agent.run).toBe('function')
     expect(typeof agent.runAgent).toBe('function')
     expect(typeof agent.abortRun).toBe('function')

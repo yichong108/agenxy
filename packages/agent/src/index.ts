@@ -1,16 +1,16 @@
 /**
- * @openwork/agent 公共 API — 以 createAgent 为入口，辅以工具定义与宿主持久化所需类型。
+ * @openworker/agent 公共 API — 以 createAgent 为入口，辅以工具定义与宿主持久化所需类型。
  *
  * 消息与工具统一使用 AI SDK 的 CoreMessage / Tool / ToolSet。
- * MCP / Skills 由 send 内部从 ~/.openwork 约定路径加载；宿主侧用 agent.mcp（probe/warmup/dispose）管理连接池；
+ * MCP / Skills 由 send 内部从 ~/.openworker 约定路径加载；宿主侧用 agent.mcp（probe/warmup/dispose）管理连接池；
  * 不在包根导出 MCP 实现细节。
  */
 
 export {
   createAgent,
-  getOpenworkDir,
-  getOpenworkMcpConfigPath,
-  getOpenworkSkillsPath,
+  getOpenworkerDir,
+  getOpenworkerMcpConfigPath,
+  getOpenworkerSkillsPath,
   type Agent,
   type AgentMcp,
   type AgentRunInput,

@@ -1,7 +1,7 @@
 {
-  "name": "@openwork/landing",
+  "name": "@openworker/landing",
   "version": "1.0.0",
-  "description": "Openwork 落地页 — Next.js + Tailwind CSS",
+  "description": "Openworker 落地页 — Next.js + Tailwind CSS",
   "type": "module",
   "scripts": {
     "preinstall": "npx only-allow pnpm",

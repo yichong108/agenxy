@@ -2,7 +2,7 @@
 
 ## 创建您的第一个 Agent
 
-1. **启动应用**: 打开 Openwork 应用
+1. **启动应用**: 打开 Openworker 应用
 2. **创建 Workspace**: 点击"新建 Workspace"按钮
 3. **配置 Agent**: 选择或创建您的 AI Agent
 4. **开始对话**: 在聊天窗口输入您的第一个问题

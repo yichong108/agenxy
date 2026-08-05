@@ -5,7 +5,12 @@
  * MCP 预热 / 探测 / dispose 使用应用级宿主（getMcpHostAgent），不参与会话 send。
  * Skills / MCP 工具绑定在 send 时按轮传入。
  */
-import { type Agent, type CoreMessage, createAgent, type CreateAgentOptions } from '@openwork/agent'
+import {
+  type Agent,
+  type CoreMessage,
+  createAgent,
+  type CreateAgentOptions
+} from '@openworker/agent'
 import type { LanguageModel } from 'ai'
 
 /**

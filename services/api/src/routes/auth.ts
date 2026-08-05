@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import type { LoginRequest } from '@openwork/shared'
+import type { LoginRequest } from '@openworker/shared'
 
 import {
   getUserFromAccessToken,

@@ -1,4 +1,4 @@
-import type { AuthUser, LoginResult } from '@openwork/shared'
+import type { AuthUser, LoginResult } from '@openworker/shared'
 
 import { getRequestErrorMessage, request } from '@/renderer/src/api/request'
 

@@ -10,8 +10,8 @@ import {
   useState
 } from 'react'
 
-import { AboutOpenworkModal } from '@/renderer/src/AboutOpenworkModal'
-import openworkLogoUrl from '@/renderer/src/assets/openwork-logo.png'
+import { AboutOpenworkerModal } from '@/renderer/src/AboutOpenworkerModal'
+import openworkerLogoUrl from '@/renderer/src/assets/openworker-logo.png'
 import { LoginPage } from '@/renderer/src/auth/LoginPage'
 import { WorkspaceCenterPane } from '@/renderer/src/center-pane'
 import { WorkspaceLeftPane } from '@/renderer/src/left-pane'
@@ -111,7 +111,7 @@ function AuthenticatedAppShell() {
   const [aboutOpen, setAboutOpen] = useState(false)
   const [aboutInfo, setAboutInfo] = useState<AboutAppInfo | null>(null)
 
-  const openAboutOpenwork = useCallback(async () => {
+  const openAboutOpenworker = useCallback(async () => {
     setAboutOpen(true)
     setAboutInfo(null)
     try {
@@ -163,13 +163,13 @@ function AuthenticatedAppShell() {
         children: [
           {
             key: 'about',
-            label: '关于 Openwork',
-            onClick: () => void openAboutOpenwork()
+            label: '关于 Openworker',
+            onClick: () => void openAboutOpenworker()
           }
         ]
       }
     ]
-  }, [bridge, isWinCustomChrome, openAboutOpenwork])
+  }, [bridge, isWinCustomChrome, openAboutOpenworker])
 
   const [rightPaneWidth, setRightPaneWidth] = useState(RIGHT_PANE_DEFAULT_WIDTH)
   const [isRightPaneCollapsed, setIsRightPaneCollapsed] = useState(true)
@@ -263,7 +263,7 @@ function AuthenticatedAppShell() {
         <div className="app-win-titlebar">
           <span className="app-brand-logo-visual app-brand-logo-visual--titlebar">
             <img
-              src={openworkLogoUrl}
+              src={openworkerLogoUrl}
               alt=""
               width={15}
               height={15}
@@ -313,7 +313,7 @@ function AuthenticatedAppShell() {
         />
       </div>
 
-      <AboutOpenworkModal
+      <AboutOpenworkerModal
         open={aboutOpen}
         info={aboutInfo}
         onClose={() => {

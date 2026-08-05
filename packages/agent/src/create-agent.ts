@@ -1,13 +1,13 @@
 /**
  * createAgent 是 agent 的唯一入口工厂。
- * 基于 createReActAgent，在 send 时按约定从 ~/.openwork 加载 Skills / MCP。
+ * 基于 createReActAgent，在 send 时按约定从 ~/.openworker 加载 Skills / MCP。
  */
 
 import {
   type AgentComposerMode,
   type McpServerEntry,
   normalizeComposerMode
-} from '@openwork/shared'
+} from '@openworker/shared'
 import type { CoreMessage, ToolSet } from 'ai'
 
 import {
@@ -25,15 +25,15 @@ import {
   warmupMcpServersFromConfig
 } from './mcp/mcp-runtime.js'
 import type { McpProbeResult, McpWarmupServerResult } from './mcp/types.js'
-import { getOpenworkMcpConfigPath, getOpenworkSkillsPath } from './openwork-paths.js'
+import { getOpenworkerMcpConfigPath, getOpenworkerSkillsPath } from './openworker-paths.js'
 import { loadSkillsFromPaths } from './skills/load-skills.js'
 
 export type { AgentRunResult, AgentRunTavilyOptions } from './createReActAgent.js'
 export {
-  getOpenworkDir,
-  getOpenworkMcpConfigPath,
-  getOpenworkSkillsPath
-} from './openwork-paths.js'
+  getOpenworkerDir,
+  getOpenworkerMcpConfigPath,
+  getOpenworkerSkillsPath
+} from './openworker-paths.js'
 
 /**
  * createAgent 本地运行环境配置。
@@ -51,7 +51,7 @@ export type AgentMcp = {
   probe: (entry: McpServerEntry) => Promise<McpProbeResult>
   /**
    * 按 configPath 预热已启用的 MCP（池化建连）。
-   * 未传时使用 `~/.openwork/mcp.json`。
+   * 未传时使用 `~/.openworker/mcp.json`。
    */
   warmup: (configPath?: string) => Promise<McpWarmupServerResult[]>
   /** 关闭所有池化 MCP 子进程（设置变更或应用退出时调用） */
@@ -62,7 +62,7 @@ export type AgentMcp = {
  * createAgent 配置项。
  *
  * provider 必填；messages / local 可选（messages 默认 []，cwd 回退 process.cwd()）。
- * Skills / MCP 在 send 时按 `~/.openwork` 约定自动加载，不在创建时绑定。
+ * Skills / MCP 在 send 时按 `~/.openworker` 约定自动加载，不在创建时绑定。
  *
  * @example
  * ```ts
@@ -81,7 +81,7 @@ export type CreateAgentOptions = CreateReActAgentOptions
  *
  * 调用形态：`send(userText, options?)`。
  * 会话历史由 createAgent / agent.messages 持有；send 内部追加 userText 并写回。
- * Skills / MCP 由 send 内部从 `~/.openwork/skills` 与 `~/.openwork/mcp.json` 加载；
+ * Skills / MCP 由 send 内部从 `~/.openworker/skills` 与 `~/.openworker/mcp.json` 加载；
  * 可经 `tools` 传入宿主额外工具，与 skills / MCP 合并后交给 createReActAgent（同名时 tools 覆盖）。
  */
 export type AgentRunInput = ReActAgentRunInput
@@ -105,7 +105,7 @@ export type Agent = {
 }
 
 /**
- * 按 `~/.openwork` 约定加载本轮 Skills / MCP 工具。
+ * 按 `~/.openworker` 约定加载本轮 Skills / MCP 工具。
  *
  * ask 模式下跳过（与历史行为一致，不暴露 skill_* / mcp_*）。
  * 目录或文件不存在时加载结果为空，不抛错。
@@ -122,8 +122,8 @@ async function loadSkillsAndMcpTools(
     return {}
   }
 
-  const skillBundle = await loadSkillsFromPaths([getOpenworkSkillsPath()], onTool)
-  const mcpResult = await buildMcpToolsFromConfig(getOpenworkMcpConfigPath(), onTool)
+  const skillBundle = await loadSkillsFromPaths([getOpenworkerSkillsPath()], onTool)
+  const mcpResult = await buildMcpToolsFromConfig(getOpenworkerMcpConfigPath(), onTool)
 
   return mergeToolSets(skillBundle.tools, mcpResult.tools)
 }
@@ -131,7 +131,7 @@ async function loadSkillsAndMcpTools(
 /**
  * 创建 agent 实例 — packages/agent 的唯一入口工厂。
  *
- * 内部委托 createReActAgent；skills / mcp 在 send 时从 `~/.openwork` 加载并经其 tools 入参传入。
+ * 内部委托 createReActAgent；skills / mcp 在 send 时从 `~/.openworker` 加载并经其 tools 入参传入。
  * 可 `await createAgent(...)`（函数本身同步，await 无害）。
  *
  * 注意：不直接与外部耦合。同会话「运行中不可再发」由宿主按 session 互斥；
@@ -144,7 +144,7 @@ export function createAgent(options: CreateAgentOptions): Agent {
   const inner = createReActAgent(options)
 
   /**
-   * 发起一次 agent run：从 ~/.openwork 加载 skills / MCP → 委托 createReActAgent.send。
+   * 发起一次 agent run：从 ~/.openworker 加载 skills / MCP → 委托 createReActAgent.send。
    *
    * @param userText - 本轮用户文本
    * @param input - 可选 run 参数（不含 skills / mcp）
@@ -174,7 +174,7 @@ export function createAgent(options: CreateAgentOptions): Agent {
   const mcpApi: AgentMcp = {
     probe: (entry) => probeMcpServer(entry),
     warmup: (configPath) =>
-      warmupMcpServersFromConfig((configPath?.trim() || getOpenworkMcpConfigPath()).trim()),
+      warmupMcpServersFromConfig((configPath?.trim() || getOpenworkerMcpConfigPath()).trim()),
     dispose: () => disposeMcpConnectionPool()
   }
 

@@ -149,4 +149,4 @@ const api = {
 
 contextBridge.exposeInMainWorld('bridge', api)
 
-export type OpenworkApi = typeof api
+export type OpenworkerApi = typeof api

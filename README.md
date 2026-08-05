@@ -1,12 +1,12 @@
-# Openwork
+# Openworker
 
 [简体中文说明](README.zh-CN.md)
 
-**Openwork** is an AI agent suite in a **pnpm + Turborepo** monorepo: an **Electron** desktop client, a **Next.js** marketing site, and an optional **local Langfuse** stack for observability.
+**Openworker** is an AI agent suite in a **pnpm + Turborepo** monorepo: an **Electron** desktop client, a **Next.js** marketing site, and an optional **local Langfuse** stack for observability.
 
 ## Preview
 
-![Openwork main UI: workspace sidebar, session tree, and chat](assets/openwork-ui-screenshot.png)
+![Openworker main UI: workspace sidebar, session tree, and chat](assets/openworker-ui-screenshot.png)
 
 ## Highlights (desktop)
 
@@ -21,7 +21,7 @@
 The workspace is defined in `pnpm-workspace.yaml` (`apps/*`, `packages/*`, `services/*`). Current first-party packages live under `apps/` and `services/`.
 
 ```
-openwork/
+openworker/
 ├── apps/
 │   ├── desktop/              # Electron app (electron-vite, React, Ant Design)
 │   └── landing/              # Next.js landing page
@@ -64,7 +64,7 @@ pnpm desktop:dev
 Debug build (inspect / remote debugging ports):
 
 ```bash
-pnpm --filter @openwork/desktop run dev:debug
+pnpm --filter @openworker/desktop run dev:debug
 ```
 
 ### Landing page

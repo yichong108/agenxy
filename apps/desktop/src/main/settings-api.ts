@@ -1,4 +1,4 @@
-import { type AppSettings, normalizeSettings } from '@openwork/shared'
+import { type AppSettings, normalizeSettings } from '@openworker/shared'
 
 import { mainLog } from '@/main/logger'
 
@@ -10,12 +10,12 @@ type SettingsApiResponse = {
 /**
  * 解析桌面端对接的 API 根地址
  *
- * 优先读 `OPENWORK_API_BASE_URL`，默认本地开发地址 `http://127.0.0.1:3100`。
+ * 优先读 `OPENWORKERER_API_BASE_URL`，默认本地开发地址 `http://127.0.0.1:3100`。
  *
  * @returns 去掉尾部斜杠后的 base URL
  */
 export function getApiBaseUrl(): string {
-  const raw = (process.env.OPENWORK_API_BASE_URL || 'http://127.0.0.1:3100').trim()
+  const raw = (process.env.OPENWORKERER_API_BASE_URL || 'http://127.0.0.1:3100').trim()
   return raw.replace(/\/+$/, '') || 'http://127.0.0.1:3100'
 }
 

@@ -1,5 +1,5 @@
 import type { RowDataPacket, ResultSetHeader } from 'mysql2/promise'
-import { defaultSettings, normalizeSettings, type AppSettings } from '@openwork/shared'
+import { defaultSettings, normalizeSettings, type AppSettings } from '@openworker/shared'
 
 import { mysqlPool } from '../db/mysql.js'
 import { redis } from '../db/redis.js'

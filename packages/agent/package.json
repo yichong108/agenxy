@@ -1,7 +1,7 @@
 {
-  "name": "@openwork/agent",
+  "name": "@openworker/agent",
   "version": "0.0.0",
-  "description": "Openwork agent core — ReAct loop, messages, pipeline",
+  "description": "Openworker agent core — ReAct loop, messages, pipeline",
   "type": "module",
   "private": true,
   "exports": {
@@ -13,7 +13,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@openwork/shared": "workspace:*",
+    "@openworker/shared": "workspace:*",
     "@ai-sdk/openai": "^1.3.22",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@vscode/ripgrep": "^1.18.0",

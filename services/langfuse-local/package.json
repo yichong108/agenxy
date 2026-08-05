@@ -1,5 +1,5 @@
 {
-  "name": "@openwork/langfuse-local",
+  "name": "@openworker/langfuse-local",
   "version": "1.0.0",
   "description": "Local Langfuse observability service (Docker Compose)",
   "type": "module",

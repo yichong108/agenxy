@@ -1,10 +1,10 @@
-import type { AuthUser } from '@openwork/shared'
+import type { AuthUser } from '@openworker/shared'
 import { create } from 'zustand'
 
 import { fetchAuthMeApi, loginWithPasswordApi } from '@/renderer/src/api/auth-api'
 
 /** localStorage 中持久化登录会话的 key */
-const AUTH_STORAGE_KEY = 'openwork.auth.session'
+const AUTH_STORAGE_KEY = 'openworker.auth.session'
 
 type PersistedAuthSession = {
   accessToken: string

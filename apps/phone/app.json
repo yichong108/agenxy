@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Openwork Phone",
-    "slug": "openwork-phone",
+    "name": "Openworker Phone",
+    "slug": "openworker-phone",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

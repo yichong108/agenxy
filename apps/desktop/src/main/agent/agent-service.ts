@@ -7,7 +7,7 @@ import {
   resolveChatModel,
   type ToolObservation,
   userMessage
-} from '@openwork/agent'
+} from '@openworker/agent'
 import type { WebContents } from 'electron'
 
 import { createSessionAgent } from '@/main/agent/agent-instance'

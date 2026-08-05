@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import type { AppSettings } from '@openwork/shared'
+import type { AppSettings } from '@openworker/shared'
 
 import { getAppSettings, patchAppSettings } from '../services/settings-service.js'
 

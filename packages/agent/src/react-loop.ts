@@ -2,7 +2,7 @@
  * @file react-loop.ts
  * @description ReAct 循环实现（基于 AI SDK CoreMessage + ToolSet）
  */
-import { defaultSettings, MAX_AGENT_LOOP_STEPS } from '@openwork/shared'
+import { defaultSettings, MAX_AGENT_LOOP_STEPS } from '@openworker/shared'
 import {
   streamText,
   type CoreAssistantMessage,

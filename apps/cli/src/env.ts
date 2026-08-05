@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { type AppSettings, defaultSettings, normalizeSettings } from '@openwork/shared'
+import { type AppSettings, defaultSettings, normalizeSettings } from '@openworker/shared'
 import { config as loadDotenv } from 'dotenv'
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -28,17 +28,18 @@ export function loadCliEnv(): void {
 /**
  * 从环境变量组装 CLI 用 AppSettings。
  *
- * 读取 `OPENWORK_API_KEY` / `OPENWORK_BASE_URL` / `OPENWORK_MODEL` /
+ * 读取 `OPENWORKERER_API_KEY` / `OPENWORKERER_BASE_URL` / `OPENWORKERER_MODEL` /
  * `TAVILY_API_KEY`；未设置时回退 defaultSettings。
  *
  * @returns 规范化后的 AppSettings
  */
 export function settingsFromEnv(): AppSettings {
-  const apiKey = process.env.OPENWORK_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim() || ''
+  const apiKey =
+    process.env.OPENWORKERER_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim() || ''
   const baseUrl =
-    process.env.OPENWORK_BASE_URL?.trim() || defaultSettings.providerProfiles.deepseek.baseUrl
+    process.env.OPENWORKERER_BASE_URL?.trim() || defaultSettings.providerProfiles.deepseek.baseUrl
   const model =
-    process.env.OPENWORK_MODEL?.trim() || defaultSettings.providerProfiles.deepseek.model
+    process.env.OPENWORKERER_MODEL?.trim() || defaultSettings.providerProfiles.deepseek.model
   const tavilyApiKey = process.env.TAVILY_API_KEY?.trim() || ''
 
   return normalizeSettings({

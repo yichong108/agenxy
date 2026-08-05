@@ -1,6 +1,6 @@
-# @openwork/skills
+# @openworker/skills
 
-Openwork 内置 Agent Skills 内容包。各技能位于 `content/` 下的独立子目录，入口文件为 `SKILL.md`。
+Openworker 内置 Agent Skills 内容包。各技能位于 `content/` 下的独立子目录，入口文件为 `SKILL.md`。
 
 ## 加载位置
 
@@ -71,7 +71,7 @@ description: 用于执行代码评审，优先发现 bug、回归风险和缺失
 ## 程序化路径
 
 ```ts
-import { getBundledSkillsDir } from '@openwork/skills'
+import { getBundledSkillsDir } from '@openworker/skills'
 
 const root = getBundledSkillsDir() // .../packages/skills/content
 ```

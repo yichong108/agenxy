@@ -29,7 +29,7 @@ importers:
       '@ant-design/icons':
         specifier: ^5.6.1
         version: 5.6.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@openwork/shared':
+      '@openworker/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       antd:
@@ -69,10 +69,10 @@ importers:
 
   apps/cli:
     dependencies:
-      '@openwork/agent':
+      '@openworker/agent':
         specifier: workspace:*
         version: link:../../packages/agent
-      '@openwork/shared':
+      '@openworker/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       '@vscode/ripgrep':
@@ -115,13 +115,13 @@ importers:
       '@opentelemetry/sdk-node':
         specifier: ^0.217.0
         version: 0.217.0(@opentelemetry/api@1.9.1)
-      '@openwork/agent':
+      '@openworker/agent':
         specifier: workspace:*
         version: link:../../packages/agent
-      '@openwork/shared':
+      '@openworker/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@openwork/skills':
+      '@openworker/skills':
         specifier: workspace:*
         version: link:../../packages/skills
       '@vscode/ripgrep':
@@ -331,7 +331,7 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@3.25.76)
-      '@openwork/shared':
+      '@openworker/shared':
         specifier: workspace:*
         version: link:../shared
       '@vscode/ripgrep':
@@ -351,7 +351,7 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(vite@6.4.2(@types/node@22.19.19)(jiti@2.7.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0))
 
-  packages/openworkAgent:
+  packages/openworkerAgent:
     dependencies:
       '@ag-ui/client':
         specifier: 0.0.57
@@ -359,7 +359,7 @@ importers:
       '@ag-ui/core':
         specifier: 0.0.57
         version: 0.0.57
-      '@openwork/agent':
+      '@openworker/agent':
         specifier: workspace:*
         version: link:../agent
       ai:
@@ -393,7 +393,7 @@ importers:
 
   services/api:
     dependencies:
-      '@openwork/shared':
+      '@openworker/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       bcryptjs:

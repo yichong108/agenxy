@@ -1,6 +1,6 @@
 /** IPC 与流式事件类型（主进程 / 预加载 / 渲染层共享） */
 
-import type { ToolTimelineEvent } from '@openwork/shared'
+import type { ToolTimelineEvent } from '@openworker/shared'
 
 export const IPC = {
   WORKSPACE_SELECT: 'workspace:select',
@@ -130,7 +130,7 @@ export type {
   ToolCallEvent,
   ToolErrorEvent,
   ToolTimelineEvent
-} from '@openwork/shared'
+} from '@openworker/shared'
 export {
   applySettingsForm,
   defaultProviderProfiles,
@@ -144,7 +144,7 @@ export {
   normalizeSettings,
   parseMcpServersFromUnknown,
   settingsToFormValues
-} from '@openwork/shared'
+} from '@openworker/shared'
 
 export type McpProbeToolInfo = {
   name: string

@@ -2,7 +2,7 @@
  * CLI 参数解析与帮助文案。
  */
 
-import type { AgentComposerMode } from '@openwork/shared'
+import type { AgentComposerMode } from '@openworker/shared'
 
 /** 解析后的命令行选项 */
 export type CliOptions = {
@@ -20,28 +20,28 @@ export type CliOptions = {
  * 打印 CLI 用法。
  */
 export function printHelp(): void {
-  console.log(`Openwork CLI — 命令行智能体
+  console.log(`Openworker CLI — 命令行智能体
 
 用法:
-  pnpm --filter @openwork/cli start -- [options] [prompt]
-  pnpm --filter @openwork/cli start -- [options]
+  pnpm --filter @openworker/cli start -- [options] [prompt]
+  pnpm --filter @openworker/cli start -- [options]
 
 选项:
   -h, --help          显示帮助
   -C, --cwd <path>    工作区根目录（默认 process.cwd()）
   -m, --mode <mode>   ask | build（默认 build）
 
-MCP / Skills 从用户目录 ~/.openwork/mcp.json 与 ~/.openwork/skills 自动加载。
+MCP / Skills 从用户目录 ~/.openworker/mcp.json 与 ~/.openworker/skills 自动加载。
 
 环境变量（见 .env.example）:
-  OPENWORK_API_KEY    OpenAI 兼容 API Key（必填）
-  OPENWORK_BASE_URL   接口地址
-  OPENWORK_MODEL      模型名
+  OPENWORKERER_API_KEY    OpenAI 兼容 API Key（必填）
+  OPENWORKERER_BASE_URL   接口地址
+  OPENWORKERER_MODEL      模型名
   TAVILY_API_KEY      可选联网搜索
 
 示例:
-  pnpm --filter @openwork/cli start -- "列出当前目录文件"
-  pnpm --filter @openwork/cli start -- -m ask
+  pnpm --filter @openworker/cli start -- "列出当前目录文件"
+  pnpm --filter @openworker/cli start -- -m ask
 `)
 }
 

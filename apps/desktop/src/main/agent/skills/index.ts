@@ -1,8 +1,8 @@
 /**
  * Desktop 技能路径解析 — 供用户布局管理使用。
  *
- * createAgent.send 已改为扫描 `~/.openwork/skills`；本模块仍负责 bundled / userData 布局。
- * 加载与工具组装由 @openwork/agent 的 loadSkillsFromPaths 完成。
+ * createAgent.send 已改为扫描 `~/.openworker/skills`；本模块仍负责 bundled / userData 布局。
+ * 加载与工具组装由 @openworker/agent 的 loadSkillsFromPaths 完成。
  */
 import { existsSync, readdirSync } from 'node:fs'
 import path from 'node:path'
@@ -20,7 +20,7 @@ export {
  * 解析当前进程可用的 skills 根目录列表（bundled / userData）。
  *
  * 同步实现。同名技能由 agent 侧「先出现优先」去重。
- * 注意：createAgent.send 不再接收此列表，改为扫描 ~/.openwork/skills。
+ * 注意：createAgent.send 不再接收此列表，改为扫描 ~/.openworker/skills。
  *
  * @returns 绝对路径列表
  */

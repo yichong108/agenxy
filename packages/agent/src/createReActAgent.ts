@@ -3,7 +3,7 @@
  * 它负责创建 agent 实例，并提供 send 方法，用于发起一次 agent run。
  */
 
-import { type AgentComposerMode, normalizeComposerMode, type StreamEvent } from '@openwork/shared'
+import { type AgentComposerMode, normalizeComposerMode, type StreamEvent } from '@openworker/shared'
 import type { CoreMessage, LanguageModel, ToolSet } from 'ai'
 
 import type { PreparedTooling } from './run-types.js'

@@ -1,4 +1,4 @@
-import type { AuthUser, LoginResult } from '@openwork/shared'
+import type { AuthUser, LoginResult } from '@openworker/shared'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import type { RowDataPacket } from 'mysql2/promise'

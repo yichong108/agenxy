@@ -3,7 +3,7 @@ import { LockOutlined, UserOutlined } from '@ant-design/icons'
 import { Alert, App as AntdApp, Button, Form, Input, Typography } from 'antd'
 import { useState } from 'react'
 
-import openworkLogoUrl from '@/renderer/src/assets/openwork-logo.png'
+import openworkerLogoUrl from '@/renderer/src/assets/openworker-logo.png'
 import { useAuthStore } from '@/renderer/src/store/auth-store'
 
 const { Title, Text } = Typography
@@ -43,7 +43,7 @@ export function LoginPage() {
       <div className="login-page-panel">
         <div className="login-page-brand">
           <img
-            src={openworkLogoUrl}
+            src={openworkerLogoUrl}
             alt=""
             width={28}
             height={28}
@@ -51,7 +51,7 @@ export function LoginPage() {
             draggable={false}
           />
           <Title level={3} className="login-page-title">
-            Openwork
+            Openworker
           </Title>
           <Text type="secondary" className="login-page-subtitle">
             使用账号密码登录

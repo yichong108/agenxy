@@ -1,5 +1,5 @@
 /**
- * OpenWork AG-UI 适配器：将 `@openwork/agent` 的 createAgent 桥接为 AG-UI AbstractAgent。
+ * OpenWorker AG-UI 适配器：将 `@openworker/agent` 的 createAgent 桥接为 AG-UI AbstractAgent。
  *
  * 导出形态与官方集成一致：继承 `AbstractAgent`，`run(input)` 返回 `Observable<BaseEvent>`，
  * 可直接用于 CopilotKit / HttpAgent 服务端或 `runAgent()` 客户端管线。
@@ -31,55 +31,55 @@ import {
   type AgentRunInput,
   type CreateAgentOptions,
   type ToolObservation
-} from '@openwork/agent'
+} from '@openworker/agent'
 import type { CoreMessage, CoreToolMessage } from 'ai'
 import { Observable, type Subscriber } from 'rxjs'
 
 /**
  * 每轮 createAgent.send 的默认参数（不含流式回调；回调由本适配器映射为 AG-UI 事件）。
  */
-export type OpenWorkAgentRunDefaults = Omit<AgentRunInput, 'onTextDelta' | 'onTool' | 'onEmit'>
+export type OpenWorkerAgentRunDefaults = Omit<AgentRunInput, 'onTextDelta' | 'onTool' | 'onEmit'>
 
 /**
- * OpenWorkAgent 配置：AG-UI AgentConfig + createAgent 选项。
+ * OpenWorkerAgent 配置：AG-UI AgentConfig + createAgent 选项。
  *
  * @example
  * ```ts
- * const agent = new OpenWorkAgent({
- *   agentId: 'openwork',
- *   description: 'Openwork desktop agent',
+ * const agent = new OpenWorkerAgent({
+ *   agentId: 'openworker',
+ *   description: 'Openworker desktop agent',
  *   agent: { provider: model, local: { cwd } },
  *   runDefaults: { composerMode: 'build', workspacePath: cwd }
  * })
  * await agent.runAgent({ runId: 'r1' })
  * ```
  */
-export type OpenWorkAgentConfig = AgentConfig & {
+export type OpenWorkerAgentConfig = AgentConfig & {
   /** createAgent 配置（provider 必填） */
   agent: CreateAgentOptions
   /**
    * 每轮 send 的默认参数。
    * 优先级：runDefaults < RunAgentInput.forwardedProps
    */
-  runDefaults?: OpenWorkAgentRunDefaults
+  runDefaults?: OpenWorkerAgentRunDefaults
 }
 
 /**
  * 从 RunAgentInput.forwardedProps 解析可覆盖的 Agent 运行参数。
  *
  * @param forwarded - AG-UI forwardedProps
- * @returns 部分 OpenWorkAgentRunDefaults
+ * @returns 部分 OpenWorkerAgentRunDefaults
  */
-function parseForwardedProps(forwarded: unknown): OpenWorkAgentRunDefaults {
+function parseForwardedProps(forwarded: unknown): OpenWorkerAgentRunDefaults {
   if (!forwarded || typeof forwarded !== 'object') return {}
   const src = forwarded as Record<string, unknown>
-  const out: OpenWorkAgentRunDefaults = {}
+  const out: OpenWorkerAgentRunDefaults = {}
 
   if (typeof src.composerMode === 'string') {
-    out.composerMode = src.composerMode as OpenWorkAgentRunDefaults['composerMode']
+    out.composerMode = src.composerMode as OpenWorkerAgentRunDefaults['composerMode']
   }
   if (src.provider != null) {
-    out.provider = src.provider as OpenWorkAgentRunDefaults['provider']
+    out.provider = src.provider as OpenWorkerAgentRunDefaults['provider']
   }
   if (src.abortController instanceof AbortController) {
     out.abortController = src.abortController
@@ -91,7 +91,7 @@ function parseForwardedProps(forwarded: unknown): OpenWorkAgentRunDefaults {
     out.terminalKey = src.terminalKey
   }
   if (src.tavily != null && typeof src.tavily === 'object') {
-    out.tavily = src.tavily as OpenWorkAgentRunDefaults['tavily']
+    out.tavily = src.tavily as OpenWorkerAgentRunDefaults['tavily']
   }
   if (typeof src.maxSteps === 'number') {
     out.maxSteps = src.maxSteps
@@ -275,27 +275,27 @@ function formatRunError(error: unknown): string {
 }
 
 /**
- * AG-UI AbstractAgent 实现：内部委托 `@openwork/agent` 的 createAgent。
+ * AG-UI AbstractAgent 实现：内部委托 `@openworker/agent` 的 createAgent。
  *
  * 与官方 `VercelAISDKAgent` / `ClaudeAgentAdapter` 相同契约：
  * - `run(input): Observable<BaseEvent>`
  * - 支持 `runAgent()` / `subscribe()` / `abortRun()` / `clone()`
  */
-export class OpenWorkAgent extends AbstractAgent {
+export class OpenWorkerAgent extends AbstractAgent {
   /** CopilotKit Runtime 可能注入的 per-request headers（本适配器暂不转发至 LLM） */
   public headers?: Record<string, string>
 
-  private readonly config: OpenWorkAgentConfig
+  private readonly config: OpenWorkerAgentConfig
   private readonly inner: Agent
-  private readonly runDefaults: OpenWorkAgentRunDefaults
+  private readonly runDefaults: OpenWorkerAgentRunDefaults
   private activeAbort: AbortController | null = null
 
   /**
-   * 创建 OpenWork AG-UI Agent。
+   * 创建 OpenWorker AG-UI Agent。
    *
    * @param config - AgentConfig + createAgent 选项与 run 默认参数
    */
-  constructor(config: OpenWorkAgentConfig) {
+  constructor(config: OpenWorkerAgentConfig) {
     const { agent: agentOptions, runDefaults, ...rest } = config
     super(rest)
     this.config = config
@@ -306,10 +306,10 @@ export class OpenWorkAgent extends AbstractAgent {
   /**
    * 克隆当前 agent（新 createAgent 实例，复制 AG-UI 消息与 state）。
    *
-   * @returns 新的 OpenWorkAgent
+   * @returns 新的 OpenWorkerAgent
    */
-  public clone(): OpenWorkAgent {
-    const cloned = new OpenWorkAgent({
+  public clone(): OpenWorkerAgent {
+    const cloned = new OpenWorkerAgent({
       ...this.config,
       threadId: this.threadId,
       initialMessages: structuredClone(this.messages),
@@ -420,7 +420,7 @@ export class OpenWorkAgent extends AbstractAgent {
       emit(end)
     }
 
-    const merged: OpenWorkAgentRunDefaults = {
+    const merged: OpenWorkerAgentRunDefaults = {
       ...this.runDefaults,
       ...parseForwardedProps(input.forwardedProps),
       abortController
@@ -485,7 +485,7 @@ export class OpenWorkAgent extends AbstractAgent {
         onEmit: (event) => {
           const custom: CustomEvent = {
             type: EventType.CUSTOM,
-            name: 'openwork.stream',
+            name: 'openworker.stream',
             value: event,
             timestamp: Date.now()
           }

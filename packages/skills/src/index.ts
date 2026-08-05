@@ -1,5 +1,5 @@
 /**
- * @openwork/skills — 内置技能内容包入口
+ * @openworker/skills — 内置技能内容包入口
  *
  * 本包存放随应用分发的 SKILL.md 及配套资源；宿主（desktop 等）通过
  * getBundledSkillsDir 定位扫描根目录，或在打包时将该目录复制到 extraResources。

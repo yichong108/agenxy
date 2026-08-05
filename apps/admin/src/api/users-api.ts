@@ -1,4 +1,4 @@
-import type { UserListResult } from '@openwork/shared'
+import type { UserListResult } from '@openworker/shared'
 
 import { getRequestErrorMessage, request } from './request'
 

@@ -9,7 +9,7 @@ import { WorkspaceMessagesInner } from './WorkspaceMessagesInner'
 import { MenuUnfoldOutlined } from '@ant-design/icons'
 import { Alert, Button, Space, Tag, Typography } from 'antd'
 
-import openworkLogoUrl from '@/renderer/src/assets/openwork-logo.png'
+import openworkerLogoUrl from '@/renderer/src/assets/openworker-logo.png'
 
 const { Text } = Typography
 
@@ -33,7 +33,7 @@ export function WorkspaceCenterPane(props: WorkspaceCenterPaneProps) {
           <div className="app-topbar-leading-cluster">
             <span className="app-brand-logo-visual app-brand-logo-visual--topbar">
               <img
-                src={openworkLogoUrl}
+                src={openworkerLogoUrl}
                 alt=""
                 width={19}
                 height={19}

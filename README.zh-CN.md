@@ -1,12 +1,12 @@
-# Openwork
+# Openworker
 
 [English README](README.md)
 
-**Openwork** 是一款基于 Electron 的 AI Agent 桌面应用。界面使用 React 与 Ant Design；主进程集成 LangChain 与各模型提供商，并支持 **MCP（Model Context Protocol）** 以接入外部工具与能力。
+**Openworker** 是一款基于 Electron 的 AI Agent 桌面应用。界面使用 React 与 Ant Design；主进程集成 LangChain 与各模型提供商，并支持 **MCP（Model Context Protocol）** 以接入外部工具与能力。
 
 ## 界面预览
 
-![Openwork 主界面：工作区侧栏、会话树与对话区](assets/openwork-ui-screenshot.png)
+![Openworker 主界面：工作区侧栏、会话树与对话区](assets/openworker-ui-screenshot.png)
 
 ## 功能概览
 

@@ -1,7 +1,7 @@
 {
-  "name": "@openwork/cli",
+  "name": "@openworker/cli",
   "version": "0.0.0",
-  "description": "Openwork CLI — 命令行调用 @openwork/agent",
+  "description": "Openworker CLI — 命令行调用 @openworker/agent",
   "type": "module",
   "private": true,
   "scripts": {
@@ -13,8 +13,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@openwork/agent": "workspace:*",
-    "@openwork/shared": "workspace:*",
+    "@openworker/agent": "workspace:*",
+    "@openworker/shared": "workspace:*",
     "@vscode/ripgrep": "^1.18.0",
     "dotenv": "^17.4.2"
   },

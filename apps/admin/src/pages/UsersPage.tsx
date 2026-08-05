@@ -1,4 +1,4 @@
-import type { AuthUserListItem } from '@openwork/shared'
+import type { AuthUserListItem } from '@openworker/shared'
 import { Alert, Space, Table, Tag, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'

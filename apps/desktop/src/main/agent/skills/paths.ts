@@ -27,7 +27,7 @@ export function getBundledSkillsSourceDir(): string | null {
     const absRoot = path.join(process.resourcesPath, 'skills')
     return existsSync(absRoot) ? absRoot : null
   }
-  const fromPackage = __OPENWORK_BUNDLED_SKILLS_DIR__
+  const fromPackage = __OPENWORKERER_BUNDLED_SKILLS_DIR__
   if (existsSync(fromPackage)) return fromPackage
   mainLog.warn('[skills] 开发模式下未找到内置技能目录，已尝试:', fromPackage)
   return null

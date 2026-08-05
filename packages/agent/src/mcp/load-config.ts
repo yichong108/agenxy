@@ -4,7 +4,7 @@
 
 import { promises as fs, writeFileSync } from 'node:fs'
 
-import { type McpServerEntry, parseMcpServersFromUnknown } from '@openwork/shared'
+import { type McpServerEntry, parseMcpServersFromUnknown } from '@openworker/shared'
 
 /**
  * 从配置文件路径加载 MCP 服务器列表。

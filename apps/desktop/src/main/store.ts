@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
-import { getOpenworkDir, getOpenworkMcpConfigPath } from '@openwork/agent'
+import { getOpenworkerDir, getOpenworkerMcpConfigPath } from '@openworker/agent'
 import { app } from 'electron'
 import Store from 'electron-store'
 
@@ -44,7 +44,7 @@ type StoreSchema = {
 const DEFAULT_WORKSPACE_ID = 'workspace-default'
 
 const store = new Store<StoreSchema>({
-  name: 'openwork',
+  name: 'openworker',
   defaults: {
     workspaces: [],
     activeWorkspaceId: null,
@@ -263,12 +263,12 @@ function writeLocalSettingsCache(next: AppSettings): void {
 }
 
 /**
- * MCP 配置文件路径（~/.openwork/mcp.json），与 createAgent.send 约定一致。
+ * MCP 配置文件路径（~/.openworker/mcp.json），与 createAgent.send 约定一致。
  *
  * @returns 绝对路径
  */
 export function getMcpConfigPath(): string {
-  return getOpenworkMcpConfigPath()
+  return getOpenworkerMcpConfigPath()
 }
 
 /**
@@ -278,7 +278,7 @@ export function getMcpConfigPath(): string {
  */
 function syncMcpConfigFile(settings: AppSettings): void {
   try {
-    mkdirSync(getOpenworkDir(), { recursive: true })
+    mkdirSync(getOpenworkerDir(), { recursive: true })
     const payload = { mcpServers: settings.mcpServers ?? [] }
     writeFileSync(getMcpConfigPath(), `${JSON.stringify(payload, null, 2)}\n`, 'utf8')
   } catch (e) {
