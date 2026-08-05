@@ -31,10 +31,10 @@ describe('createAgent', () => {
     vi.mocked(runReactLoop).mockClear()
   })
 
-  it('返回含 send / wait 的实例', () => {
+  it('返回含 send / mcp 的实例', () => {
     const agent = createAgent({ provider: stubModel, local: { cwd: '/tmp/ws' } })
     expect(agent.send).toBeTypeOf('function')
-    expect(agent.wait).toBeTypeOf('function')
+    expect(agent.mcp).toBeTypeOf('object')
     expect(agent.messages).toEqual([])
   })
 
@@ -67,6 +67,7 @@ describe('createAgent', () => {
       { role: 'user', content: 'ping' },
       { role: 'assistant', content: 'hello' }
     ])
+    expect(result.result).toBe('hello')
     expect(agent.messages).toEqual(result.messages)
   })
 
@@ -153,47 +154,36 @@ describe('createAgent', () => {
     await expect(agent.send('   ', {})).rejects.toThrow('userText is empty')
   })
 
-  it('wait 在 send 成功后返回 finished 与助手文本', async () => {
+  it('send 成功时返回助手文本', async () => {
     const agent = createAgent({ provider: stubModel, local: { cwd: '/tmp/ws' } })
     const callbacks = createCallbacks()
 
-    const sendPromise = agent.send('hi', {
+    const result = await agent.send('hi', {
       composerMode: 'ask',
       ...callbacks
     })
-    const waitResult = await agent.wait()
-    await sendPromise
 
-    expect(waitResult).toEqual({
-      status: 'finished',
-      result: 'hello'
-    })
-    // 重复 wait 返回同一终态
-    await expect(agent.wait()).resolves.toEqual(waitResult)
+    expect(result.result).toBe('hello')
   })
 
-  it('wait 在取消时返回 cancelled', async () => {
+  it('取消时 send 抛错且保留已追加用户消息', async () => {
     const agent = createAgent({ provider: stubModel, local: { cwd: '/tmp/ws' } })
     const callbacks = createCallbacks()
     const abortError = new Error('Aborted')
     abortError.name = 'AbortError'
     vi.mocked(runReactLoop).mockRejectedValueOnce(abortError)
 
-    const sendPromise = agent.send('hi', {
-      composerMode: 'ask',
-      ...callbacks
-    })
-    await expect(sendPromise).rejects.toThrow('Aborted')
+    await expect(
+      agent.send('hi', {
+        composerMode: 'ask',
+        ...callbacks
+      })
+    ).rejects.toThrow('Aborted')
 
-    const waitResult = await agent.wait()
-    expect(waitResult.status).toBe('cancelled')
-    expect(waitResult.result).toBe('')
-    expect(waitResult.error).toBe(abortError)
-    // 失败时仍保留已追加的用户消息
     expect(agent.messages).toEqual([{ role: 'user', content: 'hi' }])
   })
 
-  it('wait 在失败时返回 error', async () => {
+  it('失败时 send 抛错', async () => {
     const agent = createAgent({ provider: stubModel, local: { cwd: '/tmp/ws' } })
     const callbacks = createCallbacks()
     const boom = new Error('model failed')
@@ -205,14 +195,5 @@ describe('createAgent', () => {
         ...callbacks
       })
     ).rejects.toThrow('model failed')
-
-    const waitResult = await agent.wait()
-    expect(waitResult.status).toBe('error')
-    expect(waitResult.error).toBe(boom)
-  })
-
-  it('未 send 时 wait 抛错', async () => {
-    const agent = createAgent({ provider: stubModel })
-    await expect(agent.wait()).rejects.toThrow('No agent run to wait for')
   })
 })

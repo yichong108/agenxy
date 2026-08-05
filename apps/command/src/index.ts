@@ -37,14 +37,12 @@ async function main(): Promise<void> {
     if (options.prompt) {
       await runOnce(agent, options.prompt, {
         mode: options.mode,
-        settings,
-        mcpConfigPath: options.mcpConfigPath
+        settings
       })
     } else {
       await runRepl(agent, {
         mode: options.mode,
-        settings,
-        mcpConfigPath: options.mcpConfigPath
+        settings
       })
     }
   } finally {

@@ -32,7 +32,6 @@ import {
   ensureHomeWorkspaceInList,
   getActiveWorkspace,
   getActiveWorkspaceId,
-  getMcpConfigPath,
   getSessionMessages,
   getUiState,
   getWorkspace,
@@ -125,7 +124,7 @@ function getMcpWarmupStatus(): McpWarmupStatus {
 
 async function executeMcpWarmupCycle(): Promise<McpWarmupReport> {
   const gen = ++mcpWarmupGen
-  const servers = (await getMcpHostAgent().mcp.warmup(getMcpConfigPath())) ?? []
+  const servers = (await getMcpHostAgent().mcp.warmup()) ?? []
   if (gen !== mcpWarmupGen) {
     return lastMcpWarmupReport ?? { atMs: Date.now(), servers: [] }
   }

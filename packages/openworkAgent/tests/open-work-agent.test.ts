@@ -3,7 +3,7 @@
  */
 
 import { EventType, type BaseEvent, type RunAgentInput } from '@ag-ui/client'
-import type { Agent, AgentRunResult, AgentWaitResult, CoreMessage } from '@openwork/agent'
+import type { Agent, AgentRunResult, CoreMessage } from '@openwork/agent'
 import type { LanguageModel } from 'ai'
 import { firstValueFrom, toArray } from 'rxjs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -36,12 +36,11 @@ function baseInput(overrides: Partial<RunAgentInput> = {}): RunAgentInput {
 /**
  * 构造可注入的 createAgent 替身。
  *
- * @param handlers - 可选覆盖 send / wait 行为
+ * @param handlers - 可选覆盖 send 行为
  * @returns Agent 替身
  */
-function createStubAgent(handlers?: { send?: Agent['send']; wait?: Agent['wait'] }): Agent {
+function createStubAgent(handlers?: { send?: Agent['send'] }): Agent {
   let messages: CoreMessage[] = []
-  let lastWait: AgentWaitResult = { status: 'finished', result: 'Hello' }
 
   const send: Agent['send'] =
     handlers?.send ??
@@ -53,15 +52,7 @@ function createStubAgent(handlers?: { send?: Agent['send']; wait?: Agent['wait']
         { role: 'user', content: userText },
         { role: 'assistant', content: 'Hello' }
       ]
-      lastWait = { status: 'finished', result: 'Hello' }
-      return { messages }
-    })
-
-  const wait: Agent['wait'] =
-    handlers?.wait ??
-    (async () => {
-      if (!lastWait) throw new Error('No agent run to wait for; call send() first')
-      return lastWait
+      return { messages, result: 'Hello' }
     })
 
   return {
@@ -71,19 +62,12 @@ function createStubAgent(handlers?: { send?: Agent['send']; wait?: Agent['wait']
     set messages(next: CoreMessage[]) {
       messages = [...next]
     },
-    send: async (userText, input) => {
-      try {
-        return await send(userText, input)
-      } catch (error) {
-        lastWait = {
-          status: 'error',
-          result: '',
-          error
-        }
-        throw error
-      }
-    },
-    wait
+    send,
+    mcp: {
+      probe: async () => ({ ok: false as const, error: 'stub' }),
+      warmup: async () => [],
+      dispose: async () => undefined
+    }
   }
 }
 
@@ -196,7 +180,8 @@ describe('OpenWorkAgent', () => {
             messages: [
               { role: 'user', content: userText },
               { role: 'assistant', content: 'done' }
-            ]
+            ],
+            result: 'done'
           }
         }
       })
@@ -224,8 +209,7 @@ describe('OpenWorkAgent', () => {
       createStubAgent({
         send: async () => {
           throw new Error('boom')
-        },
-        wait: async () => ({ status: 'error', result: '', error: new Error('boom') })
+        }
       })
     )
 
@@ -264,7 +248,8 @@ describe('OpenWorkAgent', () => {
         messages: [
           { role: 'user' as const, content: userText },
           { role: 'assistant' as const, content: 'ok' }
-        ]
+        ],
+        result: 'ok'
       }
     })
     createAgentMock.mockImplementation(() => createStubAgent({ send }))

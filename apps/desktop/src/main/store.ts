@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import { writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
+import { getOpenworkDir, getOpenworkMcpConfigPath } from '@openwork/agent'
 import { app } from 'electron'
 import Store from 'electron-store'
 
@@ -262,12 +263,12 @@ function writeLocalSettingsCache(next: AppSettings): void {
 }
 
 /**
- * MCP 配置文件路径（userData/mcp.json），供 send.mcp.configPath 使用。
+ * MCP 配置文件路径（~/.openwork/mcp.json），与 createAgent.send 约定一致。
  *
  * @returns 绝对路径
  */
 export function getMcpConfigPath(): string {
-  return path.join(userDataPath(), 'mcp.json')
+  return getOpenworkMcpConfigPath()
 }
 
 /**
@@ -277,6 +278,7 @@ export function getMcpConfigPath(): string {
  */
 function syncMcpConfigFile(settings: AppSettings): void {
   try {
+    mkdirSync(getOpenworkDir(), { recursive: true })
     const payload = { mcpServers: settings.mcpServers ?? [] }
     writeFileSync(getMcpConfigPath(), `${JSON.stringify(payload, null, 2)}\n`, 'utf8')
   } catch (e) {

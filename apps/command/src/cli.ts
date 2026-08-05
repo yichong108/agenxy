@@ -12,8 +12,6 @@ export type CliOptions = {
   cwd: string
   /** ask | build */
   mode: AgentComposerMode
-  /** MCP 配置文件路径（可选） */
-  mcpConfigPath?: string
   /** 是否打印帮助后退出 */
   help: boolean
 }
@@ -32,7 +30,8 @@ export function printHelp(): void {
   -h, --help          显示帮助
   -C, --cwd <path>    工作区根目录（默认 process.cwd()）
   -m, --mode <mode>   ask | build（默认 build）
-  --mcp <path>        MCP 配置文件绝对/相对路径
+
+MCP / Skills 从用户目录 ~/.openwork/mcp.json 与 ~/.openwork/skills 自动加载。
 
 环境变量（见 .env.example）:
   OPENWORK_API_KEY    OpenAI 兼容 API Key（必填）
@@ -55,7 +54,6 @@ export function printHelp(): void {
 export function parseArgs(argv: string[]): CliOptions {
   let cwd = process.cwd()
   let mode: AgentComposerMode = 'build'
-  let mcpConfigPath: string | undefined
   let help = false
   const promptParts: string[] = []
 
@@ -79,12 +77,6 @@ export function parseArgs(argv: string[]): CliOptions {
       mode = next
       continue
     }
-    if (arg === '--mcp') {
-      const next = argv[++i]
-      if (!next) throw new Error('--mcp 需要配置文件路径')
-      mcpConfigPath = next
-      continue
-    }
     if (arg.startsWith('-')) {
       throw new Error(`未知选项: ${arg}`)
     }
@@ -95,7 +87,6 @@ export function parseArgs(argv: string[]): CliOptions {
     prompt: promptParts.join(' ').trim(),
     cwd,
     mode,
-    mcpConfigPath,
     help
   }
 }

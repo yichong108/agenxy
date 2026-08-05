@@ -10,27 +10,7 @@ import type { PreparedTooling } from './run-types.js'
 import { mergeToolSets, type ToolObservation, type ToolOnTool } from './define-tool.js'
 import { contentToText, findLastAssistantMessage, userMessage } from './messages.js'
 import { runReactLoop } from './react-loop.js'
-import { isAbortError } from './run-utils.js'
 import { buildWorkspaceRunPrompt, buildWorkspaceTools } from './tools/workspace-tools.js'
-
-/**
- * 将捕获的异常映射为 wait 状态。
- *
- * 超时归为 error；AbortError / 用户取消归为 cancelled。
- *
- * @param error - send 捕获的异常
- * @param signal - 本轮 AbortSignal
- * @returns error 或 cancelled
- */
-function resolveWaitFailureStatus(error: unknown, signal: AbortSignal): 'error' | 'cancelled' {
-  if (error instanceof Error && /timeout/i.test(error.message)) {
-    return 'error'
-  }
-  if (isAbortError(error) || signal.aborted) {
-    return 'cancelled'
-  }
-  return 'error'
-}
 
 /**
  * 从 messages 提取最后一条助手文本。
@@ -170,35 +150,10 @@ export type AgentRunInput = {
  * 单次 agent run 的结果。
  */
 export type AgentRunResult = {
+  /** 本轮结束后的完整消息轨迹 */
   messages: CoreMessage[]
-}
-
-/**
- * agent.wait() 的终态状态。
- */
-export type AgentWaitStatus = 'finished' | 'error' | 'cancelled'
-
-/**
- * agent.wait() 的返回值：本轮 run 的摘要终态。
- *
- * @example
- * ```ts
- * void agent.send('hi', { onTextDelta, onTool, onEmit })
- * const result = await agent.wait()
- * console.log(result.status) // "finished" | "error" | "cancelled"
- * console.log(result.result) // 最终助手文本
- * console.log(result.error)  // 失败时有
- * // 连续 send：历史已在 agent.messages 中
- * await agent.send('继续', {})
- * ```
- */
-export type AgentWaitResult = {
-  /** 本轮终态 */
-  status: AgentWaitStatus
-  /** 最终助手文本；失败/取消时可能为空 */
+  /** 最终助手文本；无助手回复时为空串 */
   result: string
-  /** 失败或取消时的错误；成功时为 undefined */
-  error?: unknown
 }
 
 /**
@@ -215,11 +170,6 @@ export type ReActAgent = {
    * 内部更新 messages；同会话互斥由宿主保证，不同会话可并行。
    */
   send: (userText: string, input?: AgentRunInput) => Promise<AgentRunResult>
-  /**
-   * 等待当前（或最近一次）run 结束，返回摘要终态。
-   * 未调用过 send 时抛出错误。
-   */
-  wait: () => Promise<AgentWaitResult>
 }
 
 /**
@@ -233,7 +183,7 @@ export type ReActAgent = {
  * 不同会话各自独立 send，互不排队。
  *
  * @param options - 创建配置；provider 必填，messages / local 有默认值
- * @returns 可 send / wait 的 agent 实例
+ * @returns 可 send 的 agent 实例
  */
 export function createReActAgent(options: CreateReActAgentOptions): ReActAgent {
   const local = options.local ?? DEFAULT_LOCAL
@@ -241,11 +191,6 @@ export function createReActAgent(options: CreateReActAgentOptions): ReActAgent {
   const defaultProvider = options.provider
   /** 会话消息由 agent 持有；初始值来自 options.messages */
   let messages: CoreMessage[] = [...(options.messages ?? [])]
-
-  /** 当前进行中的 wait Promise；无进行中 run 时为 null */
-  let inflightWait: Promise<AgentWaitResult> | null = null
-  /** 最近一次已结束 run 的 wait 结果，供重复 wait() */
-  let lastWaitResult: AgentWaitResult | null = null
 
   /**
    * 组装本轮工具与 system prompt：工作区内置工具 + 本轮可选 tools。
@@ -277,13 +222,13 @@ export function createReActAgent(options: CreateReActAgentOptions): ReActAgent {
    *
    * 调用：`send(userText, options?)`。内部将 userText 追加到 agent.messages，
    * 成功后写回完整轨迹，因此可连续多次 send。
-   * 消息持久化仍由宿主负责。失败时 wait 得 status，send 仍会 rethrow；
-   * 已追加的用户消息会保留在 agent.messages（便于重试或展示）。
+   * 消息持久化仍由宿主负责。失败时已追加的用户消息会保留在 agent.messages
+   * （便于重试或展示）。
    *
    * @param userText - 本轮用户文本
    * @param input - 可选 run 参数（回调、模式、超时等）
-   * @returns 运行结束后的 messages
-   * @throws 消息为空、运行失败或取消时抛出（wait 仍可拿到对应 status）
+   * @returns 运行结束后的 messages 与助手文本
+   * @throws 消息为空、运行失败或取消时抛出
    */
   async function send(userText: string, input: AgentRunInput = {}): Promise<AgentRunResult> {
     const trimmed = userText.trim()
@@ -312,76 +257,36 @@ export function createReActAgent(options: CreateReActAgentOptions): ReActAgent {
     const terminalKey = input.terminalKey?.trim() || 'term:default'
     const tavilyApiKey = input.tavily?.apiKey?.trim() || undefined
 
-    let settleWait!: (value: AgentWaitResult) => void
-    const waitPromise = new Promise<AgentWaitResult>((resolve) => {
-      settleWait = resolve
+    const tooling = await prepareTooling({
+      composerMode,
+      terminalKey,
+      root,
+      tavilyApiKey,
+      tools: input.tools,
+      onTool,
+      signal: abortController.signal,
+      emit: onEmit,
+      provider
     })
-    inflightWait = waitPromise
 
-    try {
-      const tooling = await prepareTooling({
-        composerMode,
-        terminalKey,
-        root,
-        tavilyApiKey,
-        tools: input.tools,
-        onTool,
-        signal: abortController.signal,
-        emit: onEmit,
-        provider
-      })
+    const runMessages = await runReactLoop(
+      provider,
+      tooling.runPrompt,
+      inputMessages,
+      tooling.tools,
+      abortController,
+      onTextDelta,
+      maxSteps,
+      invokeTimeoutMs
+    )
 
-      const runMessages = await runReactLoop(
-        provider,
-        tooling.runPrompt,
-        inputMessages,
-        tooling.tools,
-        abortController,
-        onTextDelta,
-        maxSteps,
-        invokeTimeoutMs
-      )
-
-      const finalMessages = runMessages.length > 0 ? runMessages : inputMessages
-      // 写回完整轨迹，供下一次 send 直接续聊
-      messages = finalMessages
-      const waitResult: AgentWaitResult = {
-        status: 'finished',
-        result: extractAssistantText(finalMessages)
-      }
-      lastWaitResult = waitResult
-      settleWait(waitResult)
-      return { messages: finalMessages }
-    } catch (error) {
-      const waitResult: AgentWaitResult = {
-        status: resolveWaitFailureStatus(error, abortController.signal),
-        result: '',
-        error
-      }
-      lastWaitResult = waitResult
-      settleWait(waitResult)
-      throw error
-    } finally {
-      if (inflightWait === waitPromise) {
-        inflightWait = null
-      }
+    const finalMessages = runMessages.length > 0 ? runMessages : inputMessages
+    // 写回完整轨迹，供下一次 send 直接续聊
+    messages = finalMessages
+    return {
+      messages: finalMessages,
+      result: extractAssistantText(finalMessages)
     }
-  }
-
-  /**
-   * 等待当前进行中的 run，或返回最近一次 run 的终态。
-   *
-   * @returns 含 status / result / error 的摘要
-   * @throws 尚未调用过 send 时抛出
-   */
-  async function wait(): Promise<AgentWaitResult> {
-    if (inflightWait) {
-      return inflightWait
-    }
-    if (lastWaitResult) {
-      return lastWaitResult
-    }
-    throw new Error('No agent run to wait for; call send() first')
   }
 
   return {
@@ -391,7 +296,6 @@ export function createReActAgent(options: CreateReActAgentOptions): ReActAgent {
     set messages(next: CoreMessage[]) {
       messages = [...next]
     },
-    send,
-    wait
+    send
   }
 }

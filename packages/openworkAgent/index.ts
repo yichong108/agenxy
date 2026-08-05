@@ -29,7 +29,6 @@ import {
   createAgent,
   type Agent,
   type AgentRunInput,
-  type AgentWaitResult,
   type CreateAgentOptions,
   type ToolObservation
 } from '@openwork/agent'
@@ -93,12 +92,6 @@ function parseForwardedProps(forwarded: unknown): OpenWorkAgentRunDefaults {
   }
   if (src.tavily != null && typeof src.tavily === 'object') {
     out.tavily = src.tavily as OpenWorkAgentRunDefaults['tavily']
-  }
-  if (src.skills != null && typeof src.skills === 'object') {
-    out.skills = src.skills as OpenWorkAgentRunDefaults['skills']
-  }
-  if (src.mcp != null && typeof src.mcp === 'object') {
-    out.mcp = src.mcp as OpenWorkAgentRunDefaults['mcp']
   }
   if (typeof src.maxSteps === 'number') {
     out.maxSteps = src.maxSteps
@@ -257,19 +250,6 @@ function toolArgsToJsonDelta(args: string | undefined): string {
 }
 
 /**
- * 将 wait 终态映射为 RUN_ERROR 文案。
- *
- * @param waitResult - agent.wait 结果
- * @returns 错误消息
- */
-function formatWaitError(waitResult: AgentWaitResult): string {
-  if (waitResult.error instanceof Error) return waitResult.error.message
-  if (waitResult.error != null) return String(waitResult.error)
-  if (waitResult.status === 'cancelled') return 'Run cancelled'
-  return 'Run failed'
-}
-
-/**
  * 判断异常是否由 AbortController 取消触发。
  *
  * @param error - 捕获的未知异常
@@ -280,6 +260,18 @@ function isAbortError(error: unknown): boolean {
     error instanceof Error &&
     (error.name === 'AbortError' || error.message.toLowerCase().includes('abort'))
   )
+}
+
+/**
+ * 将捕获的异常映射为 RUN_ERROR 文案。
+ *
+ * @param error - send 抛出的异常
+ * @returns 错误消息
+ */
+function formatRunError(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (error != null) return String(error)
+  return 'Run failed'
 }
 
 /**
@@ -438,7 +430,7 @@ export class OpenWorkAgent extends AbstractAgent {
       const { userText, history } = extractUserTurn(input.messages ?? [])
       this.inner.messages = history
 
-      await this.inner.send(userText, {
+      const runResult = await this.inner.send(userText, {
         ...merged,
         onTextDelta: (text) => {
           if (!text) return
@@ -503,12 +495,11 @@ export class OpenWorkAgent extends AbstractAgent {
 
       ensureTextEnd()
 
-      const waitResult = await this.inner.wait()
       const finished: RunFinishedEvent = {
         type: EventType.RUN_FINISHED,
         threadId,
         runId,
-        result: waitResult.result,
+        result: runResult.result,
         timestamp: Date.now()
       }
       emit(finished)
@@ -516,26 +507,10 @@ export class OpenWorkAgent extends AbstractAgent {
     } catch (error) {
       ensureTextEnd()
 
-      let waitResult: AgentWaitResult | null = null
-      try {
-        waitResult = await this.inner.wait()
-      } catch {
-        waitResult = null
-      }
-
-      const waitFailed = waitResult?.status === 'error' || waitResult?.status === 'cancelled'
-      const cancelled =
-        waitResult?.status === 'cancelled' || isAbortError(error) || abortController.signal.aborted
-
-      const message = waitFailed
-        ? formatWaitError(waitResult!)
-        : error instanceof Error
-          ? error.message
-          : String(error)
-
+      const cancelled = isAbortError(error) || abortController.signal.aborted
       const runError: RunErrorEvent = {
         type: EventType.RUN_ERROR,
-        message,
+        message: formatRunError(error),
         code: cancelled ? 'CANCELLED' : 'ERROR',
         timestamp: Date.now()
       }
