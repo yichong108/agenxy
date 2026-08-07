@@ -729,6 +729,13 @@
   border-left: 1px solid var(--aw-color-border-secondary);
 }
 
+/* Worked：与助手正文左对齐，不做树形缩进 */
+.app-timeline-accordion.app-worked-accordion .app-timeline-wrap {
+  padding-left: 0;
+  margin-left: 0;
+  border-left: none;
+}
+
 .app-timeline-wrap {
   margin-top: 10px;
   border-top: 1px solid var(--aw-color-border-secondary);
@@ -792,9 +799,9 @@
 }
 
 .app-worked-l2-body {
-  margin-left: 10px;
-  padding-left: 10px;
-  border-left: 1px solid var(--aw-color-border-secondary);
+  margin-left: 0;
+  padding-left: 0;
+  border-left: none;
 }
 
 .app-worked-l3-item {
