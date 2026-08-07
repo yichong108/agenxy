@@ -444,10 +444,10 @@ export function useWorkspaceCenterPane({
         })
         streamBuf.current[sessionId] = ''
         assistantMsgId.current[sessionId] = null
-        void ensureSessionMessages(sessionId, true)
+        // 不在此处 force 重载：RUN_FINISHED 早于 main 落盘，强制拉取会用旧列表冲掉流式正文
       }
     },
-    [ensureSessionMessages, msgApi]
+    [msgApi]
   )
 
   useEffect(() => {

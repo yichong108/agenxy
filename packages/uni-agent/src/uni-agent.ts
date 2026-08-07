@@ -274,7 +274,10 @@ export class UniAgent extends AbstractAgent {
   }
 
   /**
-   * 按 AG-UI 协议执行一轮：同步消息后委托后端 `run`。
+   * 按 AG-UI 协议执行一轮：将外层 messages 灌入后端后委托 `run`。
+   *
+   * 本轮 assistant 正文由外层 AbstractAgent.apply 根据事件流累加到 this.messages；
+   * 结束后不要用 backend.messages 回写覆盖。
    *
    * @param input - AG-UI RunAgentInput
    * @returns BaseEvent 流
@@ -301,12 +304,12 @@ export class UniAgent extends AbstractAgent {
           if (!subscriber.closed) subscriber.next(event)
         },
         error: (err) => {
-          this.messages = [...this.backend.messages]
+          // 外层 AbstractAgent.apply 已根据 TEXT_MESSAGE_* 更新 this.messages；
+          // 后端并不维护完整 AG-UI messages，禁止用 backend.messages 覆盖以免冲掉本轮正文。
           this.pendingForwardedExtras = {}
           if (!subscriber.closed) subscriber.error(err)
         },
         complete: () => {
-          this.messages = [...this.backend.messages]
           this.pendingForwardedExtras = {}
           if (!subscriber.closed) subscriber.complete()
         }
