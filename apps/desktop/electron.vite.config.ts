@@ -18,13 +18,13 @@ function readGitShortHash(cwd: string): string {
     return ''
   }
 }
-const aliasSrc = resolve(__dirname, 'src')
-const aliasUniAgent = resolve(__dirname, '../../packages/uni-agent/src/index.ts')
-const aliasAgent = resolve(__dirname, '../../packages/agent/src/index.ts')
-const aliasCursorAgent = resolve(__dirname, '../../packages/cursor-agent/src/index.ts')
-const aliasShared = resolve(__dirname, '../../packages/shared/src/index.ts')
+const aliasSrc = resolve(rootDir, 'src')
+const aliasUniAgent = resolve(rootDir, '../../packages/uni-agent/src/index.ts')
+const aliasAgent = resolve(rootDir, '../../packages/agent/src/index.ts')
+const aliasCursorAgent = resolve(rootDir, '../../packages/cursor-agent/src/index.ts')
+const aliasShared = resolve(rootDir, '../../packages/shared/src/index.ts')
 /** 内置 skills 内容根目录（开发/未打包时由 define 注入，避免打包后 import.meta.url 漂移） */
-const bundledSkillsDir = resolve(__dirname, '../../packages/skills/content')
+const bundledSkillsDir = resolve(rootDir, '../../packages/skills/content')
 /** monaco-themes 未在 package exports 中暴露 themes/，需直连磁盘路径供 Vite 解析 */
 const monacoGithubLightThemeJson = resolve(
   rootDir,
@@ -59,9 +59,13 @@ export default defineConfig({
       })
     ],
     build: {
+      // monorepo 别名包连改时防抖，避免 watch 重建叠写清空 out/main 后 Electron 抢先启动
+      watch: {
+        buildDelay: 300
+      },
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/main/index.ts')
+          index: resolve(rootDir, 'src/main/index.ts')
         },
         // Cursor SDK 含原生二进制，保持 external 由 Node/Electron 解析
         external: [/^@cursor\//]
@@ -89,6 +93,9 @@ export default defineConfig({
       })
     ],
     build: {
+      watch: {
+        buildDelay: 300
+      },
       // 沙箱内 preload 以非 ES 模块方式执行，需输出 CJS
       lib: {
         entry: resolve(rootDir, 'src/preload/index.ts'),
@@ -125,7 +132,7 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/renderer/index.html')
+          index: resolve(rootDir, 'src/renderer/index.html')
         }
       }
     },
