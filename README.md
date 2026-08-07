@@ -1,6 +1,6 @@
 # OpenWorker
 
-OpenWorker is a AI companion for everyday information processing, helping people make better choices.
+OpenWorker is your AI companion for everyday information processing, helping you make better choices.
 
 ## Preview
 
