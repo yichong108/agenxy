@@ -700,6 +700,7 @@
 }
 
 .app-timeline-chevron {
+  flex-shrink: 0;
   font-size: var(--aw-font-micro);
   transition: transform 0.15s ease;
   color: var(--aw-color-icon-muted);
@@ -707,6 +708,10 @@
 
 .app-timeline-chevron.is-open {
   transform: rotate(90deg);
+}
+
+.app-timeline-chevron.is-hidden {
+  visibility: hidden;
 }
 
 .app-timeline-accordion-title {
@@ -744,6 +749,119 @@
   border-radius: 8px;
   background: var(--aw-color-fill-secondary);
   border: 1px solid var(--aw-color-border-secondary);
+}
+
+/* Worked 树：L2（Thought / Explored / Shell…）与 L3（原子工具） */
+.app-worked-children {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-worked-l2 {
+  min-width: 0;
+}
+
+.app-worked-l2-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--aw-color-text-secondary);
+}
+
+.app-worked-l2-head:hover:not(:disabled) {
+  color: var(--aw-color-text);
+}
+
+.app-worked-l2-head:disabled {
+  cursor: default;
+}
+
+.app-worked-l2-title {
+  font-size: var(--aw-font-sm);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.app-worked-l2-body {
+  margin-left: 10px;
+  padding-left: 10px;
+  border-left: 1px solid var(--aw-color-border-secondary);
+}
+
+.app-worked-l3-item {
+  min-width: 0;
+  padding: 2px 0;
+}
+
+.app-worked-l3-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.app-worked-l3-head:hover {
+  color: var(--aw-color-text);
+}
+
+.app-worked-l3-body {
+  margin-left: 16px;
+  padding: 2px 0 6px;
+}
+
+.app-worked-args {
+  display: block;
+  font-size: var(--aw-font-caption);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+/* Thought：标签行 + 正文（非手风琴，随 Worked 展开） */
+.app-worked-thought {
+  min-width: 0;
+  padding: 4px 0 6px;
+}
+
+.app-worked-thought-label {
+  font-size: var(--aw-font-sm);
+  line-height: 1.4;
+  color: var(--aw-color-text-secondary);
+}
+
+.app-worked-thought.is-brief .app-worked-thought-label {
+  color: var(--aw-color-text-tertiary, var(--aw-color-text-secondary));
+}
+
+.app-worked-thought-text {
+  margin-top: 2px;
+  font-size: var(--aw-font-sm);
+  line-height: 1.55;
+  color: var(--aw-color-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow: auto;
+}
+
+.app-worked-error {
+  padding: 4px 0 4px 2px;
 }
 
 .app-composer {

@@ -279,8 +279,8 @@ export type ChatMessage = {
   /** 消息内容 */
   content: string
   /**
-   * 本轮 AG-UI 工具相关事件快照（TOOL_CALL_* / RUN_ERROR）。
-   * 仅用于 UI 恢复；展示前由渲染层转为 ToolTimelineEvent。
+   * 本轮 AG-UI 时间线相关事件快照（TOOL_CALL_* / RUN_ERROR / CUSTOM cursor.thinking）。
+   * 仅用于 UI 恢复；展示前由渲染层转为扁平 ToolTimelineEvent，再归并为 Worked 树。
    */
   aguiEvents?: BaseEvent[]
 }

@@ -8,7 +8,7 @@
   "type": "module",
   "scripts": {
     "preinstall": "npx only-allow pnpm",
-    "dev": "electron-vite dev --watch",
+    "dev": "electron-vite dev",
     "dev:debug": "electron-vite dev --inspect=9229 --remoteDebuggingPort=9222 --sourcemap",
     "build": "electron-vite build && electron-builder",
     "build:app": "electron-vite build",

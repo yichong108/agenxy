@@ -39,7 +39,7 @@ export function filterSessionsForSidebar(
   return (list ?? []).filter((s) => !hidden.has(s.id))
 }
 
-/** Cursor 风格时间线标题用：耗时 1 分 2.3 秒 */
+/** Cursor 风格时间线标题用：紧凑英文单位（1.2s / 2m 3s） */
 export function formatWorkedDuration(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return '0s'
   if (ms < 1000) return `${Math.round(ms)}ms`
@@ -55,6 +55,29 @@ export function formatWorkedDuration(ms: number): string {
   const h = Math.floor(m / 60)
   const rm = m % 60
   return `${h}h ${rm}m`
+}
+
+/**
+ * Worked / Thought 标题用中文耗时文案。
+ *
+ * @param ms - 耗时毫秒
+ * @returns 如「24 秒」「1 分 2 秒」
+ */
+export function formatWorkedDurationZh(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return '0 秒'
+  if (ms < 1000) return `${Math.round(ms)} 毫秒`
+  const sec = ms / 1000
+  if (sec < 60) {
+    const t = sec.toFixed(1)
+    return t.endsWith('.0') ? `${Math.round(sec)} 秒` : `${t} 秒`
+  }
+  const s = Math.floor(sec)
+  const m = Math.floor(s / 60)
+  const rs = s % 60
+  if (m < 60) return rs > 0 ? `${m} 分 ${rs} 秒` : `${m} 分`
+  const h = Math.floor(m / 60)
+  const rm = m % 60
+  return rm > 0 ? `${h} 小时 ${rm} 分` : `${h} 小时`
 }
 
 export type MessageTurn = {

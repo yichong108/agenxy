@@ -3,6 +3,7 @@ import { normalizeAgentType, type AgentType } from '@openworker/shared'
 import {
   EventType,
   type BaseEvent,
+  type CustomEvent,
   type Message,
   type RunErrorEvent,
   type RunStartedEvent
@@ -380,6 +381,11 @@ function createAguiTimelineEventCollector(): {
         event.type === EventType.TOOL_CALL_RESULT ||
         event.type === EventType.RUN_ERROR
       ) {
+        events.push(event)
+        return
+      }
+      // Cursor 思考过程：落盘供刷新后恢复 Worked → Thought
+      if (event.type === EventType.CUSTOM && (event as CustomEvent).name === 'cursor.thinking') {
         events.push(event)
       }
     },

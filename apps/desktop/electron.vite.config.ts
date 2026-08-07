@@ -59,10 +59,6 @@ export default defineConfig({
       })
     ],
     build: {
-      // monorepo 别名包连改时防抖，避免 watch 重建叠写清空 out/main 后 Electron 抢先启动
-      watch: {
-        buildDelay: 300
-      },
       rollupOptions: {
         input: {
           index: resolve(rootDir, 'src/main/index.ts')
@@ -93,9 +89,6 @@ export default defineConfig({
       })
     ],
     build: {
-      watch: {
-        buildDelay: 300
-      },
       // 沙箱内 preload 以非 ES 模块方式执行，需输出 CJS
       lib: {
         entry: resolve(rootDir, 'src/preload/index.ts'),

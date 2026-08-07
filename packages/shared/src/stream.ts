@@ -36,5 +36,16 @@ export type ToolErrorEvent = {
   errorCode?: string
 } & RunMeta
 
-/** 助手消息旁展示的工具时间线条目 */
-export type ToolTimelineEvent = ToolCallEvent | ToolErrorEvent
+/**
+ * 思考时间线事件（UI 视图模型）。
+ *
+ * 由宿主从 AG-UI `CUSTOM(cursor.thinking)` 派生；展示层归并为 Worked → Thought。
+ */
+export type ThinkingTimelineEvent = {
+  kind: 'thinking'
+  id: string
+  text: string
+} & RunMeta
+
+/** 助手消息旁展示的工具/思考时间线条目（扁平原子事件，供展示层再聚合） */
+export type ToolTimelineEvent = ToolCallEvent | ToolErrorEvent | ThinkingTimelineEvent

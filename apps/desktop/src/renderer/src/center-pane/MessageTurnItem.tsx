@@ -1,9 +1,22 @@
 import {
   assistantDisplayTimeline,
-  formatWorkedDuration,
+  formatWorkedDurationZh,
   type MessageTurn,
   remarkLinkifyBareUrls
 } from './center-pane-utils'
+import {
+  estimateTimelineDurationMs,
+  formatAtomicToolTitle,
+  formatEditTitle,
+  formatExploredTitle,
+  formatMcpTitle,
+  formatShellTitle,
+  formatThoughtTitle,
+  groupWorkedTimeline,
+  isBriefThought,
+  type WorkedChild,
+  type WorkedNode
+} from './worked-timeline'
 import { CheckOutlined, CopyOutlined, RightOutlined } from '@ant-design/icons'
 import { App as AntdApp, Card, Typography } from 'antd'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
@@ -11,7 +24,7 @@ import ReactMarkdown, { type Components } from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
 import remarkGfm from 'remark-gfm'
 
-import type { ChatMessage, ToolTimelineEvent } from '@/shared/ipc'
+import type { ChatMessage, ToolCallEvent, ToolTimelineEvent } from '@/shared/ipc'
 
 const { Text } = Typography
 
@@ -142,9 +155,10 @@ type MessageCardContext = Pick<
 type MessageCardView = {
   isLatestAssistant: boolean
   isStreaming: boolean
-  displayTimeline: ToolTimelineEvent[]
+  worked: WorkedNode
+  wallMs: number
   timelineExpanded: boolean
-  showTimelineAccordion: boolean
+  showWorkedAccordion: boolean
   contentPlaceholder: string
 }
 
@@ -164,27 +178,30 @@ function buildMessageCardView(msg: ChatMessage, ctx: MessageCardContext): Messag
     isStreaming,
     ctx.currentTimeline
   )
-  // 有工具事件，或当前 run 中的最新 assistant：均显示耗时手风琴（不依赖已移除的意图思考）
-  const showTimelineAccordion =
-    displayTimeline.length > 0 || (isLatestAssistant && Boolean(ctx.isRun))
+  const worked = groupWorkedTimeline(displayTimeline)
+  // 有过程事件，或当前 run 中的最新 assistant：显示 Worked（过程可追溯）
+  const showWorkedAccordion =
+    worked.children.length > 0 || (isLatestAssistant && Boolean(ctx.isRun))
   const timelineExpanded =
     ctx.timelineOpenOverride[msg.id] !== undefined
       ? ctx.timelineOpenOverride[msg.id]!
       : Boolean(ctx.isRun)
 
+  const estimatedMs = estimateTimelineDurationMs(displayTimeline)
+  const wallMs =
+    isLatestAssistant && (ctx.isRun || ctx.timelineWallMs > 0)
+      ? ctx.timelineWallMs
+      : (estimatedMs ?? ctx.timelineWallMs)
+
   return {
     isLatestAssistant,
     isStreaming,
-    displayTimeline,
+    worked,
+    wallMs,
     timelineExpanded,
-    showTimelineAccordion,
+    showWorkedAccordion,
     contentPlaceholder: isStreaming ? '…' : ''
   }
-}
-
-/** 生成时间线事件列表项的稳定 key */
-function timelineEventKey(event: ToolTimelineEvent, index: number): string {
-  return `${event.kind}-${'id' in event ? event.id : index}-${index}`
 }
 
 /** 判断工具调用结果是否为用户拒绝 */
@@ -278,40 +295,213 @@ function MessageContentCopyButton({ text }: MessageContentCopyButtonProps) {
   )
 }
 
-type TimelineEventItemProps = {
-  event: ToolTimelineEvent
+type NestedAccordionProps = {
+  title: string
+  defaultOpen?: boolean
+  children: React.ReactNode
+  className?: string
 }
 
-/** 单条工具时间线事件，按 kind 分支渲染 */
-function TimelineEventItem({ event }: TimelineEventItemProps) {
-  if (event.kind === 'error') {
-    return <Text type="danger">{event.message}</Text>
-  }
+/**
+ * Worked 内二级手风琴（Thought / Explored 等）。
+ *
+ * 默认折叠；展开后显示 L3 原子步骤或思考正文。
+ */
+function NestedAccordion({
+  title,
+  defaultOpen = false,
+  children,
+  className
+}: NestedAccordionProps) {
+  const [open, setOpen] = useState(defaultOpen)
 
   return (
-    <>
-      <Text code>
-        {event.name} {toolCallStatusSymbol(event.status, event.result)}
-      </Text>
-      {event.args ? <Text type="secondary"> {event.args}</Text> : null}
-      {event.status === 'end' && event.result ? (
-        <pre className="app-timeline-result">{event.result}</pre>
-      ) : null}
-    </>
+    <div className={`app-worked-l2${className ? ` ${className}` : ''}`}>
+      <button
+        type="button"
+        className="app-worked-l2-head"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <RightOutlined className={`app-timeline-chevron${open ? ' is-open' : ''}`} />
+        <span className="app-worked-l2-title">{title}</span>
+      </button>
+      {open ? <div className="app-worked-l2-body">{children}</div> : null}
+    </div>
   )
 }
 
-type TimelineAccordionProps = {
+type AtomicToolRowProps = {
+  event: ToolCallEvent
+}
+
+/** Explored 内的 L3 原子工具行 */
+function AtomicToolRow({ event }: AtomicToolRowProps) {
+  const [open, setOpen] = useState(false)
+  const hasDetail = Boolean(event.args || (event.status === 'end' && event.result))
+  const title = `${formatAtomicToolTitle(event)} ${toolCallStatusSymbol(event.status, event.result)}`
+
+  if (!hasDetail) {
+    return (
+      <div className="app-worked-l3-item">
+        <Text type="secondary">{title}</Text>
+      </div>
+    )
+  }
+
+  return (
+    <div className="app-worked-l3-item">
+      <button
+        type="button"
+        className="app-worked-l3-head"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <RightOutlined className={`app-timeline-chevron${open ? ' is-open' : ''}`} />
+        <Text type="secondary">{title}</Text>
+      </button>
+      {open ? (
+        <div className="app-worked-l3-body">
+          {event.args ? (
+            <Text type="secondary" className="app-worked-args">
+              {event.args}
+            </Text>
+          ) : null}
+          {event.status === 'end' && event.result ? (
+            <pre className="app-timeline-result">{event.result}</pre>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+type ToolLeafRowProps = {
+  title: string
+  event: ToolCallEvent
+  defaultOpen?: boolean
+}
+
+/** Shell / Edit / MCP / 通用工具：Worked 下的 L2 叶子（可展开看输出） */
+function ToolLeafRow({ title, event, defaultOpen = false }: ToolLeafRowProps) {
+  const [open, setOpen] = useState(defaultOpen)
+  const status = toolCallStatusSymbol(event.status, event.result)
+  const hasDetail = Boolean(event.args || (event.status === 'end' && event.result))
+
+  return (
+    <div className="app-worked-l2">
+      <button
+        type="button"
+        className="app-worked-l2-head"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        disabled={!hasDetail}
+      >
+        <RightOutlined
+          className={`app-timeline-chevron${open ? ' is-open' : ''}${hasDetail ? '' : ' is-hidden'}`}
+        />
+        <span className="app-worked-l2-title">
+          {title} {status}
+        </span>
+      </button>
+      {open && hasDetail ? (
+        <div className="app-worked-l2-body">
+          {event.args ? (
+            <Text type="secondary" className="app-worked-args">
+              {event.args}
+            </Text>
+          ) : null}
+          {event.status === 'end' && event.result ? (
+            <pre className="app-timeline-result">{event.result}</pre>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * Thought 行：对齐 Cursor——标签 +（可选）正文，不是二级手风琴。
+ *
+ * - 略作思考：仅一行灰字标题
+ * - 较长思考：标题「思考 · N 秒」+ 正文始终可见（随 Worked 展开）
+ */
+function ThoughtRow({ child }: { child: Extract<WorkedChild, { kind: 'thought' }> }) {
+  const title = formatThoughtTitle(child)
+  const brief = isBriefThought(child)
+
+  return (
+    <div className={`app-worked-thought${brief ? ' is-brief' : ''}`}>
+      <div className="app-worked-thought-label">{title}</div>
+      {!brief && child.text.trim() ? (
+        <div className="app-worked-thought-text">{child.text.trim()}</div>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * 渲染单个 Worked L2 子节点。
+ *
+ * Thought 为静态标签块；Explored 为可折叠组；Shell/Edit/MCP 为可展开叶子。
+ */
+function WorkedChildNode({ child }: { child: WorkedChild }) {
+  if (child.kind === 'thought') {
+    return <ThoughtRow child={child} />
+  }
+
+  if (child.kind === 'explored') {
+    return (
+      <NestedAccordion title={formatExploredTitle(child.tools)}>
+        {child.tools.map((tool) => (
+          <AtomicToolRow key={tool.id} event={tool} />
+        ))}
+      </NestedAccordion>
+    )
+  }
+
+  if (child.kind === 'shell') {
+    return <ToolLeafRow title={formatShellTitle(child.event)} event={child.event} />
+  }
+
+  if (child.kind === 'edit') {
+    return <ToolLeafRow title={formatEditTitle(child.event)} event={child.event} />
+  }
+
+  if (child.kind === 'mcp') {
+    return <ToolLeafRow title={formatMcpTitle(child.event)} event={child.event} />
+  }
+
+  if (child.kind === 'error') {
+    return (
+      <div className="app-worked-l2 app-worked-error">
+        <Text type="danger">{child.event.message}</Text>
+      </div>
+    )
+  }
+
+  return <ToolLeafRow title={child.event.name} event={child.event} />
+}
+
+type WorkedAccordionProps = {
   expanded: boolean
   wallMs: number
-  events: ToolTimelineEvent[]
+  worked: WorkedNode
   onToggle: () => void
 }
 
-/** 工具时间线手风琴：工具事件列表 */
-function TimelineAccordion({ expanded, wallMs, events, onToggle }: TimelineAccordionProps) {
+/**
+ * Worked（L1）手风琴：本轮干活过程总容器。
+ *
+ * 默认视图只显示一行摘要；展开后展示 Thought / Explored / Shell / Edit 等 L2。
+ * 最终回答（Result）与此并列，由外层 Markdown 渲染。
+ */
+function WorkedAccordion({ expanded, wallMs, worked, onToggle }: WorkedAccordionProps) {
+  // 对齐 Cursor「Worked for 25s」：标题以耗时为主，步骤数过密时不抢视线
+  const title = `已工作 · ${formatWorkedDurationZh(wallMs)}`
+
   return (
-    <div className="app-timeline-accordion">
+    <div className="app-timeline-accordion app-worked-accordion">
       <button
         type="button"
         className="app-timeline-accordion-head"
@@ -319,15 +509,15 @@ function TimelineAccordion({ expanded, wallMs, events, onToggle }: TimelineAccor
         onClick={onToggle}
       >
         <RightOutlined className={`app-timeline-chevron${expanded ? ' is-open' : ''}`} />
-        <span className="app-timeline-accordion-title">耗时 {formatWorkedDuration(wallMs)}</span>
+        <span className="app-timeline-accordion-title">{title}</span>
       </button>
       {expanded ? (
-        <div className="app-timeline-wrap">
-          {events.map((event, index) => (
-            <div key={timelineEventKey(event, index)} className="app-timeline-item">
-              <TimelineEventItem event={event} />
-            </div>
-          ))}
+        <div className="app-timeline-wrap app-worked-children">
+          {worked.children.length === 0 ? (
+            <Text type="secondary">进行中…</Text>
+          ) : (
+            worked.children.map((child) => <WorkedChildNode key={child.id} child={child} />)
+          )}
         </div>
       ) : null}
     </div>
@@ -340,18 +530,18 @@ type AssistantMessageBodyProps = {
   ctx: MessageCardContext
 }
 
-/** assistant 消息正文：时间线手风琴 + Markdown；回复完成后右下角常显复制 */
+/** assistant 消息正文：Worked（过程）+ Result（Markdown）；回复完成后右下角常显复制 */
 function AssistantMessageBody({ msg, view, ctx }: AssistantMessageBodyProps) {
   const markdownContent = msg.content || view.contentPlaceholder
   const showContentCopy = !view.isStreaming && Boolean(msg.content?.trim())
 
   return (
     <>
-      {view.showTimelineAccordion ? (
-        <TimelineAccordion
+      {view.showWorkedAccordion ? (
+        <WorkedAccordion
           expanded={view.timelineExpanded}
-          wallMs={ctx.timelineWallMs}
-          events={view.displayTimeline}
+          wallMs={view.wallMs}
+          worked={view.worked}
           onToggle={() =>
             ctx.setTimelineOpenOverride((prev) => ({
               ...prev,
@@ -383,7 +573,7 @@ function MessageCard({ msg, ctx }: MessageCardProps) {
 
   if (isUser) {
     return (
-      <Card size="small" bordered className="app-message-card is-user is-sticky-prompt">
+      <Card size="small" variant="outlined" className="app-message-card is-user is-sticky-prompt">
         <div className="app-message-content">{msg.content}</div>
       </Card>
     )
@@ -392,7 +582,7 @@ function MessageCard({ msg, ctx }: MessageCardProps) {
   const view = buildMessageCardView(msg, ctx)
 
   return (
-    <Card size="small" bordered={false} className="app-message-card is-assistant">
+    <Card size="small" variant="borderless" className="app-message-card is-assistant">
       <div className="app-message-content">
         <AssistantMessageBody msg={msg} view={view} ctx={ctx} />
       </div>
@@ -401,7 +591,7 @@ function MessageCard({ msg, ctx }: MessageCardProps) {
 }
 
 /**
- * 渲染单个消息回合：包含该回合内所有消息卡片（用户 / assistant、时间线等）。
+ * 渲染单个消息回合：包含该回合内所有消息卡片（用户 / assistant、Worked/Result 等）。
  *
  * 从 `WorkspaceMessagesInner` 抽离，便于独立维护单回合 UI 与后续 memo 优化。
  *
