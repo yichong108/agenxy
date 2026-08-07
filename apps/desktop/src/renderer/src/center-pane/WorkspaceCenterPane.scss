@@ -758,11 +758,43 @@
   border: 1px solid var(--aw-color-border-secondary);
 }
 
+/* Worked：对齐 Cursor——浅灰、常规字重、弱于正文 */
+.app-worked-accordion {
+  --aw-worked-fg: rgb(24 24 27 / 0.48);
+  --aw-worked-fg-hover: rgb(24 24 27 / 0.64);
+  --aw-worked-fg-muted: rgb(24 24 27 / 0.36);
+
+  .app-timeline-accordion-head {
+    gap: 6px;
+    padding: 2px 0;
+    color: var(--aw-worked-fg);
+  }
+
+  .app-timeline-accordion-head:hover {
+    color: var(--aw-worked-fg-hover);
+  }
+
+  .app-timeline-accordion-title {
+    font-size: var(--aw-font-sm);
+    font-weight: 400;
+    line-height: 1.4;
+  }
+
+  .app-timeline-chevron {
+    font-size: var(--aw-font-micro);
+    color: var(--aw-worked-fg-muted);
+  }
+
+  .app-timeline-wrap {
+    padding-top: 2px;
+  }
+}
+
 /* Worked 树：L2（Thought / Explored / Shell…）与 L3（原子工具） */
 .app-worked-children {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
 }
 
 .app-worked-l2 {
@@ -774,18 +806,18 @@
   align-items: center;
   gap: 6px;
   width: 100%;
-  padding: 4px 0;
+  padding: 2px 0;
   margin: 0;
   border: none;
   background: transparent;
   cursor: pointer;
   text-align: left;
   font: inherit;
-  color: var(--aw-color-text-secondary);
+  color: var(--aw-worked-fg, rgb(24 24 27 / 0.48));
 }
 
 .app-worked-l2-head:hover:not(:disabled) {
-  color: var(--aw-color-text);
+  color: var(--aw-worked-fg-hover, rgb(24 24 27 / 0.64));
 }
 
 .app-worked-l2-head:disabled {
@@ -794,8 +826,10 @@
 
 .app-worked-l2-title {
   font-size: var(--aw-font-sm);
+  font-weight: 400;
   line-height: 1.4;
   word-break: break-word;
+  color: inherit;
 }
 
 .app-worked-l2-body {
@@ -806,7 +840,10 @@
 
 .app-worked-l3-item {
   min-width: 0;
-  padding: 2px 0;
+  padding: 1px 0;
+  color: var(--aw-worked-fg, rgb(24 24 27 / 0.48));
+  font-size: var(--aw-font-sm);
+  font-weight: 400;
 }
 
 .app-worked-l3-head {
@@ -814,7 +851,7 @@
   align-items: flex-start;
   gap: 6px;
   width: 100%;
-  padding: 2px 0;
+  padding: 1px 0;
   margin: 0;
   border: none;
   background: transparent;
@@ -825,7 +862,7 @@
 }
 
 .app-worked-l3-head:hover {
-  color: var(--aw-color-text);
+  color: var(--aw-worked-fg-hover, rgb(24 24 27 / 0.64));
 }
 
 .app-worked-l3-body {
@@ -836,6 +873,7 @@
 .app-worked-args {
   display: block;
   font-size: var(--aw-font-caption);
+  color: var(--aw-worked-fg-muted, rgb(24 24 27 / 0.36));
   word-break: break-word;
   white-space: pre-wrap;
 }
@@ -872,6 +910,14 @@
   min-height: 1.5em;
 }
 
+.app-file-diff-line:first-child {
+  padding-top: 6px;
+}
+
+.app-file-diff-line:last-child {
+  padding-bottom: 6px;
+}
+
 .app-file-diff-lineno {
   flex: 0 0 2.5em;
   width: 2.5em;
@@ -886,6 +932,7 @@
   width: 1.1em;
   text-align: center;
   user-select: none;
+  font-weight: 700;
   color: #8b949e;
 }
 
@@ -898,50 +945,58 @@
 
 .app-file-diff-line.is-add {
   background: #e6ffed;
+  border-left: 3px solid #2da44e;
 }
 
 .app-file-diff-line.is-add .app-file-diff-sign {
-  color: #24292f;
+  color: #1a7f37;
+  font-weight: 700;
 }
 
 .app-file-diff-line.is-del {
   background: #ffebe9;
+  border-left: 3px solid #cf222e;
 }
 
 .app-file-diff-line.is-del .app-file-diff-sign {
-  color: #24292f;
+  color: #cf222e;
+  font-weight: 700;
 }
 
 .app-file-diff-line.is-ctx {
   background: transparent;
+  border-left: 3px solid transparent;
   color: var(--aw-color-text);
 }
 
 .app-file-diff-line.is-ctx .app-file-diff-sign {
   color: transparent;
+  font-weight: 400;
 }
 
 /* Thought：标签行 + 正文（非手风琴，随 Worked 展开） */
 .app-worked-thought {
   min-width: 0;
-  padding: 4px 0 6px;
+  padding: 2px 0 4px;
 }
 
 .app-worked-thought-label {
   font-size: var(--aw-font-sm);
+  font-weight: 400;
   line-height: 1.4;
-  color: var(--aw-color-text-secondary);
+  color: var(--aw-worked-fg, rgb(24 24 27 / 0.48));
 }
 
 .app-worked-thought.is-brief .app-worked-thought-label {
-  color: var(--aw-color-text-tertiary, var(--aw-color-text-secondary));
+  color: var(--aw-worked-fg-muted, rgb(24 24 27 / 0.36));
 }
 
 .app-worked-thought-text {
   margin-top: 2px;
   font-size: var(--aw-font-sm);
+  font-weight: 400;
   line-height: 1.55;
-  color: var(--aw-color-text);
+  color: var(--aw-worked-fg, rgb(24 24 27 / 0.48));
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 200px;
