@@ -387,6 +387,50 @@ html[data-aw-wco-suppressed='1'] .app-win-titlebar {
   background: var(--aw-color-fill-secondary) !important;
 }
 
+.app-workspace-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 12px 2px;
+  flex-shrink: 0;
+}
+
+.app-workspace-section-title {
+  min-width: 0;
+  color: var(--aw-color-text-secondary);
+  font-size: var(--aw-font-xs);
+  font-weight: var(--aw-font-weight-medium);
+  line-height: var(--aw-line-snug);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-workspace-add-btn {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--aw-color-icon);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.app-workspace-add-btn:hover {
+  background: var(--aw-color-fill-tertiary);
+  color: var(--aw-color-text);
+}
+
 .app-workspace-tree {
   flex: 1;
   overflow: auto;
@@ -642,11 +686,6 @@ html[data-aw-wco-suppressed='1'] .app-win-titlebar {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.app-workspace-btn-wrap {
-  padding: 8px 10px 10px;
-  border-top: 1px solid var(--aw-color-border-secondary);
 }
 
 .app-devtools-float {

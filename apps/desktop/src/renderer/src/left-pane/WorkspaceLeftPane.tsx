@@ -1,7 +1,7 @@
 import { SettingsModal } from './modals'
 import { useWorkspaceLeftPane } from './useWorkspaceLeftPane'
 import {
-  FolderOpenOutlined,
+  FolderAddOutlined,
   InboxOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
@@ -97,6 +97,20 @@ export function WorkspaceLeftPane({ leftTogglePortalHost }: WorkspaceLeftPanePro
               >
                 新会话
               </Button>
+            </div>
+          )}
+          {!p.isSidebarCollapsed && (
+            <div className="app-workspace-section-header">
+              <Text className="app-workspace-section-title">工作区</Text>
+              <button
+                type="button"
+                className="app-workspace-add-btn"
+                aria-label="添加工作区"
+                title="添加工作区"
+                onClick={() => void p.pickWorkspace()}
+              >
+                <FolderAddOutlined aria-hidden />
+              </button>
             </div>
           )}
           {!p.isSidebarCollapsed && (
@@ -232,13 +246,6 @@ export function WorkspaceLeftPane({ leftTogglePortalHost }: WorkspaceLeftPanePro
                   )
                 })
               )}
-            </div>
-          )}
-          {!p.isSidebarCollapsed && (
-            <div className="app-workspace-btn-wrap">
-              <Button block icon={<FolderOpenOutlined />} onClick={() => void p.pickWorkspace()}>
-                添加并切换工作区
-              </Button>
             </div>
           )}
         </div>

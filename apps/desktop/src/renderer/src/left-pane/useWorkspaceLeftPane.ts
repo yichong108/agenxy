@@ -81,7 +81,7 @@ export function useWorkspaceLeftPane() {
   const workspaceTreeEmptyMessage = useMemo(() => {
     if (workspacesForSidebar.length > 0) return ''
     if (workspaces.length === 0) {
-      return '暂无工作区。请点击下方「添加并切换工作区」选择项目文件夹。'
+      return '暂无工作区。请点击右侧「添加工作区」图标选择项目文件夹。'
     }
     return '请添加项目文件夹作为工作区；用户目录（Home）仅在已有会话记录时显示在侧栏。'
   }, [workspaces.length, workspacesForSidebar.length])
@@ -352,10 +352,10 @@ export function useWorkspaceLeftPane() {
       modalApi.confirm({
         title: '从侧边栏移除此工作区？',
         content: isHome
-          ? 'Home（用户目录）工作区下的全部会话将从本机永久删除，不会并入其他工作区。移除后不会再自动显示 Home；若需该路径仍可通过「添加并切换工作区」选择用户目录。'
+          ? 'Home（用户目录）工作区下的全部会话将从本机永久删除，不会并入其他工作区。移除后不会再自动显示 Home；若需该路径仍可通过「添加工作区」选择用户目录。'
           : isDefault
-            ? '默认工作区下的全部会话将从本机永久删除，不会并入其他工作区。移除后侧栏可为空，可通过下方按钮重新添加工作区。'
-            : '该工作区下的全部会话将从本机永久删除，不会并入其他工作区。之后可通过「添加并切换工作区」重新选择该文件夹。',
+            ? '默认工作区下的全部会话将从本机永久删除，不会并入其他工作区。移除后侧栏可为空，可通过「添加工作区」重新添加。'
+            : '该工作区下的全部会话将从本机永久删除，不会并入其他工作区。之后可通过「添加工作区」重新选择该文件夹。',
         centered: true,
         okText: '移除',
         okButtonProps: { danger: true },
