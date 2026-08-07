@@ -115,7 +115,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px 0;
+  /* 底部多留空，让空状态输入区略高于垂直中心 */
+  padding: 24px 0 clamp(96px, 20vh, 220px);
 }
 
 .app-composer-hero-inner {
