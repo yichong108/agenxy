@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import '@/main/app-identity'
 import '@/main/env-bootstrap'
 import '@/main/agent/agent-log'
-import { completeCommandInWorkspace, killCommand, runCommand } from '@openworker/agent'
+import { completeCommandInWorkspace, killCommand, runCommand } from '@openworker/uni-agent'
 import { EventType } from '@ag-ui/client'
 import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron'
 

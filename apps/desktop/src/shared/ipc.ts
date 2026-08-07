@@ -130,6 +130,7 @@ export type TerminalOutputEvent = {
 export type {
   AgentComposerMode,
   AgentSendOptions,
+  AgentType,
   AppSettings,
   McpServerEntry,
   ModelProviderId,
@@ -141,6 +142,7 @@ export type {
 } from '@openworker/shared'
 export {
   applySettingsForm,
+  DEFAULT_CURSOR_MODEL,
   defaultProviderProfiles,
   defaultSettings,
   getActiveProviderProfile,
@@ -148,6 +150,7 @@ export {
   MAX_MCP_SERVERS,
   MAX_TERMINAL_OUTPUT_CHARS,
   mergeFormIntoProviderProfiles,
+  normalizeAgentType,
   normalizeComposerMode,
   normalizeSettings,
   parseMcpServersFromUnknown,

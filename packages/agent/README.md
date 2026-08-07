@@ -14,6 +14,7 @@ Agent 可选 MCP。
 
 ## 边界与依赖
 
+- **Desktop 宿主禁止直接依赖本包**；应经 [`@openworker/uni-agent`](../uni-agent/README.md)。
 - **外部禁止直接使用 `createAgent` / `agent.send`**；一律经 `OpenWorkerAgent.runAgent`（或 `run`）与 AG-UI 事件。
 - `createAgent` 仅由 `OpenWorkerAgent` 内部委托，不从包根导出。
 - MCP 宿主能力经 `OpenWorkerAgent.mcp`（probe / warmup / dispose）。
@@ -21,7 +22,8 @@ Agent 可选 MCP。
 
 ## 反模式（本模块已出现过/严禁）
 
-- 宿主直接 import / 调用 `createAgent`（应使用 `OpenWorkerAgent`）
+- Desktop 直接依赖 `@openworker/agent`（应使用 `@openworker/uni-agent`）
+- 宿主直接 import / 调用 `createAgent`（应使用 `OpenWorkerAgent` / `uni-agent`）
 - 让 agent 依赖宿主特有的 skills 目录布局（bundled / userData）；应统一走 `~/.openworker/skills`
 - 在工作流中强制执行仅 Desktop 需要的增强阶段
 - 在宿主侧重复实现 MCP 连接池 / 工具绑定（应走 send 内置加载与 `OpenWorkerAgent.mcp`）

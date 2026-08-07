@@ -1,90 +1,100 @@
 /**
  * Desktop agent 工厂。
  *
- * 每个会话应持有独立的 OpenWorkerAgent 实例（createSessionOpenWorkerAgent）。
- * MCP 预热 / 探测 / dispose 使用应用级 OpenWorkerAgent 宿主（getMcpHostAgent），不参与会话 run。
- * Skills / MCP 工具绑定在 run 时按轮由底层加载。
- *
- * 会话消息一律使用 AG-UI Message（经 initialMessages / agent.messages）。
- * 禁止在 Desktop 直接调用 createAgent。
+ * 只负责把设置中的 agentType / 凭据传给 UniAgent；不在此判断用哪个后端。
  */
-import { type CreateAgentOptions, OpenWorkerAgent } from '@openworker/agent'
+import { UniAgent } from '@openworker/uni-agent'
+import { normalizeAgentType, type AgentType } from '@openworker/shared'
 import type { Message } from '@ag-ui/client'
-import type { LanguageModel } from 'ai'
+
+import { getSettings } from '@/main/store'
+
+/** 会话级 AG-UI Agent */
+export type SessionAguiAgent = UniAgent
 
 /**
- * 创建时占位模型：会话实际对话模型由 run 的 provider 覆盖；
- * MCP 宿主不发起 run，仅需满足底层 createAgent 必填约束。
- */
-const PLACEHOLDER_PROVIDER = { modelId: 'desktop-placeholder' } as LanguageModel
-
-/**
- * 组装 Desktop 会话用底层 agent 选项（不含消息；历史由 AG-UI initialMessages 承载）。
+ * 读取当前设置中的 Agent 类型。
  *
- * @param cwd - 工作区根目录（可选）
- * @returns CreateAgentOptions
+ * @returns openworker | cursor
  */
-function buildSessionAgentOptions(cwd?: string): CreateAgentOptions {
-  return {
-    provider: PLACEHOLDER_PROVIDER,
-    ...(cwd ? { local: { cwd } } : {})
-  }
+export function getConfiguredAgentType(): AgentType {
+  return normalizeAgentType(getSettings().agentType)
 }
 
 /**
- * 为单个会话创建独立 OpenWorkerAgent（AG-UI AbstractAgent）。
+ * 为单个会话创建独立 UniAgent。
  *
- * 同会话复用该实例；不同会话互不共享，避免并发 run / 状态串扰。
- * 勿在会话销毁时调用 sessionAgent.mcp.dispose（MCP 连接池为进程级，由 mcpHost 管理）。
- *
- * @param options - cwd / messages（AG-UI）/ threadId 等工作区与会话相关配置
- * @returns 新的 OpenWorkerAgent 实例
+ * @param options - cwd / messages / threadId / agentType
+ * @returns 新的 UniAgent
+ */
+export function createSessionAgent(options?: {
+  cwd?: string
+  messages?: Message[]
+  threadId?: string
+  agentType?: AgentType
+}): UniAgent {
+  const settings = getSettings()
+  const agentType = options?.agentType ?? getConfiguredAgentType()
+  const cwd = options?.cwd?.trim() || undefined
+
+  return new UniAgent({
+    agentType,
+    role: 'session',
+    agentId: 'openworker-desktop',
+    description: 'Openworker desktop session agent',
+    cwd,
+    cursorApiKey: settings.cursorApiKey,
+    cursorModel: settings.cursorModel,
+    ...(options?.threadId ? { threadId: options.threadId } : {}),
+    ...(options?.messages ? { initialMessages: options.messages } : {})
+  })
+}
+
+/**
+ * @deprecated 使用 createSessionAgent
  */
 export function createSessionOpenWorkerAgent(options?: {
   cwd?: string
   messages?: Message[]
   threadId?: string
-}): OpenWorkerAgent {
-  const cwd = options?.cwd?.trim() || undefined
-  return new OpenWorkerAgent({
-    agentId: 'openworker-desktop',
-    description: 'Openworker desktop session agent',
-    ...(options?.threadId ? { threadId: options.threadId } : {}),
-    ...(options?.messages ? { initialMessages: options.messages } : {}),
-    agent: buildSessionAgentOptions(cwd)
-  })
+}): UniAgent {
+  return createSessionAgent({ ...options, agentType: 'openworker' })
 }
 
 /** 应用级 MCP 宿主（warmup / probe / dispose），不用于会话 run */
-let mcpHostAgent: OpenWorkerAgent | undefined
+let mcpHostAgent: UniAgent | undefined
 
 /**
- * 获取（或惰性创建）应用级 MCP 宿主 OpenWorkerAgent。
+ * 获取（或惰性创建）应用级 MCP 宿主 UniAgent。
  *
- * @returns 带 mcp 能力的 OpenWorkerAgent
+ * @returns role=mcp-host 的 UniAgent
  */
-export function getMcpHostAgent(): OpenWorkerAgent {
+export function getMcpHostAgent(): UniAgent {
   if (!mcpHostAgent) {
-    mcpHostAgent = new OpenWorkerAgent({
+    mcpHostAgent = new UniAgent({
+      agentType: 'openworker',
+      role: 'mcp-host',
       agentId: 'openworker-mcp-host',
-      description: 'Openworker desktop MCP host',
-      agent: { provider: PLACEHOLDER_PROVIDER }
+      description: 'Openworker desktop MCP host'
     })
   }
   return mcpHostAgent
 }
 
 /**
- * 设置变更后重建 MCP 宿主：先释放连接池再新建实例。
+ * 设置变更后重建 MCP 宿主：先 dispose 再新建。
  *
- * @returns 重建后的宿主 OpenWorkerAgent
+ * @returns 重建后的 MCP 宿主 UniAgent
  */
-export async function resetMcpHostAgent(): Promise<OpenWorkerAgent> {
-  await mcpHostAgent?.dispose()
-  mcpHostAgent = new OpenWorkerAgent({
+export async function resetMcpHostAgent(): Promise<UniAgent> {
+  if (mcpHostAgent) {
+    await mcpHostAgent.dispose()
+  }
+  mcpHostAgent = new UniAgent({
+    agentType: 'openworker',
+    role: 'mcp-host',
     agentId: 'openworker-mcp-host',
-    description: 'Openworker desktop MCP host',
-    agent: { provider: PLACEHOLDER_PROVIDER }
+    description: 'Openworker desktop MCP host'
   })
   return mcpHostAgent
 }

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-import { listSkillsFromPaths, type SkillListItem } from '@openworker/agent'
+import { listSkillsFromPaths, type SkillListItem } from '@openworker/uni-agent'
 import { app } from 'electron'
 
 import { mainLog } from '@/main/logger'

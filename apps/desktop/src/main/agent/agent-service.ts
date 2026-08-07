@@ -1,9 +1,5 @@
-import {
-  killCommand,
-  OpenWorkerAgent,
-  type OpenWorkerAgentRunDefaults,
-  resolveChatModel
-} from '@openworker/agent'
+import { killCommand, resolveChatModel } from '@openworker/uni-agent'
+import { normalizeAgentType, type AgentType } from '@openworker/shared'
 import {
   EventType,
   type BaseEvent,
@@ -13,7 +9,11 @@ import {
 } from '@ag-ui/client'
 import type { WebContents } from 'electron'
 
-import { createSessionOpenWorkerAgent } from '@/main/agent/agent-instance'
+import {
+  createSessionAgent,
+  getConfiguredAgentType,
+  type SessionAguiAgent
+} from '@/main/agent/agent-instance'
 import { agentLog } from '@/main/agent/agent-log'
 import { flushLangfuseTracing } from '@/main/langfuse'
 import { getSessionMessages, getSettings, getWorkspaceById, setSessionMessages } from '@/main/store'
@@ -34,28 +34,46 @@ type AgentUnsubscribe = { unsubscribe: () => void }
 
 type SessionRuntime = {
   workspaceId: string
+  /** 创建该会话 agent 时使用的类型；设置变更后需重建 */
+  agentType: AgentType
+  /** agentType + Cursor 密钥/模型指纹；变更时重建 agent */
+  agentFingerprint: string
   /** 该会话独立的 AG-UI agent（勿跨会话复用）；消息以 agent.messages 为准 */
-  agent: OpenWorkerAgent
+  agent: SessionAguiAgent
   controller: AbortController | null
   subscription: AgentUnsubscribe | null
   terminalKey: string
 }
 
 /**
- * 按工作区创建会话级 OpenWorkerAgent。
+ * 生成会话 agent 重建指纹（类型或 Cursor 凭据变更时失效）。
+ *
+ * @returns 指纹字符串
+ */
+function getAgentSettingsFingerprint(): string {
+  const settings = getSettings()
+  const agentType = normalizeAgentType(settings.agentType)
+  if (agentType === 'cursor') {
+    return `cursor:${settings.cursorApiKey.trim()}:${settings.cursorModel.trim()}`
+  }
+  return 'openworker'
+}
+
+/**
+ * 按工作区创建会话级 AG-UI Agent（OpenWorker 或 Cursor）。
  *
  * @param workspaceId - 工作区 ID
  * @param sessionId - 会话 ID（作为 AG-UI threadId）
  * @param messages - AG-UI 初始消息（可选）
- * @returns 新 OpenWorkerAgent
+ * @returns 新 SessionAguiAgent
  */
 function createAgentForWorkspace(
   workspaceId: string,
   sessionId: string,
   messages?: Message[]
-): OpenWorkerAgent {
+): SessionAguiAgent {
   const cwd = getWorkspaceById(workspaceId)?.path?.trim() || undefined
-  return createSessionOpenWorkerAgent({ cwd, messages, threadId: sessionId })
+  return createSessionAgent({ cwd, messages, threadId: sessionId })
 }
 
 const sessions = new Map<string, SessionRuntime>()
@@ -227,19 +245,28 @@ export function bindAgentIpc(wc: WebContents): void {
 }
 
 /**
- * 初始化或校正会话运行时：每个会话绑定独立 OpenWorkerAgent。
+ * 初始化或校正会话运行时：每个会话绑定独立 AG-UI Agent。
  *
- * 若会话已存在但工作区变更，则重建该会话的 agent（更新 cwd），并保留 AG-UI 消息。
+ * 若会话已存在但工作区或 agentType 变更，则重建该会话的 agent，并保留 AG-UI 消息。
  *
  * @param workspaceId - 工作区 ID
  * @param sessionId - 会话 ID
  */
 export function initSessionState(workspaceId: string, sessionId: string): void {
+  const configuredType = getConfiguredAgentType()
+  const fingerprint = getAgentSettingsFingerprint()
   const existing = sessions.get(sessionId)
   if (existing) {
-    if (existing.workspaceId !== workspaceId) {
+    const workspaceChanged = existing.workspaceId !== workspaceId
+    const agentChanged =
+      existing.agentType !== configuredType || existing.agentFingerprint !== fingerprint
+    if (workspaceChanged || agentChanged) {
+      const prev = existing.agent
       existing.workspaceId = workspaceId
-      existing.agent = createAgentForWorkspace(workspaceId, sessionId, existing.agent.messages)
+      existing.agentType = configuredType
+      existing.agentFingerprint = fingerprint
+      existing.agent = createAgentForWorkspace(workspaceId, sessionId, prev.messages)
+      void prev.dispose()
     }
     return
   }
@@ -247,6 +274,8 @@ export function initSessionState(workspaceId: string, sessionId: string): void {
   const messages = fromPersistedMessages(getSessionMessages(workspaceId, sessionId))
   sessions.set(sessionId, {
     workspaceId,
+    agentType: configuredType,
+    agentFingerprint: fingerprint,
     agent: createAgentForWorkspace(workspaceId, sessionId, messages),
     controller: null,
     subscription: null,
@@ -265,7 +294,7 @@ export function getSessionAguiMessages(sessionId: string): Message[] {
 }
 
 /**
- * 清除会话运行时：取消进行中的 run、杀掉终端进程并删除会话条目。
+ * 清除会话运行时：取消进行中的 run、释放 agent、杀掉终端进程并删除会话条目。
  *
  * @param sessionId - 会话 ID
  */
@@ -276,6 +305,9 @@ export function clearSessionState(sessionId: string): void {
   }
   s?.subscription?.unsubscribe()
   s?.agent.abortRun()
+  if (s?.agent) {
+    void s.agent.dispose()
+  }
   void killCommand(s?.terminalKey ?? `term:${sessionId}`)
   sessions.delete(sessionId)
 }
@@ -356,11 +388,11 @@ function createAguiTimelineEventCollector(): {
 }
 
 /**
- * 运行用户消息（经 OpenWorkerAgent / AG-UI runAgent）。
+ * 运行用户消息（经 AG-UI runAgent：OpenWorkerAgent 或 CursorAgent）。
  *
  * 同会话同时只允许一次 run：已有运行中的智能体时直接拒绝。
  * 不同会话各自独立，可并行执行。
- * Desktop 仅组装 AG-UI Message 与 RunAgentInput；CoreMessage 转换留在 OpenWorkerAgent 内部。
+ * Desktop 仅组装 AG-UI Message 与 RunAgentInput。
  *
  * @param sessionId - 会话 ID
  * @param userText - 用户输入文本
@@ -378,7 +410,16 @@ export async function runUserMessage(
     return
   }
   const settings = getSettings()
-  agentLog.info(`settings: ${JSON.stringify(settings, null, 2)}, composerMode: ${composerMode}`)
+  const agentType = normalizeAgentType(settings.agentType)
+  agentLog.info(
+    `agentType: ${agentType}, composerMode: ${composerMode}, settingsKeys: ${Object.keys(settings).join(',')}`
+  )
+
+  // 设置可能已切换 agentType：发送前校正会话 agent
+  const sessionBefore = sessions.get(sessionId)
+  if (sessionBefore) {
+    initSessionState(sessionBefore.workspaceId, sessionId)
+  }
 
   const session = sessions.get(sessionId)
   if (!session) {
@@ -402,8 +443,10 @@ export async function runUserMessage(
   }
 
   const provider = resolveChatModel(settings)
-  if (!provider) {
-    emitPreRunError(sessionId, '请先在设置中配置 API Key')
+  try {
+    session.agent.assertReady({ provider })
+  } catch (e) {
+    emitPreRunError(sessionId, e instanceof Error ? e.message : String(e))
     return
   }
 
@@ -415,16 +458,17 @@ export async function runUserMessage(
   const runStartedAt = Date.now()
   const aguiCollector = createAguiTimelineEventCollector()
 
-  const forwardedProps: OpenWorkerAgentRunDefaults = {
+  // 统一组装参数；按 agentType 裁剪由 UniAgent 内部完成
+  const forwardedProps = session.agent.buildRunForwardedProps({
     composerMode,
-    provider,
     abortController: ac,
     workspacePath,
     terminalKey: session.terminalKey,
-    tavily: { apiKey: settings.tavilyApiKey },
+    provider,
+    tavilyApiKey: settings.tavilyApiKey,
     maxSteps: MAX_AGENT_LOOP_STEPS,
     invokeTimeoutMs: settings.agentRunTimeoutMs
-  }
+  })
 
   // 追加本轮用户消息到 AG-UI agent.messages；runAgent 以之为 RunAgentInput.messages
   const userMessage: Message = {
@@ -436,7 +480,7 @@ export async function runUserMessage(
 
   try {
     agentLog.info(
-      `[runUserMessage] run-start: ${runId}, sessionId: ${sessionId}, timestampMs: ${runStartedAt}`
+      `[runUserMessage] run-start: ${runId}, sessionId: ${sessionId}, agentType: ${agentType}, timestampMs: ${runStartedAt}`
     )
 
     const sub = session.agent.subscribe({
