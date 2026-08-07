@@ -269,12 +269,32 @@ export function formatShellTitle(event: ToolCallEvent): string {
 }
 
 /**
+ * 从工具 result 中解析文件路径（结构化 JSON 或「已写入：path」文案）。
+ *
+ * @param result - 工具结果字符串
+ */
+function pathFromToolResult(result?: string): string | undefined {
+  if (!result?.trim()) return undefined
+  try {
+    const parsed: unknown = JSON.parse(result)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const path = (parsed as Record<string, unknown>).path
+      if (typeof path === 'string' && path.trim()) return path.trim()
+    }
+  } catch {
+    // ignore
+  }
+  const m = /^(?:已写入|已删除)[:：]\s*(.+)$/.exec(result.trim())
+  return m?.[1]?.trim() || undefined
+}
+
+/**
  * 生成 Edit 二级节点标题。
  *
  * @param event - write_file / delete_file 事件
  */
 export function formatEditTitle(event: ToolCallEvent): string {
-  const path = argString(parseToolArgs(event.args), 'path')
+  const path = argString(parseToolArgs(event.args), 'path') || pathFromToolResult(event.result)
   if (event.name === 'delete_file') {
     return path ? `删除了 \`${path}\`` : '删除文件'
   }

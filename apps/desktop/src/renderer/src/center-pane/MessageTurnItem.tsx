@@ -5,6 +5,14 @@ import {
   remarkLinkifyBareUrls
 } from './center-pane-utils'
 import {
+  displayLineNumber,
+  type FileDiffLine,
+  type FileEditDiffView,
+  guessHighlightLanguage,
+  highlightCodeLines,
+  resolveFileEditDiff
+} from './file-edit-diff'
+import {
   estimateTimelineDurationMs,
   formatAtomicToolTitle,
   formatEditTitle,
@@ -19,7 +27,7 @@ import {
 } from './worked-timeline'
 import { CheckOutlined, CopyOutlined, RightOutlined } from '@ant-design/icons'
 import { App as AntdApp, Card, Typography } from 'antd'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
 import remarkGfm from 'remark-gfm'
@@ -382,6 +390,92 @@ type ToolLeafRowProps = {
   defaultOpen?: boolean
 }
 
+type FileDiffLineRowProps = {
+  line: FileDiffLine
+  index: number
+  codeHtml: string
+}
+
+/**
+ * 渲染单行 unified diff（行号 + +/- + 语法高亮）。
+ *
+ * @param line - diff 行
+ * @param index - 列表索引
+ * @param codeHtml - 行内 HTML
+ */
+function FileDiffLineRow({ line, index, codeHtml }: FileDiffLineRowProps) {
+  const prefix = line.kind === 'add' ? '+' : line.kind === 'del' ? '-' : ' '
+  const lineno = displayLineNumber(line)
+  return (
+    <div className={`app-file-diff-line is-${line.kind}`} data-diff-index={index}>
+      <span className="app-file-diff-lineno" aria-hidden>
+        {lineno ?? ''}
+      </span>
+      <span className="app-file-diff-sign" aria-hidden>
+        {prefix}
+      </span>
+      <span className="app-file-diff-code" dangerouslySetInnerHTML={{ __html: codeHtml || ' ' }} />
+    </div>
+  )
+}
+
+/**
+ * 将纯文本转义为可安全写入 innerHTML 的片段。
+ *
+ * @param text - 原始行文本
+ */
+function escapePlain(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+/**
+ * 编辑文件展开区：jsdiff 计算 + 轻量 unified 渲染（无文件名头、带行号）。
+ *
+ * @param view - 已解析的 diff 视图模型
+ */
+function FileEditDiffBody({ view }: { view: FileEditDiffView }) {
+  const language = useMemo(() => guessHighlightLanguage(view.path), [view.path])
+  const beforeHtmlLines = useMemo(
+    () => highlightCodeLines(view.before, language),
+    [view.before, language]
+  )
+  const afterHtmlLines = useMemo(
+    () => highlightCodeLines(view.after, language),
+    [view.after, language]
+  )
+
+  const codeHtmlForLine = (line: FileDiffLine): string => {
+    if (line.kind === 'del' && line.oldLine != null) {
+      return beforeHtmlLines[line.oldLine - 1] ?? escapePlain(line.text)
+    }
+    if (line.newLine != null) {
+      return afterHtmlLines[line.newLine - 1] ?? escapePlain(line.text)
+    }
+    return escapePlain(line.text)
+  }
+
+  return (
+    <div className="app-file-diff" role="region" aria-label={`${view.path} 的变更`}>
+      {view.lines.length === 0 ? (
+        <div className="app-file-diff-empty">（无内容变更）</div>
+      ) : (
+        view.lines.map((line, index) => (
+          <FileDiffLineRow
+            key={`${line.kind}-${line.oldLine ?? ''}-${line.newLine ?? ''}-${index}`}
+            line={line}
+            index={index}
+            codeHtml={codeHtmlForLine(line)}
+          />
+        ))
+      )}
+    </div>
+  )
+}
+
 /** Shell / Edit / MCP / 通用工具：Worked 下的 L2 叶子（可展开看输出） */
 function ToolLeafRow({ title, event, defaultOpen = false }: ToolLeafRowProps) {
   const [open, setOpen] = useState(defaultOpen)
@@ -414,6 +508,55 @@ function ToolLeafRow({ title, event, defaultOpen = false }: ToolLeafRowProps) {
           {event.status === 'end' && event.result ? (
             <pre className="app-timeline-result">{event.result}</pre>
           ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+type EditToolLeafRowProps = {
+  title: string
+  event: ToolCallEvent
+}
+
+/**
+ * 编辑类工具叶子：展开时优先渲染文件 diff；无法解析时回退到通用 ToolLeafRow。
+ *
+ * @param title - 二级标题
+ * @param event - write_file / delete_file 事件
+ */
+function EditToolLeafRow({ title, event }: EditToolLeafRowProps) {
+  const [open, setOpen] = useState(false)
+  const status = toolCallStatusSymbol(event.status, event.result)
+  const diffView = useMemo(
+    () => resolveFileEditDiff(event.name, event.args, event.result),
+    [event.name, event.args, event.result]
+  )
+  const hasDetail = Boolean(diffView || event.args || (event.status === 'end' && event.result))
+
+  if (!diffView) {
+    return <ToolLeafRow title={title} event={event} />
+  }
+
+  return (
+    <div className="app-worked-l2">
+      <button
+        type="button"
+        className="app-worked-l2-head"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        disabled={!hasDetail}
+      >
+        <RightOutlined
+          className={`app-timeline-chevron${open ? ' is-open' : ''}${hasDetail ? '' : ' is-hidden'}`}
+        />
+        <span className="app-worked-l2-title">
+          {title} {status}
+        </span>
+      </button>
+      {open && hasDetail ? (
+        <div className="app-worked-l2-body">
+          <FileEditDiffBody view={diffView} />
         </div>
       ) : null}
     </div>
@@ -465,7 +608,7 @@ function WorkedChildNode({ child }: { child: WorkedChild }) {
   }
 
   if (child.kind === 'edit') {
-    return <ToolLeafRow title={formatEditTitle(child.event)} event={child.event} />
+    return <EditToolLeafRow title={formatEditTitle(child.event)} event={child.event} />
   }
 
   if (child.kind === 'mcp') {

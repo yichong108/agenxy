@@ -31,8 +31,51 @@ type ToolDefinition<T extends z.ZodTypeAny> = {
   /** Zod schema，对应 AI SDK Tool.parameters */
   parameters: T
   execute: (input: z.infer<T>, onTool: ToolOnTool) => Promise<unknown>
+  /**
+   * 将 execute 结果格式化为时间线观察字符串（TOOL_CALL_RESULT / onTool）。
+   * 未提供时：string 原样，其它 JSON.stringify。
+   */
   formatResult?: (result: unknown) => string
+  /**
+   * 将 execute 结果映射为返回给模型的工具结果。
+   * 未提供时返回 execute 的原始结果（与历史行为一致）。
+   * 用于：观察侧携带结构化 diff，模型侧仅返回短摘要。
+   */
+  toModelResult?: (result: unknown) => unknown
   truncateTo?: number
+}
+
+/**
+ * 将工具参数规范为 JSON 字符串，供时间线解析（如 path / content）。
+ *
+ * @param parsed - zod 解析后的入参
+ * @returns JSON 字符串；无法序列化时退回 String
+ */
+function toolArgsToObservation(parsed: unknown): string {
+  try {
+    return JSON.stringify(parsed ?? {})
+  } catch {
+    return String(parsed)
+  }
+}
+
+/**
+ * 将工具执行结果规范为观察用字符串。
+ *
+ * @param result - execute 返回值
+ * @param formatResult - 可选自定义格式化
+ */
+function toolResultToObservation(
+  result: unknown,
+  formatResult?: (result: unknown) => string
+): string {
+  if (formatResult) return formatResult(result)
+  if (typeof result === 'string') return result
+  try {
+    return JSON.stringify(result)
+  } catch {
+    return String(result)
+  }
 }
 
 /**
@@ -74,7 +117,7 @@ export function defineTool<T extends z.ZodTypeAny>(
   def: ToolDefinition<T>,
   onTool: ToolOnTool
 ): ToolSet {
-  const { name, description, parameters, execute, formatResult, truncateTo } = def
+  const { name, description, parameters, execute, formatResult, toModelResult, truncateTo } = def
 
   const wrapped: Tool = tool({
     description,
@@ -83,10 +126,7 @@ export function defineTool<T extends z.ZodTypeAny>(
       const parsed = input as z.infer<T>
       const id = `${name}-${Date.now()}`
       const startedAt = Date.now()
-      const args =
-        typeof parsed === 'object' && parsed !== null
-          ? Object.values(parsed as Record<string, unknown>).join(', ')
-          : String(parsed)
+      const args = toolArgsToObservation(parsed)
 
       onTool({
         id,
@@ -97,7 +137,7 @@ export function defineTool<T extends z.ZodTypeAny>(
       })
 
       const result = await execute(parsed, onTool)
-      const resultStr = formatResult ? formatResult(result) : String(result)
+      const resultStr = toolResultToObservation(result, formatResult)
       const truncated = truncateTo ? resultStr.slice(0, truncateTo) : resultStr
 
       onTool({
@@ -109,7 +149,7 @@ export function defineTool<T extends z.ZodTypeAny>(
         durationMs: Date.now() - startedAt
       })
 
-      return result
+      return toModelResult ? toModelResult(result) : result
     }
   })
 

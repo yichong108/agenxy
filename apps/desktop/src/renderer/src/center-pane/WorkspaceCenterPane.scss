@@ -833,6 +833,87 @@
   white-space: pre-wrap;
 }
 
+/* 编辑文件展开：jsdiff unified（单列行号 | +/- | 语法高亮） */
+.app-file-diff {
+  min-width: 0;
+  max-height: 320px;
+  margin: 4px 0 8px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  overflow: auto;
+  background: transparent;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
+  font-size: var(--aw-font-sm);
+  line-height: 1.5;
+}
+
+.app-file-diff-empty {
+  padding: 0;
+  color: var(--aw-color-text-secondary);
+}
+
+.app-file-diff-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 0;
+  min-height: 1.5em;
+}
+
+.app-file-diff-lineno {
+  flex: 0 0 2.5em;
+  width: 2.5em;
+  padding: 0 0.4em 0 0;
+  text-align: right;
+  user-select: none;
+  color: #8b949e;
+}
+
+.app-file-diff-sign {
+  flex: 0 0 1.1em;
+  width: 1.1em;
+  text-align: center;
+  user-select: none;
+  color: #8b949e;
+}
+
+.app-file-diff-code {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  background: transparent !important;
+}
+
+.app-file-diff-line.is-add {
+  background: #e6ffed;
+}
+
+.app-file-diff-line.is-add .app-file-diff-sign {
+  color: #24292f;
+}
+
+.app-file-diff-line.is-del {
+  background: #ffebe9;
+}
+
+.app-file-diff-line.is-del .app-file-diff-sign {
+  color: #24292f;
+}
+
+.app-file-diff-line.is-ctx {
+  background: transparent;
+  color: var(--aw-color-text);
+}
+
+.app-file-diff-line.is-ctx .app-file-diff-sign {
+  color: transparent;
+}
+
 /* Thought：标签行 + 正文（非手风琴，随 Worked 展开） */
 .app-worked-thought {
   min-width: 0;

@@ -35,24 +35,72 @@ export async function readFileTool(workspace: string, relPath: string): Promise<
   return await fs.readFile(file, 'utf8')
 }
 
+/** write_file 工具的结构化结果（供时间线渲染 diff；模型侧另映射为短文案） */
+export type WriteFileToolResult = {
+  path: string
+  /** 写入前内容；新建文件时为空字符串 */
+  before: string
+  /** 写入后内容 */
+  after: string
+  /** 是否为新建文件（写入前不存在） */
+  created: boolean
+}
+
+/** 写入观察载荷中 before/after 的最大字符数，避免 IPC/时间线膨胀 */
+const MAX_WRITE_DIFF_CHARS = 100_000
+
+/**
+ * 截断过长文本并附注原长度，供 diff 观察载荷使用。
+ *
+ * @param text - 原始文本
+ * @returns 可能被截断的文本
+ */
+function truncateForWriteDiff(text: string): string {
+  if (text.length <= MAX_WRITE_DIFF_CHARS) return text
+  return (
+    text.slice(0, MAX_WRITE_DIFF_CHARS) +
+    `\n\n…[已截断：共 ${text.length} 字符，仅保留前 ${MAX_WRITE_DIFF_CHARS} 字符]`
+  )
+}
+
 /**
  * 写入或覆盖工作区文件，自动创建父目录。
+ *
+ * 写入前读取旧内容，供聊天时间线展示文件 diff；模型侧由 formatResult/toModelResult 映射短摘要。
  *
  * @param workspace - 工作区根目录
  * @param relPath - 相对路径
  * @param content - 写入内容
- * @returns 成功说明
+ * @returns 含 path / before / after / created 的结构化结果
  */
 export async function writeFileTool(
   workspace: string,
   relPath: string,
   content: string
-): Promise<string> {
+): Promise<WriteFileToolResult> {
   const root = ensureWorkspaceExists(workspace)
   const file = resolveSafePath(relPath, root)
+
+  let before = ''
+  let created = true
+  try {
+    before = await fs.readFile(file, 'utf8')
+    created = false
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException)?.code
+    if (code !== 'ENOENT') throw e
+  }
+
   await fs.mkdir(path.dirname(file), { recursive: true })
   await fs.writeFile(file, content, 'utf8')
-  return `已写入：${path.relative(root, file)}`
+  const relativePath = path.relative(root, file).split(path.sep).join('/')
+
+  return {
+    path: relativePath,
+    before: truncateForWriteDiff(before),
+    after: truncateForWriteDiff(content),
+    created
+  }
 }
 
 /**

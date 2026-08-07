@@ -8,7 +8,8 @@ import {
   globFilesTool,
   listDirTool,
   readFileTool,
-  writeFileTool
+  writeFileTool,
+  type WriteFileToolResult
 } from './fs-tools.js'
 import { GREP_TOOL_DESCRIPTION, grepWorkspace } from './grep.js'
 import { runCommand } from './terminal.js'
@@ -24,7 +25,24 @@ type ToolDefinition<T extends z.ZodTypeAny> = {
   parameters: T
   execute: (input: z.infer<T>, onTool: ToolOnTool) => Promise<unknown>
   formatResult?: (result: unknown) => string
+  toModelResult?: (result: unknown) => unknown
   truncateTo?: number
+}
+
+/**
+ * 判断未知值是否为 write_file 结构化结果。
+ *
+ * @param value - execute 返回值
+ */
+function isWriteFileToolResult(value: unknown): value is WriteFileToolResult {
+  if (!value || typeof value !== 'object') return false
+  const o = value as Record<string, unknown>
+  return (
+    typeof o.path === 'string' &&
+    typeof o.before === 'string' &&
+    typeof o.after === 'string' &&
+    typeof o.created === 'boolean'
+  )
 }
 
 /**
@@ -72,7 +90,17 @@ export function buildWorkspaceTools(options: BuildWorkspaceToolsOptions): ToolSe
       name: 'write_file',
       description: '写入或覆盖工作区文件，自动创建父目录',
       parameters: z.object({ path: z.string(), content: z.string() }),
-      execute: ({ path, content }) => writeFileTool(root, path, content)
+      execute: ({ path, content }) => writeFileTool(root, path, content),
+      /** 时间线携带 before/after，供聊天展开渲染 diff */
+      formatResult: (result) =>
+        JSON.stringify(
+          isWriteFileToolResult(result)
+            ? result
+            : { path: '', before: '', after: '', created: true }
+        ),
+      /** 模型上下文只保留短摘要，避免前后全文膨胀 */
+      toModelResult: (result) =>
+        isWriteFileToolResult(result) ? `已写入：${result.path}` : '已写入'
     },
     {
       name: 'delete_file',
