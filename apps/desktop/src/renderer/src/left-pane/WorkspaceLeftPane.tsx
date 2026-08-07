@@ -1,7 +1,6 @@
-import { McpHubModal, SettingsModal } from './modals'
+import { SettingsModal } from './modals'
 import { useWorkspaceLeftPane } from './useWorkspaceLeftPane'
 import {
-  ApiOutlined,
   FolderOpenOutlined,
   InboxOutlined,
   LogoutOutlined,
@@ -68,13 +67,6 @@ export function WorkspaceLeftPane({ leftTogglePortalHost }: WorkspaceLeftPanePro
                   aria-label="收起侧边栏"
                 />
                 <Space size={2}>
-                  <Button
-                    type="text"
-                    icon={<ApiOutlined />}
-                    onClick={p.openMcpHub}
-                    className="app-settings-btn"
-                    title="MCP 与扩展"
-                  />
                   <Button
                     type="text"
                     icon={<SettingOutlined />}
@@ -258,7 +250,6 @@ export function WorkspaceLeftPane({ leftTogglePortalHost }: WorkspaceLeftPanePro
         aria-label="调整侧边栏宽度"
         onMouseDown={p.isSidebarCollapsed ? undefined : p.handleSidebarResizeStart}
       />
-      <McpHubModal open={p.mcpOpen} onClose={p.closeMcpHub} />
       <SettingsModal open={p.settingsOpen} onClose={p.closeSettings} />
 
       <Modal
