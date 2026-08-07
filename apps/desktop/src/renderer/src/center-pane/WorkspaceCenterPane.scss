@@ -701,6 +701,11 @@
 
 .app-timeline-chevron {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  line-height: 1;
   font-size: var(--aw-font-micro);
   transition: transform 0.15s ease;
   color: var(--aw-color-icon-muted);
@@ -747,15 +752,51 @@
 }
 
 .app-timeline-result {
-  margin-top: 8px;
+  margin-top: 6px;
   margin-bottom: 0;
-  padding: 8px;
-  font-size: var(--aw-font-caption);
-  max-height: 120px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: var(--aw-font-sm);
+  font-weight: 400;
+  line-height: 1.55;
+  color: var(--aw-color-text-secondary);
+  max-height: 220px;
   overflow: auto;
   border-radius: 8px;
-  background: var(--aw-color-fill-secondary);
+  background: var(--aw-color-bg-container);
   border: 1px solid var(--aw-color-border-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+  /* 与全局 / 主栏聊天滚动条 token 一致 */
+  scrollbar-width: thin;
+  scrollbar-color: var(--aw-chat-scrollbar-thumb) transparent;
+}
+
+.app-timeline-result::-webkit-scrollbar {
+  width: var(--aw-chat-scrollbar-size);
+  height: var(--aw-chat-scrollbar-size);
+}
+
+.app-timeline-result::-webkit-scrollbar-thumb {
+  background: var(--aw-chat-scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background-color 0.15s ease;
+}
+
+.app-timeline-result::-webkit-scrollbar-thumb:hover {
+  background: var(--aw-chat-scrollbar-thumb-hover);
+}
+
+.app-timeline-result::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-timeline-result::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 /* Worked：对齐 Cursor——浅灰、常规字重、弱于正文 */
@@ -775,13 +816,13 @@
   }
 
   .app-timeline-accordion-title {
-    font-size: var(--aw-font-sm);
+    font-size: var(--aw-font-lg);
     font-weight: 400;
     line-height: 1.4;
   }
 
   .app-timeline-chevron {
-    font-size: var(--aw-font-micro);
+    font-size: var(--aw-font-xs);
     color: var(--aw-worked-fg-muted);
   }
 
@@ -825,7 +866,7 @@
 }
 
 .app-worked-l2-title {
-  font-size: var(--aw-font-sm);
+  font-size: var(--aw-font-lg);
   font-weight: 400;
   line-height: 1.4;
   word-break: break-word;
@@ -842,13 +883,21 @@
   min-width: 0;
   padding: 1px 0;
   color: var(--aw-worked-fg, rgb(24 24 27 / 0.48));
-  font-size: var(--aw-font-sm);
+  font-size: var(--aw-font-lg);
   font-weight: 400;
+}
+
+.app-worked-l3-title {
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: 1.4;
+  word-break: break-word;
+  color: inherit;
 }
 
 .app-worked-l3-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 6px;
   width: 100%;
   padding: 1px 0;
@@ -866,16 +915,24 @@
 }
 
 .app-worked-l3-body {
-  margin-left: 16px;
+  margin-left: 0;
   padding: 2px 0 6px;
 }
 
 .app-worked-args {
   display: block;
-  font-size: var(--aw-font-caption);
+  margin: 0 0 2px;
+  font-size: var(--aw-font-lg);
+  font-weight: 400;
+  line-height: 1.45;
   color: var(--aw-worked-fg-muted, rgb(24 24 27 / 0.36));
   word-break: break-word;
   white-space: pre-wrap;
+}
+
+.app-worked-accordion .app-timeline-result {
+  color: var(--aw-worked-fg-hover, rgb(24 24 27 / 0.64));
+  background: var(--aw-color-bg-container);
 }
 
 /* 编辑文件展开：jsdiff unified（单列行号 | +/- | 语法高亮） */
@@ -891,7 +948,7 @@
   font-family:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
     monospace;
-  font-size: var(--aw-font-sm);
+  font-size: var(--aw-font-lg);
   line-height: 1.5;
 }
 
@@ -901,12 +958,14 @@
 }
 
 .app-file-diff-line {
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  padding: 0;
+  /* 3px 色块外沿留白 + 3px 竖线，保证增删/上下文对齐 */
+  padding: 0 0 0 6px;
   min-height: 1.5em;
 }
 
@@ -943,9 +1002,24 @@
   background: transparent !important;
 }
 
+/* 竖线用 ::before 画在色块内侧（左缘先留 3px 底色，再画 3px 条） */
+.app-file-diff-line.is-add::before,
+.app-file-diff-line.is-del::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  pointer-events: none;
+}
+
 .app-file-diff-line.is-add {
   background: #e6ffed;
-  border-left: 3px solid #2da44e;
+}
+
+.app-file-diff-line.is-add::before {
+  background: #2da44e;
 }
 
 .app-file-diff-line.is-add .app-file-diff-sign {
@@ -955,7 +1029,10 @@
 
 .app-file-diff-line.is-del {
   background: #ffebe9;
-  border-left: 3px solid #cf222e;
+}
+
+.app-file-diff-line.is-del::before {
+  background: #cf222e;
 }
 
 .app-file-diff-line.is-del .app-file-diff-sign {
@@ -965,7 +1042,6 @@
 
 .app-file-diff-line.is-ctx {
   background: transparent;
-  border-left: 3px solid transparent;
   color: var(--aw-color-text);
 }
 
@@ -981,7 +1057,7 @@
 }
 
 .app-worked-thought-label {
-  font-size: var(--aw-font-sm);
+  font-size: var(--aw-font-lg);
   font-weight: 400;
   line-height: 1.4;
   color: var(--aw-worked-fg, rgb(24 24 27 / 0.48));
@@ -993,7 +1069,7 @@
 
 .app-worked-thought-text {
   margin-top: 2px;
-  font-size: var(--aw-font-sm);
+  font-size: var(--aw-font-lg);
   font-weight: 400;
   line-height: 1.55;
   color: var(--aw-worked-fg, rgb(24 24 27 / 0.48));

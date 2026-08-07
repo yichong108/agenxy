@@ -45,7 +45,10 @@ import type { ToolObservation } from './define-tool.js'
  * `structuredClone`。`provider`（LanguageModel，含 url 等函数）与 `abortController`
  * 不可克隆，OpenWorkerAgent 会在克隆前剥离并在本轮 run 中合并回 send 选项。
  */
-export type OpenWorkerAgentRunDefaults = Omit<AgentRunInput, 'onTextDelta' | 'onTool' | 'onEmit'>
+export type OpenWorkerAgentRunDefaults = Omit<
+  AgentRunInput,
+  'onTextDelta' | 'onThinking' | 'onTool' | 'onEmit'
+>
 
 /**
  * OpenWorkerAgent 配置：AG-UI AgentConfig + createAgent 选项。
@@ -597,6 +600,22 @@ export class OpenWorkerAgent extends AbstractAgent {
             timestamp: Date.now()
           }
           emit(content)
+        },
+        onThinking: (text, durationMs) => {
+          const trimmed = text.trim()
+          if (!trimmed) return
+          const custom: CustomEvent = {
+            type: EventType.CUSTOM,
+            name: 'cursor.thinking',
+            value: {
+              text: trimmed,
+              ...(typeof durationMs === 'number' && Number.isFinite(durationMs)
+                ? { thinkingDurationMs: durationMs }
+                : {})
+            },
+            timestamp: Date.now()
+          }
+          emit(custom)
         },
         onTool: (observation: ToolObservation) => {
           ensureTextStart()

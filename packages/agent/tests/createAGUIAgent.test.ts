@@ -266,6 +266,58 @@ describe('OpenWorkerAgent', () => {
     })
   })
 
+  it('onThinking 映射为 CUSTOM(cursor.thinking)，不进入 TEXT_MESSAGE', async () => {
+    createAgentMock.mockImplementation(() =>
+      createStubAgent({
+        send: async (userText, input = {}) => {
+          input.onThinking?.('我先检查工作区目录', 1200)
+          input.onTool?.({
+            id: 'list_dir-1',
+            name: 'list_dir',
+            status: 'start',
+            args: '.',
+            timestampMs: 1
+          })
+          input.onTool?.({
+            id: 'list_dir-1',
+            name: 'list_dir',
+            status: 'end',
+            result: '[]',
+            timestampMs: 2
+          })
+          input.onTextDelta?.('已生成演示文稿')
+          return {
+            messages: [
+              { role: 'user', content: userText },
+              { role: 'assistant', content: '已生成演示文稿' }
+            ],
+            result: '已生成演示文稿'
+          }
+        }
+      })
+    )
+
+    const agent = new OpenWorkerAgent({
+      agent: { provider: stubModel, local: { cwd: '/tmp/ws' } }
+    })
+    const events = await collectEvents(agent, baseInput())
+
+    const thinking = events.find(
+      (e) => e.type === EventType.CUSTOM && 'name' in e && e.name === 'cursor.thinking'
+    )
+    expect(thinking).toMatchObject({
+      type: EventType.CUSTOM,
+      name: 'cursor.thinking',
+      value: { text: '我先检查工作区目录', thinkingDurationMs: 1200 }
+    })
+
+    const contents = events
+      .filter((e) => e.type === EventType.TEXT_MESSAGE_CONTENT)
+      .map((e) => ('delta' in e ? e.delta : ''))
+    expect(contents.join('')).toBe('已生成演示文稿')
+    expect(contents.join('')).not.toContain('我先检查工作区目录')
+  })
+
   it('send 失败时产出 RUN_ERROR 并 complete', async () => {
     createAgentMock.mockImplementation(() =>
       createStubAgent({

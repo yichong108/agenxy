@@ -39,18 +39,13 @@ export function filterSessionsForSidebar(
   return (list ?? []).filter((s) => !hidden.has(s.id))
 }
 
-/** Cursor 风格时间线标题用：紧凑英文单位（1.2s / 2m 3s） */
+/** Cursor 风格时间线标题用：紧凑英文单位（整数秒 / 2m 3s） */
 export function formatWorkedDuration(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return '0s'
-  if (ms < 1000) return `${Math.round(ms)}ms`
-  const sec = ms / 1000
-  if (sec < 60) {
-    const t = sec.toFixed(1)
-    return t.endsWith('.0') ? `${Math.round(sec)}s` : `${t}s`
-  }
-  const s = Math.floor(sec)
-  const m = Math.floor(s / 60)
-  const rs = s % 60
+  const sec = Math.max(1, Math.round(ms / 1000))
+  if (sec < 60) return `${sec}s`
+  const m = Math.floor(sec / 60)
+  const rs = sec % 60
   if (m < 60) return `${m}m ${rs}s`
   const h = Math.floor(m / 60)
   const rm = m % 60
@@ -61,19 +56,14 @@ export function formatWorkedDuration(ms: number): string {
  * Worked / Thought 标题用中文耗时文案。
  *
  * @param ms - 耗时毫秒
- * @returns 如「24 秒」「1 分 2 秒」
+ * @returns 如「24 秒」「1 分 2 秒」（秒为整数，不含小数）
  */
 export function formatWorkedDurationZh(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return '0 秒'
-  if (ms < 1000) return `${Math.round(ms)} 毫秒`
-  const sec = ms / 1000
-  if (sec < 60) {
-    const t = sec.toFixed(1)
-    return t.endsWith('.0') ? `${Math.round(sec)} 秒` : `${t} 秒`
-  }
-  const s = Math.floor(sec)
-  const m = Math.floor(s / 60)
-  const rs = s % 60
+  const sec = Math.max(1, Math.round(ms / 1000))
+  if (sec < 60) return `${sec} 秒`
+  const m = Math.floor(sec / 60)
+  const rs = sec % 60
   if (m < 60) return rs > 0 ? `${m} 分 ${rs} 秒` : `${m} 分`
   const h = Math.floor(m / 60)
   const rm = m % 60

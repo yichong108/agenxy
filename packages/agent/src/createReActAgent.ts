@@ -134,8 +134,16 @@ export type AgentRunInput = {
    * 与工作区内置工具合并；同名时覆盖工作区工具。
    */
   tools?: ToolSet
-  /** 流式文本增量回调；可选 */
+  /** 流式文本增量回调；可选。仅最终回答（无工具的收尾步）会触发 */
   onTextDelta?: (text: string) => void
+  /**
+   * 过程思考回调；可选。
+   * ReAct 中间步（本步伴随 tool calls）的叙述文本走此通道，供宿主映射为 Worked → Thought。
+   *
+   * @param text - 本步完整思考文本
+   * @param durationMs - 本步耗时（毫秒）
+   */
+  onThinking?: (text: string, durationMs?: number) => void
   /** 工具观察回调；可选，宿主可在此映射与收集工具时间线 */
   onTool?: (event: ToolObservation) => void
   /** 向宿主推送自定义事件（可选；桌面侧经 AG-UI CUSTOM 转发） */
@@ -237,6 +245,7 @@ export function createReActAgent(options: CreateReActAgentOptions): ReActAgent {
     }
 
     const onTextDelta = input.onTextDelta ?? (() => {})
+    const onThinking = input.onThinking ?? (() => {})
     const onTool = input.onTool ?? (() => {})
     const onEmit = input.onEmit ?? (() => {})
     const { maxSteps, invokeTimeoutMs } = input
@@ -277,7 +286,8 @@ export function createReActAgent(options: CreateReActAgentOptions): ReActAgent {
       abortController,
       onTextDelta,
       maxSteps,
-      invokeTimeoutMs
+      invokeTimeoutMs,
+      onThinking
     )
 
     const finalMessages = runMessages.length > 0 ? runMessages : inputMessages

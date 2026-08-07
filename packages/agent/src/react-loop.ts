@@ -120,14 +120,19 @@ function buildAssistantMessage(text: string, toolCalls: ToolCallPart[]): CoreAss
  *
  * 入参与返回均为 AI SDK `CoreMessage` / `ToolSet`，可直接对接 streamText。
  *
+ * 每步文本在步结束时分流：
+ * - 本步有 tool calls → `onThinking`（过程叙述，进入 Worked → Thought）
+ * - 本步无 tool calls → `onToken`（最终回答，进入 Result）
+ *
  * @param model - 已解析的 AI SDK LanguageModel
  * @param systemPrompt - system 提示
  * @param messages - 初始会话消息（AI SDK CoreMessage）
  * @param tools - 可用工具（AI SDK ToolSet）
  * @param ac - 取消控制器
- * @param onToken - 流式 token 回调
+ * @param onToken - 最终回答文本回调（仅无工具的收尾步）
  * @param maxSteps - 最大工具调用轮次；缺省时使用 MAX_AGENT_LOOP_STEPS
  * @param timeoutMs - 循环超时（毫秒）；缺省时使用 defaultSettings.agentRunTimeoutMs
+ * @param onThinking - 过程思考回调（有工具的中间步文本）
  * @returns 运行结束后的 CoreMessage 列表（含输入消息与本轮新增）
  */
 export async function runReactLoop(
@@ -138,7 +143,8 @@ export async function runReactLoop(
   ac: AbortController,
   onToken: (token: string) => void,
   maxSteps?: number,
-  timeoutMs?: number
+  timeoutMs?: number,
+  onThinking?: (text: string, durationMs?: number) => void
 ): Promise<CoreMessage[]> {
   const resolvedMaxSteps = maxSteps ?? MAX_AGENT_LOOP_STEPS
   const resolvedTimeoutMs = timeoutMs ?? defaultSettings.agentRunTimeoutMs
@@ -156,6 +162,8 @@ export async function runReactLoop(
       throw new Error(`Model-tool loop timeout (>${resolvedTimeoutMs}ms), run aborted`)
     }
 
+    const stepStartedAt = Date.now()
+
     // messages 里不要塞 role: 'system'，避免和顶层 system 重复
     const result = streamText({
       model,
@@ -165,14 +173,25 @@ export async function runReactLoop(
       abortSignal: ac.signal
     })
 
+    // 先缓冲本步全文，步结束后再按是否有工具分流，避免过程叙述混入最终 Result
+    let stepText = ''
     for await (const chunk of result.fullStream) {
       if (chunk.type === 'text-delta') {
-        if (chunk.textDelta) onToken(chunk.textDelta)
+        if (chunk.textDelta) stepText += chunk.textDelta
       }
     }
 
-    const text = await result.text
+    const text = (await result.text) || stepText
     const toolCalls = await result.toolCalls
+    const stepDurationMs = Date.now() - stepStartedAt
+
+    if (text.trim()) {
+      if (toolCalls.length > 0) {
+        onThinking?.(text, stepDurationMs)
+      } else {
+        onToken(text)
+      }
+    }
 
     // ToolExecutionOptions.messages：不含 system，也不含本轮带 tool-call 的 assistant
     const messagesForTool = working.slice()

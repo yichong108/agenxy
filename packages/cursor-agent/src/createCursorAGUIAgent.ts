@@ -573,12 +573,49 @@ export class CursorAgent extends AbstractAgent {
       emit(content)
     }
 
+    /**
+     * 尚未判定归属的 assistant 纯文本。
+     * 若随后出现 tool_call → Thought；否则在 run 结束时落入 Result。
+     */
+    let pendingAssistantText = ''
+
+    const emitThinkingText = (text: string) => {
+      const trimmed = text.trim()
+      if (!trimmed) return
+      const custom: CustomEvent = {
+        type: EventType.CUSTOM,
+        name: 'cursor.thinking',
+        value: { text: trimmed },
+        timestamp: Date.now()
+      }
+      emit(custom)
+    }
+
+    const flushPendingAsThinking = () => {
+      if (!pendingAssistantText) return
+      emitThinkingText(pendingAssistantText)
+      pendingAssistantText = ''
+    }
+
+    const flushPendingAsResult = () => {
+      if (!pendingAssistantText) return
+      emitAssistantText(pendingAssistantText)
+      pendingAssistantText = ''
+    }
+
     const handleSdkMessage = (event: SDKMessage) => {
       switch (event.type) {
         case 'assistant': {
+          const hasToolUse = event.message.content.some((block) => block.type === 'tool_use')
           for (const block of event.message.content) {
             if (block.type === 'text') {
-              emitAssistantText(block.text)
+              if (hasToolUse) {
+                // 同条含 tool_use：先前挂起文本 + 本段均视为过程叙述
+                flushPendingAsThinking()
+                emitThinkingText(block.text)
+              } else {
+                pendingAssistantText += block.text
+              }
               continue
             }
             if (block.type === 'tool_use') {
@@ -588,6 +625,8 @@ export class CursorAgent extends AbstractAgent {
           break
         }
         case 'tool_call': {
+          // 工具出现前的纯文本是中间过程，归入 Thought
+          flushPendingAsThinking()
           ensureTextStart()
           const toolCallId = event.call_id
           if (event.status === 'running' && !startedToolCalls.has(toolCallId)) {
@@ -721,6 +760,9 @@ export class CursorAgent extends AbstractAgent {
         abortController.signal.removeEventListener('abort', onAbort)
       }
 
+      // 未再跟工具的挂起文本视为最终回答
+      flushPendingAsResult()
+
       const result = await run.wait()
       ensureTextEnd()
 
@@ -768,6 +810,9 @@ export class CursorAgent extends AbstractAgent {
       emit(finished)
       if (!subscriber.closed) subscriber.complete()
     } catch (error) {
+      // 异常中断：已开工具则挂起文本归 Thought，否则尝试作为 Result
+      if (startedToolCalls.size > 0) flushPendingAsThinking()
+      else flushPendingAsResult()
       ensureTextEnd()
 
       const cancelled = isAbortError(error) || abortController.signal.aborted

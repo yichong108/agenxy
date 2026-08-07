@@ -204,18 +204,13 @@ function argString(args: Record<string, unknown>, key: string): string | undefin
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
-/** 紧凑中文耗时（用于 Thought 标题） */
+/** 紧凑中文耗时（用于 Thought 标题；秒为整数） */
 function formatDurationCompactZh(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return '0 秒'
-  if (ms < 1000) return `${Math.round(ms)} 毫秒`
-  const sec = ms / 1000
-  if (sec < 60) {
-    const t = sec.toFixed(1)
-    return t.endsWith('.0') ? `${Math.round(sec)} 秒` : `${t} 秒`
-  }
-  const s = Math.floor(sec)
-  const m = Math.floor(s / 60)
-  const rs = s % 60
+  const sec = Math.max(1, Math.round(ms / 1000))
+  if (sec < 60) return `${sec} 秒`
+  const m = Math.floor(sec / 60)
+  const rs = sec % 60
   return rs > 0 ? `${m} 分 ${rs} 秒` : `${m} 分`
 }
 
@@ -296,9 +291,9 @@ function pathFromToolResult(result?: string): string | undefined {
 export function formatEditTitle(event: ToolCallEvent): string {
   const path = argString(parseToolArgs(event.args), 'path') || pathFromToolResult(event.result)
   if (event.name === 'delete_file') {
-    return path ? `删除了 \`${path}\`` : '删除文件'
+    return path ? `删除了 ${path}` : '删除文件'
   }
-  return path ? `编辑了 \`${path}\`` : '编辑文件'
+  return path ? `编辑了 ${path}` : '编辑文件'
 }
 
 /**

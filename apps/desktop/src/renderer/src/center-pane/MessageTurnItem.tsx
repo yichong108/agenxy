@@ -212,17 +212,6 @@ function buildMessageCardView(msg: ChatMessage, ctx: MessageCardContext): Messag
   }
 }
 
-/** 判断工具调用结果是否为用户拒绝 */
-function isToolCallRejected(result?: string): boolean {
-  return Boolean(result?.includes('用户已拒绝') || result?.includes('Rejected by user'))
-}
-
-/** 工具调用在时间线上的状态符号 */
-function toolCallStatusSymbol(status: 'start' | 'end', result?: string): string {
-  if (status === 'start') return '…'
-  return isToolCallRejected(result) ? '✗' : '✓'
-}
-
 type MessageMarkdownProps = {
   content: string
   className?: string
@@ -331,8 +320,8 @@ function NestedAccordion({
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <RightOutlined className={`app-timeline-chevron${open ? ' is-open' : ''}`} />
         <span className="app-worked-l2-title">{title}</span>
+        <RightOutlined className={`app-timeline-chevron${open ? ' is-open' : ''}`} />
       </button>
       {open ? <div className="app-worked-l2-body">{children}</div> : null}
     </div>
@@ -347,12 +336,12 @@ type AtomicToolRowProps = {
 function AtomicToolRow({ event }: AtomicToolRowProps) {
   const [open, setOpen] = useState(false)
   const hasDetail = Boolean(event.args || (event.status === 'end' && event.result))
-  const title = `${formatAtomicToolTitle(event)} ${toolCallStatusSymbol(event.status, event.result)}`
+  const title = formatAtomicToolTitle(event)
 
   if (!hasDetail) {
     return (
       <div className="app-worked-l3-item">
-        <Text type="secondary">{title}</Text>
+        <span className="app-worked-l3-title">{title}</span>
       </div>
     )
   }
@@ -365,16 +354,12 @@ function AtomicToolRow({ event }: AtomicToolRowProps) {
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
+        <span className="app-worked-l3-title">{title}</span>
         <RightOutlined className={`app-timeline-chevron${open ? ' is-open' : ''}`} />
-        <Text type="secondary">{title}</Text>
       </button>
       {open ? (
         <div className="app-worked-l3-body">
-          {event.args ? (
-            <Text type="secondary" className="app-worked-args">
-              {event.args}
-            </Text>
-          ) : null}
+          {event.args ? <div className="app-worked-args">{event.args}</div> : null}
           {event.status === 'end' && event.result ? (
             <pre className="app-timeline-result">{event.result}</pre>
           ) : null}
@@ -479,7 +464,6 @@ function FileEditDiffBody({ view }: { view: FileEditDiffView }) {
 /** Shell / Edit / MCP / 通用工具：Worked 下的 L2 叶子（可展开看输出） */
 function ToolLeafRow({ title, event, defaultOpen = false }: ToolLeafRowProps) {
   const [open, setOpen] = useState(defaultOpen)
-  const status = toolCallStatusSymbol(event.status, event.result)
   const hasDetail = Boolean(event.args || (event.status === 'end' && event.result))
 
   return (
@@ -491,20 +475,14 @@ function ToolLeafRow({ title, event, defaultOpen = false }: ToolLeafRowProps) {
         onClick={() => setOpen((v) => !v)}
         disabled={!hasDetail}
       >
+        <span className="app-worked-l2-title">{title}</span>
         <RightOutlined
           className={`app-timeline-chevron${open ? ' is-open' : ''}${hasDetail ? '' : ' is-hidden'}`}
         />
-        <span className="app-worked-l2-title">
-          {title} {status}
-        </span>
       </button>
       {open && hasDetail ? (
         <div className="app-worked-l2-body">
-          {event.args ? (
-            <Text type="secondary" className="app-worked-args">
-              {event.args}
-            </Text>
-          ) : null}
+          {event.args ? <div className="app-worked-args">{event.args}</div> : null}
           {event.status === 'end' && event.result ? (
             <pre className="app-timeline-result">{event.result}</pre>
           ) : null}
@@ -527,7 +505,6 @@ type EditToolLeafRowProps = {
  */
 function EditToolLeafRow({ title, event }: EditToolLeafRowProps) {
   const [open, setOpen] = useState(false)
-  const status = toolCallStatusSymbol(event.status, event.result)
   const diffView = useMemo(
     () => resolveFileEditDiff(event.name, event.args, event.result),
     [event.name, event.args, event.result]
@@ -547,12 +524,10 @@ function EditToolLeafRow({ title, event }: EditToolLeafRowProps) {
         onClick={() => setOpen((v) => !v)}
         disabled={!hasDetail}
       >
+        <span className="app-worked-l2-title">{title}</span>
         <RightOutlined
           className={`app-timeline-chevron${open ? ' is-open' : ''}${hasDetail ? '' : ' is-hidden'}`}
         />
-        <span className="app-worked-l2-title">
-          {title} {status}
-        </span>
       </button>
       {open && hasDetail ? (
         <div className="app-worked-l2-body">
@@ -572,13 +547,12 @@ function EditToolLeafRow({ title, event }: EditToolLeafRowProps) {
 function ThoughtRow({ child }: { child: Extract<WorkedChild, { kind: 'thought' }> }) {
   const title = formatThoughtTitle(child)
   const brief = isBriefThought(child)
+  const text = child.text.trim()
 
   return (
     <div className={`app-worked-thought${brief ? ' is-brief' : ''}`}>
       <div className="app-worked-thought-label">{title}</div>
-      {!brief && child.text.trim() ? (
-        <div className="app-worked-thought-text">{child.text.trim()}</div>
-      ) : null}
+      {text ? <div className="app-worked-thought-text">{text}</div> : null}
     </div>
   )
 }
@@ -651,8 +625,8 @@ function WorkedAccordion({ expanded, wallMs, worked, onToggle }: WorkedAccordion
         aria-expanded={expanded}
         onClick={onToggle}
       >
-        <RightOutlined className={`app-timeline-chevron${expanded ? ' is-open' : ''}`} />
         <span className="app-timeline-accordion-title">{title}</span>
+        <RightOutlined className={`app-timeline-chevron${expanded ? ' is-open' : ''}`} />
       </button>
       {expanded ? (
         <div className="app-timeline-wrap app-worked-children">

@@ -196,6 +196,7 @@ export function createAgent(options: CreateAgentOptions): Agent {
     }
 
     const onTextDelta = input.onTextDelta ?? (() => {})
+    const onThinking = input.onThinking ?? (() => {})
     const onTool = input.onTool ?? (() => {})
     const { maxSteps, invokeTimeoutMs, tools: hostTools } = input
 
@@ -232,7 +233,8 @@ export function createAgent(options: CreateAgentOptions): Agent {
       abortController,
       onTextDelta,
       maxSteps,
-      invokeTimeoutMs
+      invokeTimeoutMs,
+      onThinking
     )
 
     const finalMessages = runMessages.length > 0 ? runMessages : inputMessages
