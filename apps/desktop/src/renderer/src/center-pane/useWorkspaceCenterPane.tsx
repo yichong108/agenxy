@@ -353,10 +353,7 @@ export function useWorkspaceCenterPane({
             runId: e.runId,
             traceId: `${sessionId}:${e.runId}`,
             startedAt,
-            durationMs: 0,
-            toolCalls: 0,
-            toolErrors: 0,
-            status: 'running'
+            durationMs: 0
           }
         }))
         streamBuf.current[sessionId] = ''
@@ -435,16 +432,6 @@ export function useWorkspaceCenterPane({
       }
 
       if (isAguiTimelineSourceEvent(event)) {
-        if (event.type === EventType.TOOL_CALL_ARGS) {
-          setRunStats((s) => {
-            const stats = s[sessionId]
-            if (!stats) return s
-            return {
-              ...s,
-              [sessionId]: { ...stats, toolCalls: stats.toolCalls + 1 }
-            }
-          })
-        }
         if (event.type === EventType.RUN_ERROR) {
           const e = event as RunErrorEvent
           const cancelled = e.code === 'CANCELLED'
@@ -467,9 +454,7 @@ export function useWorkspaceCenterPane({
               ...s,
               [sessionId]: {
                 ...cur,
-                durationMs,
-                status: cancelled ? 'done' : 'error',
-                toolErrors: cancelled ? cur.toolErrors : cur.toolErrors + 1
+                durationMs
               }
             }
           })
@@ -492,7 +477,7 @@ export function useWorkspaceCenterPane({
             : undefined
           return {
             ...s,
-            [sessionId]: { ...cur, durationMs, status: 'done' }
+            [sessionId]: { ...cur, durationMs }
           }
         })
         streamBuf.current[sessionId] = ''

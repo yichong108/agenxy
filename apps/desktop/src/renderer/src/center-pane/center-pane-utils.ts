@@ -170,12 +170,10 @@ export function remarkLinkifyBareUrls() {
   }
 }
 
+/** 会话运行时序信息（供 Worked 时间线耗时等使用；不再在顶栏展示调用统计） */
 export type RunStats = {
   runId?: string
   traceId?: string
   startedAt?: number
   durationMs?: number
-  toolCalls: number
-  toolErrors: number
-  status: 'running' | 'done' | 'error'
 }

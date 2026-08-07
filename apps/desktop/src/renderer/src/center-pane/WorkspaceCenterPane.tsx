@@ -60,15 +60,6 @@ export function WorkspaceCenterPane(props: WorkspaceCenterPaneProps) {
                 }
               </Text>
               {p.isRun && <Tag color="processing">执行中</Tag>}
-              {p.currentRunStats && (
-                <Text type="secondary">
-                  本轮: {p.currentRunStats.toolCalls} 次调用 / {p.currentRunStats.toolErrors} 次错误
-                  / {((p.currentRunStats.durationMs ?? 0) / 1000).toFixed(2)}s
-                </Text>
-              )}
-              {p.currentRunStats?.traceId && (
-                <Tag color="default">追踪: {p.currentRunStats.traceId.slice(-12)}</Tag>
-              )}
             </Space>
           ) : null}
         </div>
