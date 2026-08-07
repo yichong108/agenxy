@@ -70,23 +70,14 @@ export function WorkspaceLeftPane({ leftTogglePortalHost }: WorkspaceLeftPanePro
         <div className={`app-sidebar-inner ${p.isSidebarCollapsed ? 'is-collapsed' : ''}`}>
           <div className="app-sidebar-header">
             {!p.isSidebarCollapsed ? (
-              <>
-                <Button
-                  type="text"
-                  icon={<MenuFoldOutlined />}
-                  onClick={p.handleSidebarCollapseToggle}
-                  className="app-settings-btn app-sidebar-collapse-btn"
-                  title="收起侧边栏"
-                  aria-label="收起侧边栏"
-                />
-                <Button
-                  type="text"
-                  icon={<SettingOutlined />}
-                  onClick={p.openSettings}
-                  className="app-settings-btn"
-                  title="设置"
-                />
-              </>
+              <Button
+                type="text"
+                icon={<MenuFoldOutlined />}
+                onClick={p.handleSidebarCollapseToggle}
+                className="app-settings-btn app-sidebar-collapse-btn"
+                title="收起侧边栏"
+                aria-label="收起侧边栏"
+              />
             ) : null}
           </div>
           {!p.isSidebarCollapsed && (
@@ -251,42 +242,54 @@ export function WorkspaceLeftPane({ leftTogglePortalHost }: WorkspaceLeftPanePro
               )}
             </div>
           )}
-          {!p.isSidebarCollapsed && authUser ? (
-            <Dropdown
-              menu={{
-                items: [
-                  {
-                    key: 'logout',
-                    label: '退出登录',
-                    icon: <LogoutOutlined />,
-                    onClick: handleLogout
-                  }
-                ]
-              }}
-              trigger={['click']}
-              placement="topLeft"
-              // 水平偏移与用户行 padding-left 一致，使菜单外边框与头像左缘对齐
-              align={{ offset: [12, 0] }}
-              overlayClassName="app-sidebar-user-dropdown"
-              overlayStyle={{ minWidth: 120 }}
-            >
-              <button
-                type="button"
-                className="app-sidebar-user"
-                aria-label={`当前用户 ${authUser.username}，打开用户菜单`}
-              >
-                <Avatar
-                  size={28}
-                  className="app-sidebar-user-avatar"
-                  icon={!getUserAvatarLabel(authUser.username) ? <UserOutlined /> : undefined}
+          {!p.isSidebarCollapsed ? (
+            <div className="app-sidebar-footer">
+              {authUser ? (
+                <Dropdown
+                  menu={{
+                    items: [
+                      {
+                        key: 'logout',
+                        label: '退出登录',
+                        icon: <LogoutOutlined />,
+                        onClick: handleLogout
+                      }
+                    ]
+                  }}
+                  trigger={['click']}
+                  placement="topLeft"
+                  overlayClassName="app-sidebar-user-dropdown"
+                  overlayStyle={{ minWidth: 120 }}
                 >
-                  {getUserAvatarLabel(authUser.username)}
-                </Avatar>
-                <Text className="app-sidebar-user-name" ellipsis>
-                  {authUser.username}
-                </Text>
-              </button>
-            </Dropdown>
+                  <button
+                    type="button"
+                    className="app-sidebar-user"
+                    aria-label={`当前用户 ${authUser.username}，打开用户菜单`}
+                  >
+                    <Avatar
+                      size={28}
+                      className="app-sidebar-user-avatar"
+                      icon={!getUserAvatarLabel(authUser.username) ? <UserOutlined /> : undefined}
+                    >
+                      {getUserAvatarLabel(authUser.username)}
+                    </Avatar>
+                    <Text className="app-sidebar-user-name" ellipsis>
+                      {authUser.username}
+                    </Text>
+                  </button>
+                </Dropdown>
+              ) : (
+                <div className="app-sidebar-user-spacer" />
+              )}
+              <Button
+                type="text"
+                icon={<SettingOutlined />}
+                onClick={p.openSettings}
+                className="app-settings-btn app-sidebar-footer-settings"
+                title="设置"
+                aria-label="设置"
+              />
+            </div>
           ) : null}
         </div>
       </div>
