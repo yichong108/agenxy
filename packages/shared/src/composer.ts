@@ -23,4 +23,9 @@ export type AgentSendOptions = {
   mode?: AgentComposerMode
   /** 本轮工作区根目录绝对路径；宿主可据此覆盖会话默认路径 */
   workspacePath?: string
+  /**
+   * 重新编辑：按「第几个用户消息」（0-based）截断 AG-UI 历史后，用本次 text 替换该条并重跑。
+   * 未设置时按普通追加发送。
+   */
+  editUserOrdinal?: number
 }

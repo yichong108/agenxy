@@ -397,14 +397,17 @@ export function useWorkspaceCenterPane({
         }
         if (event.type === EventType.RUN_ERROR) {
           const e = event as RunErrorEvent
-          msgApi.error(e.message)
-          setMessages((m) => {
-            const cur = m[sessionId] ?? []
-            return {
-              ...m,
-              [sessionId]: appendAssistantText(cur, `执行失败：${e.message}`)
-            }
-          })
+          const cancelled = e.code === 'CANCELLED'
+          if (!cancelled) {
+            msgApi.error(e.message)
+            setMessages((m) => {
+              const cur = m[sessionId] ?? []
+              return {
+                ...m,
+                [sessionId]: appendAssistantText(cur, `执行失败：${e.message}`)
+              }
+            })
+          }
           setRunning((r) => ({ ...r, [sessionId]: false }))
           setRunStats((s) => {
             const cur = s[sessionId]
@@ -415,8 +418,8 @@ export function useWorkspaceCenterPane({
               [sessionId]: {
                 ...cur,
                 durationMs,
-                status: 'error',
-                toolErrors: cur.toolErrors + 1
+                status: cancelled ? 'done' : 'error',
+                toolErrors: cancelled ? cur.toolErrors : cur.toolErrors + 1
               }
             }
           })
@@ -647,6 +650,100 @@ export function useWorkspaceCenterPane({
     await sendAgentText(t, composerMode)
   }
 
+  /**
+   * 停止当前会话进行中的智能体运行。
+   */
+  const stopRun = useCallback(() => {
+    if (!activeId) return
+    void bridge.cancelAgent(activeId)
+  }, [activeId, bridge])
+
+  /**
+   * 重新编辑用户消息：截断该消息之后的回合，替换正文并重跑。
+   *
+   * @param messageId - 用户消息 id
+   * @param text - 编辑后的文本
+   */
+  const editResendUserMessage = useCallback(
+    async (messageId: string, text: string) => {
+      const t = text.trim()
+      if (!t || !activeId) return
+
+      const activeWorkspace = workspacesWithComposerHomeStub.find(
+        (x) => x.id === composerSelectedWorkspaceId
+      )
+      if (!activeWorkspace?.path) {
+        msgApi.warning('请先为当前工作区绑定路径')
+        return
+      }
+
+      const sessionId = activeId
+      if (running[sessionId]) {
+        await bridge.cancelAgent(sessionId)
+      }
+      if (sendInFlightRef.current.has(sessionId)) {
+        msgApi.warning('当前会话正在发送中，请稍后再试')
+        return
+      }
+
+      const cur = messages[sessionId] ?? []
+      const idx = cur.findIndex((m) => m.id === messageId)
+      if (idx < 0 || cur[idx]?.role !== 'user') {
+        msgApi.warning('找不到要编辑的消息')
+        return
+      }
+
+      let userOrdinal = -1
+      for (let i = 0; i <= idx; i += 1) {
+        if (cur[i]?.role === 'user') userOrdinal += 1
+      }
+      if (userOrdinal < 0) return
+
+      const truncated: ChatMessage[] = [
+        ...cur.slice(0, idx),
+        { ...cur[idx]!, content: t, aguiEvents: undefined }
+      ]
+      sendInFlightRef.current.add(sessionId)
+      hydratedMessageSessions.current.add(sessionId)
+      setMessages((m) => ({ ...m, [sessionId]: truncated }))
+      setLiveAguiEvents((prev) => ({ ...prev, [sessionId]: [] }))
+      setRunning((r) => ({ ...r, [sessionId]: false }))
+      streamBuf.current[sessionId] = ''
+      assistantMsgId.current[sessionId] = null
+
+      try {
+        const r = await bridge.sendAgentMessage(sessionId, t, {
+          mode: composerMode,
+          workspacePath: activeWorkspace.path,
+          editUserOrdinal: userOrdinal
+        })
+        if (!r.ok) {
+          msgApi.error('发送失败: ' + r.error)
+          setMessages((m) => {
+            const list = m[sessionId] ?? []
+            return {
+              ...m,
+              [sessionId]: appendAssistantText(list, `发送失败：${r.error}`, true)
+            }
+          })
+        }
+      } finally {
+        sendInFlightRef.current.delete(sessionId)
+      }
+    },
+    [
+      activeId,
+      appendAssistantText,
+      bridge,
+      composerMode,
+      composerSelectedWorkspaceId,
+      messages,
+      msgApi,
+      running,
+      workspacesWithComposerHomeStub
+    ]
+  )
+
   const currentMessages = useMemo(
     () => (activeId ? (messages[activeId] ?? []) : []),
     [activeId, messages]
@@ -803,12 +900,7 @@ export function useWorkspaceCenterPane({
               </Button>
             )}
             {showStopButton && (
-              <Button
-                danger
-                icon={<StopOutlined />}
-                onClick={() => void bridge.cancelAgent(activeId!)}
-                className="app-stop-btn"
-              >
+              <Button danger icon={<StopOutlined />} onClick={stopRun} className="app-stop-btn">
                 停止
               </Button>
             )}
@@ -835,6 +927,8 @@ export function useWorkspaceCenterPane({
     isEmptyConversation,
     currentMessages,
     isRun,
-    currentTimeline
+    currentTimeline,
+    stopRun,
+    editResendUserMessage
   }
 }

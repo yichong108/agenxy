@@ -25,14 +25,16 @@ import {
   type WorkedChild,
   type WorkedNode
 } from './worked-timeline'
-import { CheckOutlined, CopyOutlined, RightOutlined } from '@ant-design/icons'
-import { App as AntdApp, Card, Typography } from 'antd'
+import { CheckOutlined, CopyOutlined, RightOutlined, StopOutlined } from '@ant-design/icons'
+import { App as AntdApp, Button, Card, Dropdown, Input, Typography, type MenuProps } from 'antd'
+import type { InputRef } from 'antd/es/input'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
 import remarkGfm from 'remark-gfm'
 
 import type { ChatMessage, ToolCallEvent, ToolTimelineEvent } from '@/shared/ipc'
+import { getComposerTextarea } from '@/renderer/src/center-pane/composer-slash-skills'
 
 const { Text } = Typography
 
@@ -133,6 +135,8 @@ export type MessageTurnItemProps = {
   turn: MessageTurn
   /** 当前会话最新 assistant 消息 id，用于时间线与流式态判定 */
   latestAssistantMessageId: string | null
+  /** 当前会话最新用户消息 id，用于在运行中展示停止按钮 */
+  latestUserMessageId: string | null
   /** 当前会话是否正在执行 */
   isRun: boolean
   /** 当前会话的工具时间线 */
@@ -145,18 +149,30 @@ export type MessageTurnItemProps = {
   timelineWallMs: number
   /** Markdown 区域点击外链时的确认处理 */
   onMarkdownClick: (event: React.MouseEvent<HTMLDivElement>) => void
+  /** 停止当前会话进行中的智能体运行 */
+  onStopRun: () => void
+  /**
+   * 重新编辑用户消息并从此处重发（截断后续回合）。
+   *
+   * @param messageId - 用户消息 id
+   * @param text - 编辑后的文本
+   */
+  onEditResend: (messageId: string, text: string) => void | Promise<void>
 }
 
 /** 单条消息卡片渲染所需的会话级上下文 */
 type MessageCardContext = Pick<
   MessageTurnItemProps,
   | 'latestAssistantMessageId'
+  | 'latestUserMessageId'
   | 'isRun'
   | 'currentTimeline'
   | 'timelineOpenOverride'
   | 'setTimelineOpenOverride'
   | 'timelineWallMs'
   | 'onMarkdownClick'
+  | 'onStopRun'
+  | 'onEditResend'
 >
 
 /** 单条消息的派生展示状态，将分支判断集中在 JSX 之外 */
@@ -679,21 +695,207 @@ function AssistantMessageBody({ msg, view, ctx }: AssistantMessageBodyProps) {
   )
 }
 
+type UserMessageCardProps = {
+  msg: ChatMessage
+  ctx: MessageCardContext
+}
+
+/**
+ * 用户消息卡片：默认只展示正文；左键点击进入就地编辑；右键菜单可复制提示词；运行中可停止。
+ *
+ * @param props.msg - 用户消息
+ * @param props.ctx - 会话级操作与展示上下文
+ */
+function UserMessageCard({ msg, ctx }: UserMessageCardProps) {
+  const { message: msgApi } = AntdApp.useApp()
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(msg.content)
+  const [submitting, setSubmitting] = useState(false)
+  const editInputRef = useRef<InputRef>(null)
+  const isLatestUser = msg.id === ctx.latestUserMessageId
+  const showStop = Boolean(ctx.isRun && isLatestUser)
+  const canEdit = !ctx.isRun
+
+  useEffect(() => {
+    if (!editing) setDraft(msg.content)
+  }, [editing, msg.content])
+
+  useEffect(() => {
+    if (ctx.isRun && editing) setEditing(false)
+  }, [ctx.isRun, editing])
+
+  useEffect(() => {
+    if (!editing) return
+    const id = window.requestAnimationFrame(() => {
+      const input = editInputRef.current
+      input?.focus({ preventScroll: true })
+      const textarea = getComposerTextarea(input)
+      if (!textarea) return
+      const end = textarea.value.length
+      textarea.setSelectionRange(end, end)
+    })
+    return () => window.cancelAnimationFrame(id)
+  }, [editing])
+
+  const beginEdit = useCallback(() => {
+    if (!canEdit || submitting) return
+    setDraft(msg.content)
+    setEditing(true)
+  }, [canEdit, msg.content, submitting])
+
+  const cancelEdit = useCallback(() => {
+    setDraft(msg.content)
+    setEditing(false)
+  }, [msg.content])
+
+  const submitEdit = useCallback(async () => {
+    const next = draft.trim()
+    if (!next || submitting) return
+    setSubmitting(true)
+    try {
+      await ctx.onEditResend(msg.id, next)
+      setEditing(false)
+    } finally {
+      setSubmitting(false)
+    }
+  }, [ctx, draft, msg.id, submitting])
+
+  /**
+   * 复制当前用户消息正文（提示词）到剪贴板。
+   */
+  const copyPrompt = useCallback(async () => {
+    const value = msg.content.trim()
+    if (!value) {
+      msgApi.warning('没有可复制的内容')
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(value)
+    } catch {
+      msgApi.error('复制失败，请手动选择文本复制')
+    }
+  }, [msg.content, msgApi])
+
+  const contextMenuItems = useMemo<MenuProps['items']>(
+    () => [
+      {
+        key: 'copy-prompt',
+        label: '复制提示词',
+        onClick: ({ domEvent }) => {
+          domEvent.preventDefault()
+          domEvent.stopPropagation()
+          void copyPrompt()
+        }
+      }
+    ],
+    [copyPrompt]
+  )
+
+  if (editing) {
+    return (
+      <Card
+        size="small"
+        variant="outlined"
+        className="app-message-card is-user is-sticky-prompt is-editing"
+      >
+        <Input.TextArea
+          ref={editInputRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          autoSize={{ minRows: 1, maxRows: 16 }}
+          variant="borderless"
+          className="app-message-user-edit-input"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              cancelEdit()
+              return
+            }
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              void submitEdit()
+            }
+          }}
+        />
+        <div className="app-message-user-actions is-editing">
+          <Button size="small" onClick={cancelEdit} disabled={submitting}>
+            取消
+          </Button>
+          <Button
+            size="small"
+            type="primary"
+            onClick={() => void submitEdit()}
+            disabled={!draft.trim() || submitting}
+            loading={submitting}
+          >
+            发送
+          </Button>
+        </div>
+      </Card>
+    )
+  }
+
+  return (
+    <Dropdown menu={{ items: contextMenuItems }} trigger={['contextMenu']}>
+      <Card
+        size="small"
+        variant="outlined"
+        className={`app-message-card is-user is-sticky-prompt${canEdit ? ' is-editable' : ''}`}
+        onClick={(e) => {
+          // 仅左键进入编辑；右键由上下文菜单处理，不进入编辑模式
+          if (e.button !== 0) return
+          if (!canEdit) return
+          beginEdit()
+        }}
+        onContextMenu={(e) => {
+          // 阻止右键冒泡到可能触发编辑的逻辑；菜单由 Dropdown 打开
+          e.stopPropagation()
+        }}
+        role={canEdit ? 'button' : undefined}
+        tabIndex={canEdit ? 0 : undefined}
+        onKeyDown={
+          canEdit
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  beginEdit()
+                }
+              }
+            : undefined
+        }
+      >
+        <div className="app-message-content">{msg.content}</div>
+        {showStop ? (
+          <div className="app-message-user-actions">
+            <button
+              type="button"
+              className="app-message-user-action-btn is-stop"
+              onClick={(e) => {
+                e.stopPropagation()
+                ctx.onStopRun()
+              }}
+              aria-label="停止"
+              title="停止"
+            >
+              <StopOutlined />
+              <span>停止</span>
+            </button>
+          </div>
+        ) : null}
+      </Card>
+    </Dropdown>
+  )
+}
+
 type MessageCardProps = {
   msg: ChatMessage
   ctx: MessageCardContext
 }
 
-/** 单条消息卡片：用户消息直接展示文本，assistant 走专用正文组件 */
+/** 单条消息卡片：用户消息支持停止/编辑，assistant 走专用正文组件 */
 function MessageCard({ msg, ctx }: MessageCardProps) {
-  const isUser = msg.role === 'user'
-
-  if (isUser) {
-    return (
-      <Card size="small" variant="outlined" className="app-message-card is-user is-sticky-prompt">
-        <div className="app-message-content">{msg.content}</div>
-      </Card>
-    )
+  if (msg.role === 'user') {
+    return <UserMessageCard msg={msg} ctx={ctx} />
   }
 
   const view = buildMessageCardView(msg, ctx)

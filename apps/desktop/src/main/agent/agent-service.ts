@@ -316,13 +316,19 @@ export function clearSessionState(sessionId: string): void {
 /**
  * 取消当前会话进行中的 run。
  *
+ * 立即清空 controller / subscription，便于随后重新发送（例如重新编辑）。
+ * 旧 run 的 finally 通过 AbortController 身份校验，不会误清新一轮运行。
+ *
  * @param sessionId - 会话 ID
  */
 export function cancelRun(sessionId: string): void {
   const s = sessions.get(sessionId)
   if (s?.controller) {
     s.controller.abort()
+    s.controller = null
   }
+  s?.subscription?.unsubscribe()
+  if (s) s.subscription = null
   s?.agent.abortRun()
   void killCommand(`term:${sessionId}`)
 }
@@ -394,15 +400,35 @@ function createAguiTimelineEventCollector(): {
 }
 
 /**
+ * 截断 AG-UI 消息列表：去掉从第 `userOrdinal` 条用户消息起的全部历史。
+ *
+ * @param messages - 当前 AG-UI 消息
+ * @param userOrdinal - 用户消息序号（0-based）
+ * @returns 截断后的消息列表（不含该用户消息及其后内容）
+ */
+function truncateMessagesBeforeUserOrdinal(messages: Message[], userOrdinal: number): Message[] {
+  if (userOrdinal < 0) return messages
+  let seen = 0
+  for (let i = 0; i < messages.length; i += 1) {
+    if (messages[i]?.role !== 'user') continue
+    if (seen === userOrdinal) return messages.slice(0, i)
+    seen += 1
+  }
+  return messages
+}
+
+/**
  * 运行用户消息（经 AG-UI runAgent：OpenWorkerAgent 或 CursorAgent）。
  *
  * 同会话同时只允许一次 run：已有运行中的智能体时直接拒绝。
  * 不同会话各自独立，可并行执行。
  * Desktop 仅组装 AG-UI Message 与 RunAgentInput。
  *
+ * 若 `options.editUserOrdinal` 已设置，则先按用户消息序号截断历史，再以本次文本替换该条并重跑。
+ *
  * @param sessionId - 会话 ID
  * @param userText - 用户输入文本
- * @param options - 发送选项（模式、工作区路径等）
+ * @param options - 发送选项（模式、工作区路径、重新编辑序号等）
  */
 export async function runUserMessage(
   sessionId: string,
@@ -456,6 +482,16 @@ export async function runUserMessage(
     return
   }
 
+  const editUserOrdinal = options?.editUserOrdinal
+  if (typeof editUserOrdinal === 'number' && Number.isFinite(editUserOrdinal)) {
+    session.agent.messages = truncateMessagesBeforeUserOrdinal(
+      session.agent.messages,
+      Math.floor(editUserOrdinal)
+    )
+    // 先落盘截断后的前缀，避免取消/失败后 UI 与磁盘仍保留旧尾部
+    persistSessionMessages(session.workspaceId, sessionId, session.agent.messages)
+  }
+
   const ac = new AbortController()
   // 在任意 await 之前占住会话，避免同会话并发进入
   session.controller = ac
@@ -506,12 +542,24 @@ export async function runUserMessage(
 
     const latest = sessions.get(sessionId)
     if (!latest) return
+    // 取消后若已启动新一轮（重新编辑），勿用本轮结果覆盖截断后的历史
+    if (ac.signal.aborted && latest.controller !== null && latest.controller !== ac) return
 
     const aguiEvents = aguiCollector.getEvents()
     persistSessionMessages(latest.workspaceId, sessionId, latest.agent.messages, {
       aguiEventsForLastAssistant: aguiEvents.length > 0 ? aguiEvents : undefined
     })
   } catch (e) {
+    const latest = sessions.get(sessionId)
+    if (ac.signal.aborted) {
+      // CANCELLED 已由 agent 事件流发出；若已有新一轮则跳过落盘
+      if (!latest || (latest.controller !== null && latest.controller !== ac)) return
+      const aguiEvents = aguiCollector.getEvents()
+      persistSessionMessages(latest.workspaceId, sessionId, latest.agent.messages, {
+        aguiEventsForLastAssistant: aguiEvents.length > 0 ? aguiEvents : undefined
+      })
+      return
+    }
     const message = e instanceof Error ? e.message : String(e)
     const err: RunErrorEvent = {
       type: EventType.RUN_ERROR,
@@ -522,7 +570,6 @@ export async function runUserMessage(
     emit({ sessionId, event: err })
     aguiCollector.onEvent(err)
 
-    const latest = sessions.get(sessionId)
     if (latest) {
       const aguiEvents = aguiCollector.getEvents()
       persistSessionMessages(latest.workspaceId, sessionId, latest.agent.messages, {
@@ -531,7 +578,8 @@ export async function runUserMessage(
     }
   } finally {
     const latest = sessions.get(sessionId)
-    if (latest) {
+    // 仅清理本轮 AbortController，避免取消后立刻重发时误清新一轮
+    if (latest && latest.controller === ac) {
       latest.subscription?.unsubscribe()
       latest.controller = null
       latest.subscription = null

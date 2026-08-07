@@ -18,6 +18,15 @@ export type WorkspaceMessagesInnerProps = {
   isRun: boolean
   /** 当前会话的运行统计，用于时间线耗时展示 */
   currentRunStats: RunStats | undefined
+  /** 停止当前会话进行中的智能体运行 */
+  onStopRun: () => void
+  /**
+   * 重新编辑用户消息并从此处重发（截断后续回合）。
+   *
+   * @param messageId - 用户消息 id
+   * @param text - 编辑后的文本
+   */
+  onEditResend: (messageId: string, text: string) => void | Promise<void>
 }
 
 /**
@@ -51,6 +60,14 @@ function useWorkspaceMessagesInner({
     for (let i = currentMessages.length - 1; i >= 0; i -= 1) {
       const msg = currentMessages[i]
       if (msg?.role === 'assistant') return msg.id
+    }
+    return null
+  }, [currentMessages])
+
+  const latestUserMessageId = useMemo(() => {
+    for (let i = currentMessages.length - 1; i >= 0; i -= 1) {
+      const msg = currentMessages[i]
+      if (msg?.role === 'user') return msg.id
     }
     return null
   }, [currentMessages])
@@ -155,6 +172,7 @@ function useWorkspaceMessagesInner({
   return {
     messageTurns,
     latestAssistantMessageId,
+    latestUserMessageId,
     timelineOpenOverride,
     setTimelineOpenOverride,
     timelineWallMs,
@@ -201,12 +219,15 @@ export function WorkspaceMessagesInner(props: WorkspaceMessagesInnerProps) {
               key={turn.key}
               turn={turn}
               latestAssistantMessageId={m.latestAssistantMessageId}
+              latestUserMessageId={m.latestUserMessageId}
               isRun={m.isRun}
               currentTimeline={m.currentTimeline}
               timelineOpenOverride={m.timelineOpenOverride}
               setTimelineOpenOverride={m.setTimelineOpenOverride}
               timelineWallMs={m.timelineWallMs}
               onMarkdownClick={m.onMarkdownClick}
+              onStopRun={props.onStopRun}
+              onEditResend={props.onEditResend}
             />
           ))}
           <div ref={m.messagesBottomRef} />

@@ -334,6 +334,100 @@
   line-height: 1.75;
 }
 
+.app-message-card.is-user.is-editable {
+  cursor: text;
+}
+
+.app-message-card.is-user.is-editable:hover {
+  border-color: var(--aw-color-border-secondary, var(--aw-color-border));
+}
+
+.app-message-user-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.app-message-user-actions.is-editing {
+  margin-top: 8px;
+  gap: 8px;
+}
+
+.app-message-user-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 2px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--aw-color-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
+}
+
+.app-message-user-action-btn:hover {
+  color: var(--aw-color-text);
+  background: rgb(24 24 27 / 0.04);
+}
+
+.app-message-user-action-btn.is-stop {
+  color: var(--aw-color-error, #cf1322);
+}
+
+.app-message-user-action-btn.is-stop:hover {
+  color: var(--aw-color-error, #a8071a);
+  background: rgb(207 19 34 / 0.06);
+}
+
+.app-message-card.is-user.is-editing,
+.app-message-card.is-user.is-editing .ant-card-body,
+.app-message-card.is-user.is-editing .ant-input,
+.app-message-card.is-user.is-editing .ant-input-affix-wrapper,
+.app-message-card.is-user.is-editing textarea {
+  transition: none !important;
+  animation: none !important;
+}
+
+.app-message-card.is-user.is-editing .ant-card-body {
+  padding: 10px 12px;
+}
+
+.app-message-user-edit-input.ant-input,
+textarea.app-message-user-edit-input.ant-input {
+  padding: 0;
+  border: none !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  font-size: var(--aw-font-lg);
+  line-height: 1.75;
+  resize: none;
+  transition: none !important;
+  animation: none !important;
+}
+
+.app-message-user-edit-input.ant-input:hover,
+.app-message-user-edit-input.ant-input:focus,
+textarea.app-message-user-edit-input.ant-input:hover,
+textarea.app-message-user-edit-input.ant-input:focus {
+  border: none !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  transition: none !important;
+  animation: none !important;
+}
+
 .app-message-markdown-wrap {
   min-width: 0;
 }

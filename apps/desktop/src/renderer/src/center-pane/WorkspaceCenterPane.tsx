@@ -112,6 +112,8 @@ export function WorkspaceCenterPane(props: WorkspaceCenterPaneProps) {
               currentTimeline={p.currentTimeline}
               isRun={Boolean(p.isRun)}
               currentRunStats={p.currentRunStats}
+              onStopRun={p.stopRun}
+              onEditResend={p.editResendUserMessage}
             />
             <div className="app-composer-stack">{p.composerInput}</div>
           </>
