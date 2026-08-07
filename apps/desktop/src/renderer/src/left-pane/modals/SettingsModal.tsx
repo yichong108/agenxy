@@ -1,4 +1,4 @@
-import { App as AntdApp, Form, Input, Modal, Radio, Typography } from 'antd'
+import { Form, Input, Modal, Radio, Typography } from 'antd'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import {
@@ -29,7 +29,6 @@ export type SettingsModalProps = {
 }
 
 export function SettingsModal({ open, onClose }: SettingsModalProps) {
-  const { message: msgApi } = AntdApp.useApp()
   const bridge = window.bridge
 
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
@@ -72,8 +71,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     profilesDraftRef.current = cloneProviderProfiles(saved.providerProfiles)
     setSettings(saved)
     onClose()
-    msgApi.success('已保存到 API 服务')
-  }, [bridge, form, msgApi, onClose, settings])
+  }, [bridge, form, onClose, settings])
 
   const isCursor = agentType === 'cursor'
 

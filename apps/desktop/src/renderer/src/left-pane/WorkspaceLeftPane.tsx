@@ -11,7 +11,7 @@ import {
   SettingOutlined,
   UserOutlined
 } from '@ant-design/icons'
-import { App as AntdApp, Avatar, Button, Dropdown, Input, Modal, Typography } from 'antd'
+import { Avatar, Button, Dropdown, Input, Modal, Typography } from 'antd'
 import type { DragEvent } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -38,13 +38,11 @@ export type WorkspaceLeftPaneProps = {
 
 export function WorkspaceLeftPane({ leftTogglePortalHost }: WorkspaceLeftPaneProps) {
   const p = useWorkspaceLeftPane()
-  const { message: msgApi } = AntdApp.useApp()
   const authUser = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
 
   const handleLogout = () => {
     logout()
-    msgApi.success('已退出登录')
   }
 
   const leftToggleInTopbar = (

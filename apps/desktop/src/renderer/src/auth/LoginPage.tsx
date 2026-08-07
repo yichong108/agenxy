@@ -1,6 +1,6 @@
 import '@/renderer/src/auth/LoginPage.scss'
 import { LockOutlined, UserOutlined } from '@ant-design/icons'
-import { Alert, App as AntdApp, Button, Form, Input, Typography } from 'antd'
+import { Alert, Button, Form, Input, Typography } from 'antd'
 import { useState } from 'react'
 
 import openworkerLogoUrl from '@/renderer/src/assets/openworker-logo.png'
@@ -19,7 +19,6 @@ type LoginFormValues = {
  * 账号密码表单；提交后由 auth-store 直连后端 API，成功后进入主工作区。
  */
 export function LoginPage() {
-  const { message: msgApi } = AntdApp.useApp()
   const login = useAuthStore((s) => s.login)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -29,7 +28,6 @@ export function LoginPage() {
     setSubmitting(true)
     try {
       await login(values.username.trim(), values.password)
-      msgApi.success('登录成功')
     } catch (error) {
       const text = error instanceof Error ? error.message : '登录失败'
       setFormError(text)

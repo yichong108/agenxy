@@ -172,11 +172,8 @@ export function useWorkspaceLeftPane() {
   }, [addExpandedWorkspaceId, composerSelectedWorkspaceId])
 
   const pickWorkspace = useCallback(async () => {
-    const r = await bridge.selectWorkspace()
-    if (r.path) {
-      msgApi.success('已选择工作区')
-    }
-  }, [bridge, msgApi])
+    await bridge.selectWorkspace()
+  }, [bridge])
 
   const openSettings = useCallback(() => {
     setSettingsOpen(true)
@@ -362,9 +359,7 @@ export function useWorkspaceLeftPane() {
         cancelText: '取消',
         onOk: async () => {
           const { ok } = await bridge.removeWorkspace(workspace.id)
-          if (ok) {
-            msgApi.success('已从侧边栏移除')
-          } else {
+          if (!ok) {
             msgApi.error('移除失败')
           }
         }
@@ -390,9 +385,8 @@ export function useWorkspaceLeftPane() {
         setInputDraft('')
         useUiStore.getState().requestComposerFocus()
       }
-      msgApi.success('已归档')
     },
-    [msgApi, setActiveSessionId, setInputDraft]
+    [setActiveSessionId, setInputDraft]
   )
 
   const handleWorkspaceDragStart = useCallback(
@@ -472,7 +466,6 @@ export function useWorkspaceLeftPane() {
       const v = renameName.trim()
       if (renameId && v) {
         void bridge.renameSession(renameId, v).then(() => {
-          msgApi.success('已重命名')
           setRenameId(null)
         })
       }

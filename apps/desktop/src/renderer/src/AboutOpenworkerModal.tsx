@@ -19,7 +19,6 @@ export function AboutOpenworkerModal({ open, info, onClose }: AboutOpenworkerMod
     const text = formatAboutAppCopyText(info)
     try {
       await navigator.clipboard.writeText(text)
-      msgApi.success('已复制版本信息')
     } catch {
       msgApi.error('复制失败，请手动选择文本复制')
     }

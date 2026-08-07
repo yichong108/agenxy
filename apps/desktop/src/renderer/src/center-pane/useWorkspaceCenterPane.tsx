@@ -537,11 +537,8 @@ export function useWorkspaceCenterPane({
   }, [activeId, ensureSessionMessages, preloadOk])
 
   const pickWorkspace = useCallback(async () => {
-    const r = await bridge.selectWorkspace()
-    if (r.path) {
-      msgApi.success('已选择工作区')
-    }
-  }, [bridge, msgApi])
+    await bridge.selectWorkspace()
+  }, [bridge])
 
   const switchComposerWorkspace = useCallback(
     async (workspaceId: string) => {
