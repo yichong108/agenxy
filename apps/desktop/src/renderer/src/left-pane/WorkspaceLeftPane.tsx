@@ -8,15 +8,28 @@ import {
   MenuUnfoldOutlined,
   PlusOutlined,
   RightOutlined,
-  SettingOutlined
+  SettingOutlined,
+  UserOutlined
 } from '@ant-design/icons'
-import { App as AntdApp, Button, Dropdown, Input, Modal, Space, Typography } from 'antd'
+import { App as AntdApp, Avatar, Button, Dropdown, Input, Modal, Typography } from 'antd'
 import type { DragEvent } from 'react'
 import { createPortal } from 'react-dom'
 
 import { useAuthStore } from '@/renderer/src/store/auth-store'
 
 const { Text } = Typography
+
+/**
+ * 由用户名生成头像展示用首字（无用户名时回退空串）
+ *
+ * @param username - 登录用户名
+ * @returns 用于 Avatar 的单个字符
+ */
+function getUserAvatarLabel(username: string | undefined): string {
+  const trimmed = username?.trim() ?? ''
+  if (!trimmed) return ''
+  return trimmed.charAt(0).toUpperCase()
+}
 
 export type WorkspaceLeftPaneProps = {
   /** 顶栏左侧挂载点：侧栏收起时仅将「展开」按钮 portal 到此，展开时按钮在侧栏内 */
@@ -66,23 +79,13 @@ export function WorkspaceLeftPane({ leftTogglePortalHost }: WorkspaceLeftPanePro
                   title="收起侧边栏"
                   aria-label="收起侧边栏"
                 />
-                <Space size={2}>
-                  <Button
-                    type="text"
-                    icon={<SettingOutlined />}
-                    onClick={p.openSettings}
-                    className="app-settings-btn"
-                    title="设置"
-                  />
-                  <Button
-                    type="text"
-                    icon={<LogoutOutlined />}
-                    onClick={handleLogout}
-                    className="app-settings-btn"
-                    title={authUser ? `退出登录（${authUser.username}）` : '退出登录'}
-                    aria-label="退出登录"
-                  />
-                </Space>
+                <Button
+                  type="text"
+                  icon={<SettingOutlined />}
+                  onClick={p.openSettings}
+                  className="app-settings-btn"
+                  title="设置"
+                />
               </>
             ) : null}
           </div>
@@ -248,6 +251,43 @@ export function WorkspaceLeftPane({ leftTogglePortalHost }: WorkspaceLeftPanePro
               )}
             </div>
           )}
+          {!p.isSidebarCollapsed && authUser ? (
+            <Dropdown
+              menu={{
+                items: [
+                  {
+                    key: 'logout',
+                    label: '退出登录',
+                    icon: <LogoutOutlined />,
+                    onClick: handleLogout
+                  }
+                ]
+              }}
+              trigger={['click']}
+              placement="topLeft"
+              // 水平偏移与用户行 padding-left 一致，使菜单外边框与头像左缘对齐
+              align={{ offset: [12, 0] }}
+              overlayClassName="app-sidebar-user-dropdown"
+              overlayStyle={{ minWidth: 120 }}
+            >
+              <button
+                type="button"
+                className="app-sidebar-user"
+                aria-label={`当前用户 ${authUser.username}，打开用户菜单`}
+              >
+                <Avatar
+                  size={28}
+                  className="app-sidebar-user-avatar"
+                  icon={!getUserAvatarLabel(authUser.username) ? <UserOutlined /> : undefined}
+                >
+                  {getUserAvatarLabel(authUser.username)}
+                </Avatar>
+                <Text className="app-sidebar-user-name" ellipsis>
+                  {authUser.username}
+                </Text>
+              </button>
+            </Dropdown>
+          ) : null}
         </div>
       </div>
       <div

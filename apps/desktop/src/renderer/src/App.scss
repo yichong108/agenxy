@@ -352,6 +352,57 @@ html[data-aw-wco-suppressed='1'] .app-win-titlebar {
   align-items: center;
 }
 
+.app-sidebar-user {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  border: 0;
+  border-top: 1px solid var(--aw-color-border-secondary);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.16s ease;
+}
+
+.app-sidebar-user:hover {
+  background: var(--aw-color-fill-secondary);
+}
+
+.app-sidebar-user-avatar {
+  flex-shrink: 0;
+  background: var(--aw-color-fill-tertiary) !important;
+  color: var(--aw-color-text) !important;
+  font-size: var(--aw-font-xs) !important;
+  font-weight: var(--aw-font-weight-medium);
+}
+
+.app-sidebar-user-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--aw-color-text);
+  font-size: var(--aw-font-xs);
+  font-weight: var(--aw-font-weight-medium);
+  line-height: var(--aw-line-snug);
+}
+
+.app-sidebar-user-dropdown {
+  min-width: 120px !important;
+}
+
+.app-sidebar-user-dropdown .ant-dropdown-menu {
+  min-width: 120px;
+  padding: 4px;
+}
+
+.app-sidebar-user-dropdown .ant-dropdown-menu-item {
+  padding-inline: 10px;
+  font-size: var(--aw-font-xs);
+}
+
 .app-sidebar-collapse-btn {
   width: 26px !important;
   height: 26px !important;
