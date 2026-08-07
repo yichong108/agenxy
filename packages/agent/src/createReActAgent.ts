@@ -134,8 +134,16 @@ export type AgentRunInput = {
    * 与工作区内置工具合并；同名时覆盖工作区工具。
    */
   tools?: ToolSet
-  /** 流式文本增量回调；可选。仅最终回答（无工具的收尾步）会触发 */
+  /**
+   * 流式文本增量回调；可选。
+   * 每步生成时都会增量触发；若本步最终伴有 tool calls，随后会调用 `onTextRevoke` 撤回。
+   */
   onTextDelta?: (text: string) => void
+  /**
+   * 撤回本步已通过 `onTextDelta` 流出的 Result 文本；可选。
+   * 在工具步转入 `onThinking` 之前调用，避免过程叙述留在最终回答区。
+   */
+  onTextRevoke?: () => void
   /**
    * 过程思考回调；可选。
    * ReAct 中间步（本步伴随 tool calls）的叙述文本走此通道，供宿主映射为 Worked → Thought。
@@ -245,6 +253,7 @@ export function createReActAgent(options: CreateReActAgentOptions): ReActAgent {
     }
 
     const onTextDelta = input.onTextDelta ?? (() => {})
+    const onTextRevoke = input.onTextRevoke ?? (() => {})
     const onThinking = input.onThinking ?? (() => {})
     const onTool = input.onTool ?? (() => {})
     const onEmit = input.onEmit ?? (() => {})
@@ -287,7 +296,8 @@ export function createReActAgent(options: CreateReActAgentOptions): ReActAgent {
       onTextDelta,
       maxSteps,
       invokeTimeoutMs,
-      onThinking
+      onThinking,
+      onTextRevoke
     )
 
     const finalMessages = runMessages.length > 0 ? runMessages : inputMessages

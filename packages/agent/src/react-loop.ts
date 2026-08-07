@@ -120,19 +120,20 @@ function buildAssistantMessage(text: string, toolCalls: ToolCallPart[]): CoreAss
  *
  * 入参与返回均为 AI SDK `CoreMessage` / `ToolSet`，可直接对接 streamText。
  *
- * 每步文本在步结束时分流：
- * - 本步有 tool calls → `onThinking`（过程叙述，进入 Worked → Thought）
- * - 本步无 tool calls → `onToken`（最终回答，进入 Result）
+ * 每步文本先经 `onToken` 增量流出（打字机效果）；步结束时再分流：
+ * - 本步有 tool calls → `onTextRevoke`（撤回已流出的 Result）+ `onThinking`（进入 Worked → Thought）
+ * - 本步无 tool calls → 保留已流出的 delta 作为最终 Result（不再整段重发）
  *
  * @param model - 已解析的 AI SDK LanguageModel
  * @param systemPrompt - system 提示
  * @param messages - 初始会话消息（AI SDK CoreMessage）
  * @param tools - 可用工具（AI SDK ToolSet）
  * @param ac - 取消控制器
- * @param onToken - 最终回答文本回调（仅无工具的收尾步）
+ * @param onToken - 文本增量回调（流式；收尾步保留，工具步随后 revoke）
  * @param maxSteps - 最大工具调用轮次；缺省时使用 MAX_AGENT_LOOP_STEPS
  * @param timeoutMs - 循环超时（毫秒）；缺省时使用 defaultSettings.agentRunTimeoutMs
  * @param onThinking - 过程思考回调（有工具的中间步文本）
+ * @param onTextRevoke - 撤回本步已通过 onToken 流出的 Result 文本（工具步在 onThinking 前调用）
  * @returns 运行结束后的 CoreMessage 列表（含输入消息与本轮新增）
  */
 export async function runReactLoop(
@@ -144,7 +145,8 @@ export async function runReactLoop(
   onToken: (token: string) => void,
   maxSteps?: number,
   timeoutMs?: number,
-  onThinking?: (text: string, durationMs?: number) => void
+  onThinking?: (text: string, durationMs?: number) => void,
+  onTextRevoke?: () => void
 ): Promise<CoreMessage[]> {
   const resolvedMaxSteps = maxSteps ?? MAX_AGENT_LOOP_STEPS
   const resolvedTimeoutMs = timeoutMs ?? defaultSettings.agentRunTimeoutMs
@@ -173,11 +175,16 @@ export async function runReactLoop(
       abortSignal: ac.signal
     })
 
-    // 先缓冲本步全文，步结束后再按是否有工具分流，避免过程叙述混入最终 Result
+    // 增量流出以保留打字机效果；若本步最终伴有 tool calls，再 revoke + 转入 Thought
     let stepText = ''
+    let streamedLen = 0
     for await (const chunk of result.fullStream) {
       if (chunk.type === 'text-delta') {
-        if (chunk.textDelta) stepText += chunk.textDelta
+        if (chunk.textDelta) {
+          stepText += chunk.textDelta
+          onToken(chunk.textDelta)
+          streamedLen += chunk.textDelta.length
+        }
       }
     }
 
@@ -185,12 +192,12 @@ export async function runReactLoop(
     const toolCalls = await result.toolCalls
     const stepDurationMs = Date.now() - stepStartedAt
 
-    if (text.trim()) {
-      if (toolCalls.length > 0) {
-        onThinking?.(text, stepDurationMs)
-      } else {
-        onToken(text)
-      }
+    if (toolCalls.length > 0) {
+      if (streamedLen > 0) onTextRevoke?.()
+      if (text.trim()) onThinking?.(text, stepDurationMs)
+    } else if (streamedLen === 0 && text.trim()) {
+      // 无 delta 仅整段 text 的兜底（部分 provider / 模拟实现）
+      onToken(text)
     }
 
     // ToolExecutionOptions.messages：不含 system，也不含本轮带 tool-call 的 assistant

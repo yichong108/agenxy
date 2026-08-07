@@ -20,6 +20,18 @@ import type { ToolTimelineEvent } from '@/shared/ipc'
 export const CURSOR_THINKING_CUSTOM_NAME = 'cursor.thinking'
 
 /**
+ * 运行中 Result 打字机预览增量（尚未写入 AG-UI TEXT_MESSAGE）。
+ * 仅影响 UI 展示缓冲，不进入 Worked 时间线。
+ */
+export const TEXT_DELTA_CUSTOM_NAME = 'openworker.text.delta'
+
+/**
+ * 撤回本步已流式预览的 Result 文本（工具步在转入 Thought 前发出）。
+ * 仅影响 UI / 宿主侧展示缓冲，不进入 Worked 时间线。
+ */
+export const TEXT_REVOKE_CUSTOM_NAME = 'openworker.text.revoke'
+
+/**
  * 判断事件是否属于时间线快照（应落盘 / 参与 UI 派生）。
  *
  * 含 TOOL_CALL_*、RUN_ERROR，以及 `CUSTOM(cursor.thinking)`。

@@ -5,10 +5,16 @@ import {
   randomId,
   type RunStats
 } from './center-pane-utils'
-import { aguiEventsToToolTimeline, isAguiTimelineSourceEvent } from './agui-timeline'
+import {
+  aguiEventsToToolTimeline,
+  isAguiTimelineSourceEvent,
+  TEXT_DELTA_CUSTOM_NAME,
+  TEXT_REVOKE_CUSTOM_NAME
+} from './agui-timeline'
 import {
   EventType,
   type BaseEvent,
+  type CustomEvent,
   type RunErrorEvent,
   type RunFinishedEvent,
   type RunStartedEvent,
@@ -367,9 +373,53 @@ export function useWorkspaceCenterPane({
         return
       }
 
+      // 运行中打字机预览（CUSTOM）；确认后的 TEXT_MESSAGE_CONTENT 再对齐一次终稿
+      if (event.type === EventType.CUSTOM) {
+        const custom = event as CustomEvent
+        if (custom.name === TEXT_DELTA_CUSTOM_NAME) {
+          const delta =
+            custom.value &&
+            typeof custom.value === 'object' &&
+            typeof (custom.value as { delta?: unknown }).delta === 'string'
+              ? (custom.value as { delta: string }).delta
+              : ''
+          if (!delta) return
+          streamBuf.current[sessionId] = (streamBuf.current[sessionId] ?? '') + delta
+          const buf = streamBuf.current[sessionId]!
+          const amId = assistantMsgId.current[sessionId]
+          if (!amId) return
+          setMessages((m) => {
+            const cur = [...(m[sessionId] ?? [])]
+            const idx = cur.findIndex((c) => c.id === amId)
+            if (idx < 0) return m
+            cur[idx] = { ...cur[idx]!, content: buf }
+            return { ...m, [sessionId]: cur }
+          })
+          return
+        }
+        if (custom.name === TEXT_REVOKE_CUSTOM_NAME) {
+          streamBuf.current[sessionId] = ''
+          const amId = assistantMsgId.current[sessionId]
+          if (!amId) return
+          setMessages((m) => {
+            const cur = [...(m[sessionId] ?? [])]
+            const idx = cur.findIndex((c) => c.id === amId)
+            if (idx < 0) return m
+            cur[idx] = { ...cur[idx]!, content: '' }
+            return { ...m, [sessionId]: cur }
+          })
+          return
+        }
+      }
+
       if (event.type === EventType.TEXT_MESSAGE_CONTENT) {
         const e = event as TextMessageContentEvent
-        streamBuf.current[sessionId] = (streamBuf.current[sessionId] ?? '') + e.delta
+        const prev = streamBuf.current[sessionId] ?? ''
+        // OpenWorker：CUSTOM 预览后常跟整段终稿；相同时跳过，终稿覆盖预览前缀。
+        // Cursor 等经典路径：仍按小 delta 追加。
+        if (prev === e.delta) return
+        streamBuf.current[sessionId] =
+          prev.length > 0 && e.delta.startsWith(prev) ? e.delta : prev + e.delta
         const buf = streamBuf.current[sessionId]!
         const amId = assistantMsgId.current[sessionId]
         if (!amId) return

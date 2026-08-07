@@ -47,7 +47,7 @@ import type { ToolObservation } from './define-tool.js'
  */
 export type OpenWorkerAgentRunDefaults = Omit<
   AgentRunInput,
-  'onTextDelta' | 'onThinking' | 'onTool' | 'onEmit'
+  'onTextDelta' | 'onTextRevoke' | 'onThinking' | 'onTool' | 'onEmit'
 >
 
 /**
@@ -495,7 +495,7 @@ export class OpenWorkerAgent extends AbstractAgent {
   /**
    * 按 AG-UI 协议执行一轮，产出事件 Observable。
    *
-   * 典型序列：`RUN_STARTED` → (`TEXT_MESSAGE_*` | `TOOL_CALL_*`)* → `RUN_FINISHED` | `RUN_ERROR`
+   * 典型序列：`RUN_STARTED` → (`CUSTOM(openworker.text.delta|revoke)` | `CUSTOM(cursor.thinking)` | `TOOL_CALL_*`)* → `TEXT_MESSAGE_*` → `RUN_FINISHED` | `RUN_ERROR`
    *
    * @param input - AG-UI RunAgentInput
    * @returns BaseEvent 流
@@ -553,6 +553,8 @@ export class OpenWorkerAgent extends AbstractAgent {
     const messageId = randomUUID()
     let textStarted = false
     let textEnded = false
+    /** 本步推测性 Result 缓冲；工具步 revoke 清空，收尾步再一次性写入 TEXT_MESSAGE_* */
+    let pendingResultText = ''
 
     const ensureTextStart = () => {
       if (textStarted) return
@@ -577,6 +579,23 @@ export class OpenWorkerAgent extends AbstractAgent {
       emit(end)
     }
 
+    /**
+     * 将确认后的最终回答写入 AG-UI TEXT_MESSAGE（供 AbstractAgent.apply / 落盘）。
+     * 运行中的打字机预览走 CUSTOM，避免工具步过程叙述污染 messages。
+     */
+    const flushResultText = (text: string) => {
+      const trimmed = text.trim()
+      if (!trimmed) return
+      ensureTextStart()
+      const content: TextMessageContentEvent = {
+        type: EventType.TEXT_MESSAGE_CONTENT,
+        messageId,
+        delta: text,
+        timestamp: Date.now()
+      }
+      emit(content)
+    }
+
     const merged: OpenWorkerAgentRunDefaults = {
       ...this.runDefaults,
       ...this.pendingForwardedExtras,
@@ -592,14 +611,25 @@ export class OpenWorkerAgent extends AbstractAgent {
         ...merged,
         onTextDelta: (text) => {
           if (!text) return
-          ensureTextStart()
-          const content: TextMessageContentEvent = {
-            type: EventType.TEXT_MESSAGE_CONTENT,
-            messageId,
-            delta: text,
+          pendingResultText += text
+          // UI 打字机预览；不写入 TEXT_MESSAGE，以免工具步污染 AG-UI messages
+          const preview: CustomEvent = {
+            type: EventType.CUSTOM,
+            name: 'openworker.text.delta',
+            value: { delta: text, messageId },
             timestamp: Date.now()
           }
-          emit(content)
+          emit(preview)
+        },
+        onTextRevoke: () => {
+          pendingResultText = ''
+          const revoke: CustomEvent = {
+            type: EventType.CUSTOM,
+            name: 'openworker.text.revoke',
+            value: { messageId },
+            timestamp: Date.now()
+          }
+          emit(revoke)
         },
         onThinking: (text, durationMs) => {
           const trimmed = text.trim()
@@ -667,6 +697,12 @@ export class OpenWorkerAgent extends AbstractAgent {
         }
       })
 
+      // 确认后的最终回答写入 TEXT_MESSAGE（apply / 落盘）；预览已由 CUSTOM delta 展示
+      const finalText =
+        typeof runResult.result === 'string' && runResult.result.trim()
+          ? runResult.result
+          : pendingResultText
+      flushResultText(finalText)
       ensureTextEnd()
 
       const finished: RunFinishedEvent = {

@@ -206,10 +206,26 @@ describe('OpenWorkerAgent', () => {
     expect(types).toContain(EventType.TEXT_MESSAGE_END)
     expect(types.at(-1)).toBe(EventType.RUN_FINISHED)
 
+    // 运行中打字机走 CUSTOM(openworker.text.delta)；终稿再一次 TEXT_MESSAGE_CONTENT
+    const previewDeltas = events
+      .filter(
+        (e) => e.type === EventType.CUSTOM && 'name' in e && e.name === 'openworker.text.delta'
+      )
+      .map((e) =>
+        e.type === EventType.CUSTOM &&
+        e.value &&
+        typeof e.value === 'object' &&
+        'delta' in e.value &&
+        typeof (e.value as { delta?: unknown }).delta === 'string'
+          ? (e.value as { delta: string }).delta
+          : ''
+      )
+    expect(previewDeltas).toEqual(['Hel', 'lo'])
+
     const contents = events
       .filter((e) => e.type === EventType.TEXT_MESSAGE_CONTENT)
       .map((e) => ('delta' in e ? e.delta : ''))
-    expect(contents.join('')).toBe('Hello')
+    expect(contents).toEqual(['Hello'])
 
     expect(events.at(-1)).toMatchObject({
       type: EventType.RUN_FINISHED,
@@ -217,6 +233,57 @@ describe('OpenWorkerAgent', () => {
       runId: 'run-1',
       result: 'Hello'
     })
+  })
+
+  it('工具步 onTextRevoke 清空预览，过程叙述不进入 TEXT_MESSAGE', async () => {
+    createAgentMock.mockImplementation(() =>
+      createStubAgent({
+        send: async (userText, input = {}) => {
+          input.onTextDelta?.('先看一下目录')
+          input.onTextRevoke?.()
+          input.onThinking?.('先看一下目录', 800)
+          input.onTool?.({
+            id: 'list_dir-1',
+            name: 'list_dir',
+            status: 'start',
+            args: '.',
+            timestampMs: 1
+          })
+          input.onTool?.({
+            id: 'list_dir-1',
+            name: 'list_dir',
+            status: 'end',
+            result: '[]',
+            timestampMs: 2
+          })
+          input.onTextDelta?.('已完成')
+          return {
+            messages: [
+              { role: 'user', content: userText },
+              { role: 'assistant', content: '已完成' }
+            ],
+            result: '已完成'
+          }
+        }
+      })
+    )
+
+    const agent = new OpenWorkerAgent({
+      agent: { provider: stubModel, local: { cwd: '/tmp/ws' } }
+    })
+    const events = await collectEvents(agent, baseInput())
+
+    expect(
+      events.some(
+        (e) => e.type === EventType.CUSTOM && 'name' in e && e.name === 'openworker.text.revoke'
+      )
+    ).toBe(true)
+
+    const contents = events
+      .filter((e) => e.type === EventType.TEXT_MESSAGE_CONTENT)
+      .map((e) => ('delta' in e ? e.delta : ''))
+    expect(contents).toEqual(['已完成'])
+    expect(contents.join('')).not.toContain('先看一下目录')
   })
 
   it('onTool 映射为 TOOL_CALL_* 事件', async () => {
