@@ -43,6 +43,7 @@ const WIN_MENUBAR_MENU_THEME = {
 export function App() {
   const authHydrated = useAuthStore((s) => s.hydrated)
   const accessToken = useAuthStore((s) => s.accessToken)
+  const dataHydrated = useAuthStore((s) => s.dataHydrated)
   const hydrateAuth = useAuthStore((s) => s.hydrate)
 
   useEffect(() => {
@@ -59,6 +60,14 @@ export function App() {
 
   if (!accessToken) {
     return <LoginPage />
+  }
+
+  if (!dataHydrated) {
+    return (
+      <div className="app-auth-boot">
+        <Spin size="large" />
+      </div>
+    )
   }
 
   return <AuthenticatedAppShell />

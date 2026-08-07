@@ -38,6 +38,44 @@ export async function ensureSchema(): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
 
+  // 复合主键 (user_id, id)：允许每用户共用固定 id（如 workspace-home）
+  await mysqlPool.query(`
+    CREATE TABLE IF NOT EXISTS workspaces (
+      user_id VARCHAR(36) NOT NULL,
+      id VARCHAR(64) NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      path TEXT NULL,
+      sort_order INT NOT NULL DEFAULT 0,
+      is_default TINYINT(1) NOT NULL DEFAULT 0,
+      created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      deleted_at TIMESTAMP(3) NULL DEFAULT NULL,
+      PRIMARY KEY (user_id, id),
+      KEY idx_workspaces_user_sort (user_id, sort_order),
+      KEY idx_workspaces_user_deleted (user_id, deleted_at),
+      CONSTRAINT fk_workspaces_user FOREIGN KEY (user_id) REFERENCES users (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
+  await mysqlPool.query(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      user_id VARCHAR(36) NOT NULL,
+      id VARCHAR(64) NOT NULL,
+      workspace_id VARCHAR(64) NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      messages_json JSON NOT NULL,
+      created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      deleted_at TIMESTAMP(3) NULL DEFAULT NULL,
+      PRIMARY KEY (user_id, id),
+      KEY idx_sessions_user_ws_updated (user_id, workspace_id, updated_at),
+      KEY idx_sessions_ws_deleted (user_id, workspace_id, deleted_at),
+      CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users (id),
+      CONSTRAINT fk_sessions_workspace FOREIGN KEY (user_id, workspace_id)
+        REFERENCES workspaces (user_id, id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
   await seedDefaultAdmin()
 }
 

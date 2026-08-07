@@ -2,8 +2,10 @@ import cors from 'cors'
 import express from 'express'
 import { authRouter } from './routes/auth.js'
 import { healthRouter } from './routes/health.js'
+import { sessionsRouter } from './routes/sessions.js'
 import { settingsRouter } from './routes/settings.js'
 import { usersRouter } from './routes/users.js'
+import { workspacesRouter } from './routes/workspaces.js'
 
 /**
  * 创建并配置 Express 应用实例
@@ -17,11 +19,14 @@ export function createApp() {
   const app = express()
 
   app.use(cors())
-  app.use(express.json({ limit: '2mb' }))
+  // Message[] 整包可能较大
+  app.use(express.json({ limit: '32mb' }))
   app.use(healthRouter)
   app.use(authRouter)
   app.use(usersRouter)
   app.use(settingsRouter)
+  app.use(workspacesRouter)
+  app.use(sessionsRouter)
 
   return app
 }

@@ -12,32 +12,38 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'elect
 
 import { getMcpHostAgent, resetMcpHostAgent } from '@/main/agent/agent-instance'
 import {
+  aguiMessagesToChatMessages,
   bindAgentIpc,
   cancelRun,
+  ensureSessionAgentHydrated,
+  initSessionState,
   isSessionRunning,
   runUserMessage
 } from '@/main/agent/agent-service'
 import { ensureUserSkillsLayout, listUserSkills } from '@/main/agent/skills'
 import { shutdownLangfuseTracing, startLangfuseTracingIfConfigured } from '@/main/langfuse'
 import { mainLog } from '@/main/logger'
+import { clearAccessToken, setAccessToken } from '@/main/auth-token'
+import { migrateLocalWorkspaceSessionToApiIfNeeded } from '@/main/migrate-workspace-session'
 import {
+  clearSessionsMemory,
   createSession,
   deleteSession,
+  ensureSessionMessagesLoaded,
   getSessions,
   getSessionWorkspaceId,
   loadSessionList,
-  purgeWorkspaceSessions,
-  renameSession,
-  touchSession
+  purgeWorkspaceSessionsLocal,
+  renameSession
 } from '@/main/sessions'
 import {
-  ensureHomeWorkspaceInList,
+  clearWorkspaceCache,
   getActiveWorkspace,
   getActiveWorkspaceId,
-  getSessionMessages,
   getUiState,
   getWorkspace,
   getWorkspaceById,
+  hydrateWorkspacesFromApi,
   listWorkspaces,
   loadSettingsFromApi,
   removeWorkspace,
@@ -362,14 +368,44 @@ function broadcastSessions(): void {
   mainWindow.webContents.send(EVENTS.SESSIONS_SYNC, getSessionsInActiveWorkspace())
 }
 
+/**
+ * 登录后：迁移本地数据 → 拉工作区/会话 → 广播
+ */
+async function hydrateWorkspaceSessionData(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await migrateLocalWorkspaceSessionToApiIfNeeded()
+    await hydrateWorkspacesFromApi()
+    await loadSessionList()
+    broadcastWorkspaces()
+    broadcastSessions()
+    return { ok: true }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    mainLog.error(`[hydrateWorkspaceSessionData] ${message}`)
+    return { ok: false, error: message }
+  }
+}
+
 function registerIpc(): void {
+  ipcMain.handle(IPC.AUTH_SET_TOKEN, async (_e, token: string) => {
+    setAccessToken(typeof token === 'string' ? token : null)
+    return { ok: true as const }
+  })
+  ipcMain.handle(IPC.AUTH_CLEAR_TOKEN, async () => {
+    clearAccessToken()
+    clearWorkspaceCache()
+    clearSessionsMemory()
+    return { ok: true as const }
+  })
+  ipcMain.handle(IPC.AUTH_HYDRATE_DATA, async () => hydrateWorkspaceSessionData())
+
   ipcMain.handle(IPC.WORKSPACE_SELECT, async () => {
     const r = await dialog.showOpenDialog({
       title: '选择工作区',
       properties: ['openDirectory', 'createDirectory']
     })
     if (r.canceled || !r.filePaths[0]) return { path: '' as const }
-    const workspace = upsertWorkspaceByPath(r.filePaths[0])
+    const workspace = await upsertWorkspaceByPath(r.filePaths[0])
     setActiveWorkspace(workspace.id)
     broadcastWorkspaces()
     broadcastSessions()
@@ -431,17 +467,17 @@ function registerIpc(): void {
     list: listWorkspaces(),
     activeWorkspaceId: getActiveWorkspaceId()
   }))
-  ipcMain.handle(IPC.WORKSPACE_ADD, (_e, dir: string) => {
+  ipcMain.handle(IPC.WORKSPACE_ADD, async (_e, dir: string) => {
     if (!dir?.trim()) return null
-    const workspace = upsertWorkspaceByPath(dir)
+    const workspace = await upsertWorkspaceByPath(dir)
     setActiveWorkspace(workspace.id)
     broadcastWorkspaces()
     broadcastSessions()
     return workspace
   })
-  ipcMain.handle(IPC.WORKSPACE_ACTIVATE, (_e, workspaceId: string) => {
+  ipcMain.handle(IPC.WORKSPACE_ACTIVATE, async (_e, workspaceId: string) => {
     if (workspaceId === HOME_WORKSPACE_ID) {
-      restoreHomeWorkspaceInList()
+      await restoreHomeWorkspaceInList()
     }
     const next = setActiveWorkspace(workspaceId)
     if (!next) return null
@@ -449,24 +485,24 @@ function registerIpc(): void {
     broadcastSessions()
     return next
   })
-  ipcMain.handle(IPC.WORKSPACE_REORDER, (_e, orderIds: string[]) => {
-    reorderWorkspaces(orderIds)
+  ipcMain.handle(IPC.WORKSPACE_REORDER, async (_e, orderIds: string[]) => {
+    await reorderWorkspaces(orderIds)
     broadcastWorkspaces()
     return {
       list: listWorkspaces(),
       activeWorkspaceId: getActiveWorkspaceId()
     }
   })
-  ipcMain.handle(IPC.WORKSPACE_RENAME, (_e, workspaceId: string, name: string) => {
-    const next = renameWorkspace(workspaceId, name)
+  ipcMain.handle(IPC.WORKSPACE_RENAME, async (_e, workspaceId: string, name: string) => {
+    const next = await renameWorkspace(workspaceId, name)
     if (!next) return null
     broadcastWorkspaces()
     return next
   })
-  ipcMain.handle(IPC.WORKSPACE_REMOVE, (_e, workspaceId: string) => {
-    purgeWorkspaceSessions(workspaceId)
-    const ok = removeWorkspace(workspaceId)
+  ipcMain.handle(IPC.WORKSPACE_REMOVE, async (_e, workspaceId: string) => {
+    const ok = await removeWorkspace(workspaceId)
     if (ok) {
+      purgeWorkspaceSessionsLocal(workspaceId)
       broadcastWorkspaces()
       broadcastSessions()
     }
@@ -495,16 +531,20 @@ function registerIpc(): void {
     if (!workspaceId) return []
     return getSessions(workspaceId)
   })
-  ipcMain.handle(IPC.SESSIONS_GET_MESSAGES, (_e, sessionId: string) => {
-    const workspaceId = getSessionWorkspaceId(sessionId) || getActiveWorkspaceId()
-    if (!workspaceId) return []
-    return getSessionMessages(workspaceId, sessionId)
+  ipcMain.handle(IPC.SESSIONS_GET_MESSAGES, async (_e, sessionId: string) => {
+    if (!sessionId) return []
+    const messages = await ensureSessionMessagesLoaded(sessionId)
+    const workspaceId = getSessionWorkspaceId(sessionId)
+    if (workspaceId) {
+      initSessionState(workspaceId, sessionId)
+      await ensureSessionAgentHydrated(sessionId)
+    }
+    return aguiMessagesToChatMessages(messages)
   })
-  ipcMain.handle(IPC.SESSIONS_CREATE, (_e, name?: string) => {
-    ensureHomeWorkspaceInList()
+  ipcMain.handle(IPC.SESSIONS_CREATE, async (_e, name?: string) => {
     let workspaceId = getActiveWorkspaceId()
     if (!workspaceId) {
-      const home = getWorkspaceById(HOME_WORKSPACE_ID)
+      const home = getWorkspaceById(HOME_WORKSPACE_ID) || (await restoreHomeWorkspaceInList())
       if (home) {
         setActiveWorkspace(home.id)
         workspaceId = home.id
@@ -514,21 +554,21 @@ function registerIpc(): void {
     if (!workspaceId) {
       return null
     }
-    const s = createSession(workspaceId, name)
+    const s = await createSession(workspaceId, name)
     broadcastSessions()
     return s
   })
-  ipcMain.handle(IPC.SESSIONS_RENAME, (_e, id: string, name: string) => {
+  ipcMain.handle(IPC.SESSIONS_RENAME, async (_e, id: string, name: string) => {
     const workspaceId = getSessionWorkspaceId(id) || getActiveWorkspaceId()
     if (!workspaceId) return null
-    const s = renameSession(workspaceId, id, name)
+    const s = await renameSession(workspaceId, id, name)
     broadcastSessions()
     return s
   })
-  ipcMain.handle(IPC.SESSIONS_DELETE, (_e, id: string) => {
+  ipcMain.handle(IPC.SESSIONS_DELETE, async (_e, id: string) => {
     const workspaceId = getSessionWorkspaceId(id) || getActiveWorkspaceId()
     if (!workspaceId) return { ok: false as const }
-    deleteSession(workspaceId, id)
+    await deleteSession(workspaceId, id)
     broadcastSessions()
     return { ok: true as const }
   })
@@ -558,10 +598,6 @@ function registerIpc(): void {
       }
       try {
         await runUserMessage(sessionId, text.trim(), opts ? { ...opts, mode } : { mode })
-        const workspaceId = getSessionWorkspaceId(sessionId)
-        if (workspaceId) {
-          touchSession(workspaceId, sessionId)
-        }
         broadcastSessions()
         return { ok: true as const }
       } catch (err) {
@@ -692,7 +728,7 @@ app.whenReady().then(() => {
     await loadDevtoolsExtension()
     await ensureUserSkillsLayout()
     await loadSettingsFromApi()
-    loadSessionList()
+    // 工作区/会话在登录后经 AUTH_HYDRATE_DATA 拉取，启动时不访问需 JWT 的 API
     registerIpc()
     createWindow()
     void startMcpWarmup()

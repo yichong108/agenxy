@@ -42,6 +42,14 @@ const api = {
   showAbout: () => ipcRenderer.invoke(IPC.APP_ABOUT) as Promise<AboutAppInfo>,
   /** 列出可用技能（输入框 `/` 斜杠菜单） */
   listSkills: () => ipcRenderer.invoke(IPC.SKILLS_LIST) as Promise<SkillListItem[]>,
+  /** 将 JWT 同步到主进程 */
+  setAuthToken: (token: string) =>
+    ipcRenderer.invoke(IPC.AUTH_SET_TOKEN, token) as Promise<{ ok: true }>,
+  /** 清除主进程 JWT 与工作区/会话内存 */
+  clearAuthToken: () => ipcRenderer.invoke(IPC.AUTH_CLEAR_TOKEN) as Promise<{ ok: true }>,
+  /** 登录后拉取工作区/会话 */
+  hydrateAuthData: () =>
+    ipcRenderer.invoke(IPC.AUTH_HYDRATE_DATA) as Promise<{ ok: boolean; error?: string }>,
   selectWorkspace: () => ipcRenderer.invoke(IPC.WORKSPACE_SELECT) as Promise<{ path: string }>,
   getWorkspace: () => ipcRenderer.invoke(IPC.WORKSPACE_GET) as Promise<string>,
   listWorkspaces: () => ipcRenderer.invoke(IPC.WORKSPACE_LIST) as Promise<WorkspacesPayload>,

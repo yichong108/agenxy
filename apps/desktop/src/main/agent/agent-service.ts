@@ -1,13 +1,6 @@
 import { killCommand, resolveChatModel } from '@openworker/uni-agent'
 import { normalizeAgentType, type AgentType } from '@openworker/shared'
-import {
-  EventType,
-  type BaseEvent,
-  type CustomEvent,
-  type Message,
-  type RunErrorEvent,
-  type RunStartedEvent
-} from '@ag-ui/client'
+import { EventType, type Message, type RunErrorEvent, type RunStartedEvent } from '@ag-ui/client'
 import type { WebContents } from 'electron'
 
 import {
@@ -17,7 +10,12 @@ import {
 } from '@/main/agent/agent-instance'
 import { agentLog } from '@/main/agent/agent-log'
 import { flushLangfuseTracing } from '@/main/langfuse'
-import { getSessionMessages, getSettings, getWorkspaceById, setSessionMessages } from '@/main/store'
+import {
+  ensureSessionMessagesLoaded,
+  getCachedSessionMessages,
+  persistSessionAguiMessages
+} from '@/main/sessions'
+import { getSettings, getWorkspaceById } from '@/main/store'
 import {
   type AgentSendOptions,
   type AgentStreamPayload,
@@ -79,7 +77,6 @@ function createAgentForWorkspace(
 
 const sessions = new Map<string, SessionRuntime>()
 let webContents: WebContents | null = null
-const MAX_PERSISTED_MESSAGES = 200
 
 /**
  * 生成本轮 runId。
@@ -91,7 +88,7 @@ function makeRunId(): string {
 }
 
 /**
- * 将 AG-UI Message content 转为纯文本（持久化 / 展示用）。
+ * 将 AG-UI Message content 转为纯文本（展示用）。
  *
  * @param content - AG-UI Message.content
  * @returns 纯文本
@@ -117,6 +114,27 @@ function aguiContentToText(content: Message['content']): string {
 }
 
 /**
+ * 将完整 AG-UI Message[] 转为渲染层 ChatMessage（仅 user/assistant/system 文本；无 aguiEvents）
+ *
+ * @param messages - AG-UI Message 列表
+ * @returns ChatMessage 列表
+ */
+export function aguiMessagesToChatMessages(messages: Message[]): ChatMessage[] {
+  const out: ChatMessage[] = []
+  for (const msg of messages) {
+    if (msg.role !== 'user' && msg.role !== 'assistant' && msg.role !== 'system') continue
+    const content = aguiContentToText(msg.content)
+    if (!content.trim() && msg.role !== 'user') continue
+    out.push({
+      id: msg.id || `m-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      role: msg.role,
+      content
+    })
+  }
+  return out
+}
+
+/**
  * 向渲染层推送 AG-UI 事件信封。
  *
  * @param payload - sessionId + BaseEvent
@@ -127,113 +145,19 @@ function emit(payload: AgentStreamPayload): void {
 }
 
 /**
- * 裁剪持久化消息数量上限。
+ * 将完整 AG-UI Message[] 异步写入 API（不落盘 UI 事件）
  *
- * @param messages - ChatMessage 列表
- * @returns 裁剪后的列表
- */
-function trimPersistedMessages(messages: ChatMessage[]): ChatMessage[] {
-  if (messages.length <= MAX_PERSISTED_MESSAGES) return messages
-  return messages.slice(-MAX_PERSISTED_MESSAGES)
-}
-
-/**
- * 将 AG-UI Message 转为可持久化的 ChatMessage。
- *
- * 仅保留 user 与最后一条有文本的 assistant；工具过程靠 aguiEvents 承载。
- *
- * @param messages - AG-UI Message 列表
- * @returns ChatMessage 列表
- */
-function toPersistedMessages(messages: Message[]): ChatMessage[] {
-  const visible = messages.filter((msg) => msg.role === 'user' || msg.role === 'assistant')
-
-  let lastAssistantIndex = -1
-  for (let i = visible.length - 1; i >= 0; i -= 1) {
-    if (visible[i]?.role === 'assistant') {
-      lastAssistantIndex = i
-      break
-    }
-  }
-
-  const out: ChatMessage[] = []
-  for (let i = 0; i < visible.length; i += 1) {
-    const msg = visible[i]!
-    if (msg.role === 'user') {
-      out.push({
-        id: msg.id || `u-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        role: 'user',
-        content: aguiContentToText(msg.content)
-      })
-      continue
-    }
-    if (msg.role === 'assistant') {
-      if (i !== lastAssistantIndex) continue
-      const content = aguiContentToText(msg.content)
-      if (!content.trim()) continue
-      out.push({
-        id: msg.id || `a-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        role: 'assistant',
-        content
-      })
-    }
-  }
-  return trimPersistedMessages(out)
-}
-
-/**
- * 从持久化 ChatMessage 恢复为 AG-UI Message。
- *
- * @param messages - 磁盘/store 中的 ChatMessage
- * @returns AG-UI Message 列表
- */
-function fromPersistedMessages(messages: ChatMessage[]): Message[] {
-  const list: Message[] = []
-  for (const msg of messages) {
-    if (!msg.content?.trim()) continue
-    if (msg.role === 'user') {
-      list.push({ id: msg.id, role: 'user', content: msg.content })
-      continue
-    }
-    if (msg.role === 'assistant') {
-      list.push({ id: msg.id, role: 'assistant', content: msg.content })
-      continue
-    }
-    if (msg.role === 'system') {
-      list.push({ id: msg.id, role: 'system', content: msg.content })
-    }
-  }
-  return list
-}
-
-/**
- * 将 AG-UI 消息轨迹持久化为 ChatMessage，并可选挂上本轮 AG-UI 事件快照。
- *
- * @param workspaceId - 工作区 ID
  * @param sessionId - 会话 ID
- * @param messages - 本轮结束后的完整 AG-UI 轨迹
- * @param opts - 可选：挂到最后一条 assistant 的 aguiEvents（原始 AG-UI，不做 UI 转换）
+ * @param messages - 完整 AG-UI 轨迹
  */
-function persistSessionMessages(
-  workspaceId: string,
-  sessionId: string,
-  messages: Message[],
-  opts?: {
-    aguiEventsForLastAssistant?: BaseEvent[]
+async function persistSessionMessages(sessionId: string, messages: Message[]): Promise<void> {
+  try {
+    await persistSessionAguiMessages(sessionId, messages)
+  } catch (error) {
+    agentLog.warn(
+      `[persistSessionMessages] failed: ${error instanceof Error ? error.message : String(error)}`
+    )
   }
-): void {
-  const list = toPersistedMessages(messages)
-  const aguiEvents = opts?.aguiEventsForLastAssistant
-  if (aguiEvents && aguiEvents.length > 0) {
-    for (let i = list.length - 1; i >= 0; i -= 1) {
-      const row = list[i]
-      if (row?.role === 'assistant') {
-        list[i] = { ...row, aguiEvents }
-        break
-      }
-    }
-  }
-  setSessionMessages(workspaceId, sessionId, list)
 }
 
 /**
@@ -272,7 +196,8 @@ export function initSessionState(workspaceId: string, sessionId: string): void {
     return
   }
 
-  const messages = fromPersistedMessages(getSessionMessages(workspaceId, sessionId))
+  // 优先用已 hydrate 的完整 Message[]；否则先空列表，ensure 后再灌入
+  const messages = getCachedSessionMessages(sessionId)
   sessions.set(sessionId, {
     workspaceId,
     agentType: configuredType,
@@ -282,6 +207,20 @@ export function initSessionState(workspaceId: string, sessionId: string): void {
     subscription: null,
     terminalKey: `term:${sessionId}`
   })
+}
+
+/**
+ * 确保会话 Agent 已加载远端完整 Message[]
+ *
+ * @param sessionId - 会话 ID
+ */
+export async function ensureSessionAgentHydrated(sessionId: string): Promise<void> {
+  const session = sessions.get(sessionId)
+  if (!session) return
+  const messages = await ensureSessionMessagesLoaded(sessionId)
+  if (session.agent.messages.length === 0 && messages.length > 0) {
+    session.agent.messages = messages
+  }
 }
 
 /**
@@ -369,37 +308,6 @@ function emitPreRunError(sessionId: string, message: string, runId?: string): vo
 }
 
 /**
- * 收集本轮与工具时间线相关的原始 AG-UI 事件（供落盘；不做 UI 转换）。
- *
- * @returns 累加器：onEvent + getEvents
- */
-function createAguiTimelineEventCollector(): {
-  onEvent: (event: BaseEvent) => void
-  getEvents: () => BaseEvent[]
-} {
-  const events: BaseEvent[] = []
-  return {
-    onEvent(event: BaseEvent) {
-      if (
-        event.type === EventType.TOOL_CALL_START ||
-        event.type === EventType.TOOL_CALL_ARGS ||
-        event.type === EventType.TOOL_CALL_END ||
-        event.type === EventType.TOOL_CALL_RESULT ||
-        event.type === EventType.RUN_ERROR
-      ) {
-        events.push(event)
-        return
-      }
-      // Cursor 思考过程：落盘供刷新后恢复 Worked → Thought
-      if (event.type === EventType.CUSTOM && (event as CustomEvent).name === 'cursor.thinking') {
-        events.push(event)
-      }
-    },
-    getEvents: () => events
-  }
-}
-
-/**
  * 截断 AG-UI 消息列表：去掉从第 `userOrdinal` 条用户消息起的全部历史。
  *
  * @param messages - 当前 AG-UI 消息
@@ -453,6 +361,8 @@ export async function runUserMessage(
     initSessionState(sessionBefore.workspaceId, sessionId)
   }
 
+  await ensureSessionAgentHydrated(sessionId)
+
   const session = sessions.get(sessionId)
   if (!session) {
     emitPreRunError(sessionId, '会话不存在或已过期')
@@ -488,8 +398,8 @@ export async function runUserMessage(
       session.agent.messages,
       Math.floor(editUserOrdinal)
     )
-    // 先落盘截断后的前缀，避免取消/失败后 UI 与磁盘仍保留旧尾部
-    persistSessionMessages(session.workspaceId, sessionId, session.agent.messages)
+    // 先落盘截断后的前缀，避免取消/失败后 UI 与远端仍保留旧尾部
+    await persistSessionMessages(sessionId, session.agent.messages)
   }
 
   const ac = new AbortController()
@@ -498,7 +408,6 @@ export async function runUserMessage(
 
   const runId = makeRunId()
   const runStartedAt = Date.now()
-  const aguiCollector = createAguiTimelineEventCollector()
 
   // 统一组装参数；按 agentType 裁剪由 UniAgent 内部完成
   const forwardedProps = session.agent.buildRunForwardedProps({
@@ -527,7 +436,6 @@ export async function runUserMessage(
 
     const sub = session.agent.subscribe({
       onEvent: ({ event }) => {
-        aguiCollector.onEvent(event)
         emit({ sessionId, event })
       }
     })
@@ -545,19 +453,13 @@ export async function runUserMessage(
     // 取消后若已启动新一轮（重新编辑），勿用本轮结果覆盖截断后的历史
     if (ac.signal.aborted && latest.controller !== null && latest.controller !== ac) return
 
-    const aguiEvents = aguiCollector.getEvents()
-    persistSessionMessages(latest.workspaceId, sessionId, latest.agent.messages, {
-      aguiEventsForLastAssistant: aguiEvents.length > 0 ? aguiEvents : undefined
-    })
+    await persistSessionMessages(sessionId, latest.agent.messages)
   } catch (e) {
     const latest = sessions.get(sessionId)
     if (ac.signal.aborted) {
       // CANCELLED 已由 agent 事件流发出；若已有新一轮则跳过落盘
       if (!latest || (latest.controller !== null && latest.controller !== ac)) return
-      const aguiEvents = aguiCollector.getEvents()
-      persistSessionMessages(latest.workspaceId, sessionId, latest.agent.messages, {
-        aguiEventsForLastAssistant: aguiEvents.length > 0 ? aguiEvents : undefined
-      })
+      await persistSessionMessages(sessionId, latest.agent.messages)
       return
     }
     const message = e instanceof Error ? e.message : String(e)
@@ -568,13 +470,9 @@ export async function runUserMessage(
       timestamp: Date.now()
     }
     emit({ sessionId, event: err })
-    aguiCollector.onEvent(err)
 
     if (latest) {
-      const aguiEvents = aguiCollector.getEvents()
-      persistSessionMessages(latest.workspaceId, sessionId, latest.agent.messages, {
-        aguiEventsForLastAssistant: aguiEvents.length > 0 ? aguiEvents : undefined
-      })
+      await persistSessionMessages(sessionId, latest.agent.messages)
     }
   } finally {
     const latest = sessions.get(sessionId)

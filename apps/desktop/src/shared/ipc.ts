@@ -50,7 +50,13 @@ export const IPC = {
   /** 关于面板：返回版本/构建/引擎等信息（由渲染层展示弹窗） */
   APP_ABOUT: 'app:about',
   /** 列出用户 skills 目录下的可用技能（供输入框 `/` 菜单） */
-  SKILLS_LIST: 'skills:list'
+  SKILLS_LIST: 'skills:list',
+  /** 渲染进程同步 JWT 到主进程（登录 / hydrate） */
+  AUTH_SET_TOKEN: 'auth:set-token',
+  /** 渲染进程清除主进程 JWT（登出） */
+  AUTH_CLEAR_TOKEN: 'auth:clear-token',
+  /** 登录后拉取工作区/会话并广播 */
+  AUTH_HYDRATE_DATA: 'auth:hydrate-data'
 } as const
 
 /**
@@ -212,8 +218,8 @@ export const defaultWorkspaceUiState: WorkspaceUiState = {
   sidebarHiddenSessionIds: []
 }
 
-/** 固定 ID：用户主目录工作区；顶栏下拉始终含 Home 项（侧栏可无）；侧栏无可见会话时隐藏该项；移除后不会自动再出现，可从顶栏切回以恢复 */
-export const HOME_WORKSPACE_ID = 'workspace-home'
+/** 固定 ID：用户主目录工作区；与 @openworker/shared 对齐 */
+export { HOME_WORKSPACE_ID } from '@openworker/shared'
 
 export type WorkspaceInfo = {
   id: string

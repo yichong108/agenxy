@@ -152,6 +152,37 @@ curl -X PUT http://127.0.0.1:3100/settings \
   -d '{"tavilyApiKey":"tvly-xxx"}'
 ```
 
+## Workspaces / Sessions API
+
+按登录用户隔离；**全部需要** `Authorization: Bearer <accessToken>`。响应统一为 `{ code, message, data }`（与 Auth 一致）。删除为**逻辑删除**（`deleted_at`），列表默认不可见。
+
+表：`workspaces`、`sessions`（`messages_json` 存完整 AG-UI `Message[]` 整包；无独立 messages 表）。
+
+| 方法   | 路径                                | 说明                                                       |
+| ------ | ----------------------------------- | ---------------------------------------------------------- |
+| GET    | `/workspaces`                       | 未删除工作区列表（空则自动确保 Home）                      |
+| POST   | `/workspaces`                       | 创建；body: `{ id?, name, path?, isDefault?, sortOrder? }` |
+| PATCH  | `/workspaces/:id`                   | 更新 name/path/isDefault                                   |
+| DELETE | `/workspaces/:id`                   | 软删，并级联软删其下 sessions                              |
+| PUT    | `/workspaces/reorder`               | body: `{ orderedIds: string[] }`                           |
+| GET    | `/workspaces/:workspaceId/sessions` | 会话元数据列表（不含 messages）                            |
+| POST   | `/workspaces/:workspaceId/sessions` | 创建会话；body: `{ id?, name? }`                           |
+| PATCH  | `/sessions/:id`                     | 重命名 / `{ touch: true }`                                 |
+| DELETE | `/sessions/:id`                     | 软删会话                                                   |
+| GET    | `/sessions/:id/messages`            | `{ messages: Message[] }`                                  |
+| PUT    | `/sessions/:id/messages`            | 整包覆盖 `messages_json`                                   |
+
+示例：
+
+```bash
+TOKEN=... # 来自 /auth/login
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:3100/workspaces
+curl -X PUT http://127.0.0.1:3100/sessions/<id>/messages \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"id":"u1","role":"user","content":"hi"}]}'
+```
+
 ## 脚本
 
 | 命令                                         | 说明                  |
