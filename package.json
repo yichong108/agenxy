@@ -1,7 +1,7 @@
 {
   "name": "openworker",
   "version": "1.0.0-alpha.1",
-  "description": "Openworker — AI Agent 套件 (桌面应用 + 命令行 + 落地页 + 本地服务)",
+  "description": "OpenWorker — AI Agent 套件 (桌面应用 + 命令行 + 落地页 + 本地服务)",
   "keywords": [
     "openworker",
     "ai",

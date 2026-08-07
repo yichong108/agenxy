@@ -1,7 +1,7 @@
 {
   "name": "@openworker/admin",
   "version": "1.0.0",
-  "description": "Openworker 后台管理 — Vite + React + Ant Design",
+  "description": "OpenWorker 后台管理 — Vite + React + Ant Design",
   "type": "module",
   "private": true,
   "scripts": {

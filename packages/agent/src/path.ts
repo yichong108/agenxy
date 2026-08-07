@@ -1,5 +1,5 @@
 /**
- * 用户级 Openworker 配置路径 — `~/.openworker/` 下的 skills / mcp.json。
+ * 用户级 OpenWorker 配置路径 — `~/.openworker/` 下的 skills / mcp.json。
  *
  * createAgent.send 内部按此约定加载；宿主写入 MCP 配置或预热时也应使用同一路径。
  */

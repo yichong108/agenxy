@@ -1,7 +1,7 @@
 {
   "name": "@openworker/cursor-agent",
   "version": "0.0.0",
-  "description": "Cursor SDK AG-UI agent adapter for Openworker",
+  "description": "Cursor SDK AG-UI agent adapter for OpenWorker",
   "type": "module",
   "private": true,
   "exports": {

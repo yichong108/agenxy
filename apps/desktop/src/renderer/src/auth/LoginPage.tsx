@@ -51,7 +51,7 @@ export function LoginPage() {
             draggable={false}
           />
           <Title level={3} className="login-page-title">
-            Openworker
+            OpenWorker
           </Title>
           <Text type="secondary" className="login-page-subtitle">
             使用账号密码登录

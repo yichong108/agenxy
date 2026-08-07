@@ -12,7 +12,7 @@
 
 1. 访问官网下载 Windows 安装包
 2. 双击安装包，按照提示完成安装
-3. 启动 Openworker 应用
+3. 启动 OpenWorker 应用
 
 ### macOS
 
@@ -24,8 +24,8 @@
 
 ```bash
 # 使用 AppImage
-chmod +x Openworker.AppImage
-./Openworker.AppImage
+chmod +x OpenWorker.AppImage
+./OpenWorker.AppImage
 
 # 或使用 DEB 包
 sudo dpkg -i openworker.deb

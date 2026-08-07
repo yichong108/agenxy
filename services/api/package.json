@@ -1,7 +1,7 @@
 {
   "name": "@openworker/api",
   "version": "0.0.0",
-  "description": "Openworker backend API — Express + MySQL + Redis",
+  "description": "OpenWorker backend API — Express + MySQL + Redis",
   "type": "module",
   "private": true,
   "scripts": {

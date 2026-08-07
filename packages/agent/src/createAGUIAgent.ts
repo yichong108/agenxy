@@ -57,7 +57,7 @@ export type OpenWorkerAgentRunDefaults = Omit<
  * ```ts
  * const agent = new OpenWorkerAgent({
  *   agentId: 'openworker',
- *   description: 'Openworker desktop agent',
+ *   description: 'OpenWorker desktop agent',
  *   agent: { provider: model, local: { cwd } },
  *   runDefaults: { composerMode: 'build', workspacePath: cwd }
  * })

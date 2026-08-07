@@ -37,7 +37,7 @@ export function createCliAgent(settings: AppSettings, cwd: string): OpenWorkerAg
   const workspacePath = resolve(cwd)
   return new OpenWorkerAgent({
     agentId: 'openworker-cli',
-    description: 'Openworker CLI agent',
+    description: 'OpenWorker CLI agent',
     agent: {
       provider,
       local: { cwd: workspacePath }

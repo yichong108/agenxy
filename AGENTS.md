@@ -4,7 +4,7 @@
 
 ## 项目
 
-**Openworker** — 面向智能体的 Electron 桌面应用（React、Ant Design、AI SDK、MCP）。主要代码位于 `src/`（`main`、`renderer`、`preload`）。
+**OpenWorker** — 面向智能体的 Electron 桌面应用（React、Ant Design、AI SDK、MCP）。主要代码位于 `src/`（`main`、`renderer`、`preload`）。
 
 ## 包管理器
 

@@ -1,7 +1,7 @@
 {
   "name": "@openworker/phone",
   "version": "1.0.0",
-  "description": "Openworker 移动端 — Expo + React Native",
+  "description": "OpenWorker 移动端 — Expo + React Native",
   "main": "index.ts",
   "private": true,
   "scripts": {

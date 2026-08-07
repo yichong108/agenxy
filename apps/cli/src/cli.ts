@@ -20,7 +20,7 @@ export type CliOptions = {
  * 打印 CLI 用法。
  */
 export function printHelp(): void {
-  console.log(`Openworker CLI — 命令行智能体
+  console.log(`OpenWorker CLI — 命令行智能体
 
 用法:
   pnpm --filter @openworker/cli start -- [options] [prompt]

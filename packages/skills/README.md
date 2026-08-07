@@ -1,6 +1,6 @@
 # @openworker/skills
 
-Openworker 内置 Agent Skills 内容包。各技能位于 `content/` 下的独立子目录，入口文件为 `SKILL.md`。
+OpenWorker 内置 Agent Skills 内容包。各技能位于 `content/` 下的独立子目录，入口文件为 `SKILL.md`。
 
 ## 加载位置
 

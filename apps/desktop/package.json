@@ -1,7 +1,7 @@
 {
   "name": "@openworker/desktop",
   "version": "1.0.0-alpha.1",
-  "description": "Openworker 桌面应用 — Electron + Ant Design + AI SDK",
+  "description": "OpenWorker 桌面应用 — Electron + Ant Design + AI SDK",
   "author": "Wang Zhang",
   "license": "MIT",
   "main": "out/main/index.js",
@@ -72,7 +72,7 @@
   },
   "build": {
     "appId": "com.openworker.desktop",
-    "productName": "Openworker",
+    "productName": "OpenWorker",
     "directories": {
       "output": "release"
     },

@@ -1,4 +1,4 @@
-# Openworker API 本地依赖：MySQL + Redis
+# OpenWorker API 本地依赖：MySQL + Redis
 # 使用方法:
 #   1. 确认已复制 .env.example 为 .env（凭证与下方默认值一致）
 #   2. 启动: pnpm docker:up   或  docker compose up -d

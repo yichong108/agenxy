@@ -1,6 +1,6 @@
 # @openworker/api
 
-Openworker 后端 API 服务（Node.js + Express + MySQL + Redis）。
+OpenWorker 后端 API 服务（Node.js + Express + MySQL + Redis）。
 
 ## 快速开始
 

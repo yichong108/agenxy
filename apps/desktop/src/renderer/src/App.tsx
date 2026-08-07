@@ -172,7 +172,7 @@ function AuthenticatedAppShell() {
         children: [
           {
             key: 'about',
-            label: '关于 Openworker',
+            label: '关于 OpenWorker',
             onClick: () => void openAboutOpenworker()
           }
         ]

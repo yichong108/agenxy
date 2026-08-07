@@ -1,7 +1,7 @@
 {
   "name": "@openworker/cli",
   "version": "0.0.0",
-  "description": "Openworker CLI — 命令行调用 @openworker/agent（AG-UI OpenWorkerAgent）",
+  "description": "OpenWorker CLI — 命令行调用 @openworker/agent（AG-UI OpenWorkerAgent）",
   "type": "module",
   "private": true,
   "scripts": {

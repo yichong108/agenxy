@@ -41,7 +41,7 @@ export function createSessionAgent(options?: {
     agentType,
     role: 'session',
     agentId: 'openworker-desktop',
-    description: 'Openworker desktop session agent',
+    description: 'OpenWorker desktop session agent',
     cwd,
     cursorApiKey: settings.cursorApiKey,
     cursorModel: settings.cursorModel,
@@ -75,7 +75,7 @@ export function getMcpHostAgent(): UniAgent {
       agentType: 'openworker',
       role: 'mcp-host',
       agentId: 'openworker-mcp-host',
-      description: 'Openworker desktop MCP host'
+      description: 'OpenWorker desktop MCP host'
     })
   }
   return mcpHostAgent
@@ -94,7 +94,7 @@ export async function resetMcpHostAgent(): Promise<UniAgent> {
     agentType: 'openworker',
     role: 'mcp-host',
     agentId: 'openworker-mcp-host',
-    description: 'Openworker desktop MCP host'
+    description: 'OpenWorker desktop MCP host'
   })
   return mcpHostAgent
 }

@@ -32,7 +32,7 @@ export function AboutOpenworkerModal({ open, info, onClose }: AboutOpenworkerMod
   return (
     <Modal
       className="about-openworker-modal"
-      title="关于 Openworker"
+      title="关于 OpenWorker"
       open={open}
       onCancel={onClose}
       footer={[
@@ -103,7 +103,7 @@ export function AboutOpenworkerModal({ open, info, onClose }: AboutOpenworkerMod
                 </span>
               </div>
             </div>
-            <div className="about-openworker-modal__copyright">© 2026 Openworker</div>
+            <div className="about-openworker-modal__copyright">© 2026 OpenWorker</div>
           </div>
         </div>
       )}

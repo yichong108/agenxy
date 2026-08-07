@@ -1,6 +1,6 @@
 # @openworker/admin
 
-Openworker 后台管理前端（Vite + React + Ant Design）。
+OpenWorker 后台管理前端（Vite + React + Ant Design）。
 
 ## 功能
 

@@ -1,7 +1,7 @@
 {
   "name": "@openworker/skills",
   "version": "0.0.0",
-  "description": "Openworker bundled agent skills (SKILL.md 内容包)",
+  "description": "OpenWorker bundled agent skills (SKILL.md 内容包)",
   "type": "module",
   "private": true,
   "exports": {

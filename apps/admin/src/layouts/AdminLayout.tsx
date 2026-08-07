@@ -42,7 +42,7 @@ export function AdminLayout() {
             letterSpacing: 0.5
           }}
         >
-          Openworker
+          OpenWorker
         </div>
         <Menu
           theme="dark"

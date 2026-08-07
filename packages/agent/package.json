@@ -1,7 +1,7 @@
 {
   "name": "@openworker/agent",
   "version": "0.0.0",
-  "description": "Openworker agent core — ReAct loop, messages, pipeline",
+  "description": "OpenWorker agent core — ReAct loop, messages, pipeline",
   "type": "module",
   "private": true,
   "exports": {

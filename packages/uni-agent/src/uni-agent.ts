@@ -359,7 +359,7 @@ export class UniAgent extends AbstractAgent {
     if (agentType === 'cursor') {
       return new CursorAgent({
         agentId: config.agentId ?? 'uni-cursor',
-        description: config.description ?? 'Openworker uni Cursor agent',
+        description: config.description ?? 'OpenWorker uni Cursor agent',
         ...common,
         agent: {
           apiKey: config.cursorApiKey?.trim() || '',
@@ -372,7 +372,7 @@ export class UniAgent extends AbstractAgent {
 
     return new OpenWorkerAgent({
       agentId: config.agentId ?? 'uni-openworker',
-      description: config.description ?? 'Openworker uni ReAct agent',
+      description: config.description ?? 'OpenWorker uni ReAct agent',
       ...common,
       agent: {
         provider: config.provider ?? PLACEHOLDER_PROVIDER,

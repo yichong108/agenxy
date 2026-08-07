@@ -1,6 +1,6 @@
 # @openworker/phone
 
-Openworker 移动端客户端（Expo + React Native）。
+OpenWorker 移动端客户端（Expo + React Native）。
 
 ## 开发
 
